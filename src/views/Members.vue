@@ -7,12 +7,12 @@ import { useAttendanceStore } from '../stores/attendance'
 import MemberCard from '../components/MemberCard.vue'
 import MemberDetailsModal from '../components/MemberDetailsModal.vue'
 import Modal from '../components/Modal.vue'
-import FilterModal from '../components/FilterModal.vue' // 1. Import new modal
+import FilterModal from '../components/FilterModal.vue'
 
 // --- Store Setup ---
 const membersStore = useMembersStore()
 const { members, leaders } = storeToRefs(membersStore)
-const attendanceStore = useAttendanceStore()
+const attendanceStore = useAttendanceStore() 
 const { currentEventAttendees } = storeToRefs(attendanceStore)
 
 // --- Page State ---
@@ -20,20 +20,17 @@ const viewMode = ref('list')
 const showMemberModal = ref(false)
 const selectedMember = ref(null)
 const expandedDgroups = ref([])
-const searchQuery = ref('')
-const showFilterModal = ref(false) // 2. State for new modal
+const searchQuery = ref('') 
+const showFilterModal = ref(false)
 
-// 3. NEW: Filter state object
 const filters = ref({
-  attendance: [], // ['present', 'absent']
-  age: [],        // ['Elevate', 'B1G']
-  type: [],       // ['leader', 'regular', 'firstTimer', 'volunteer']
-  ministries: []  // ['Live Prod', 'Host', ...]
+  attendance: [],
+  age: [],
+  type: [],
+  ministries: []
 })
 
 // --- Computed Properties ---
-
-// 4. NEW: Count active filters to show a badge
 const activeFilterCount = computed(() => {
   return filters.value.attendance.length +
          filters.value.age.length +
@@ -41,12 +38,10 @@ const activeFilterCount = computed(() => {
          filters.value.ministries.length
 })
 
-// Get a set of present IDs for fast lookups
 const presentMemberIds = computed(() => {
   return new Set(currentEventAttendees.value.map(att => att.memberId))
 })
 
-// 5. NEW: filterMembers logic (now with "AND" logic)
 const filteredMembers = computed(() => {
   let list = members.value
 
@@ -61,8 +56,6 @@ const filteredMembers = computed(() => {
   }
 
   // --- B. Checkbox Filters (all are AND) ---
-  
-  // Attendance Filter
   if (filters.value.attendance.length > 0) {
     list = list.filter(m => {
       const isPresent = presentMemberIds.value.has(m.id)
@@ -70,13 +63,9 @@ const filteredMembers = computed(() => {
              (filters.value.attendance.includes('absent') && !isPresent)
     })
   }
-  
-  // Age Filter
   if (filters.value.age.length > 0) {
     list = list.filter(m => filters.value.age.includes(m.finalTags.ageCategory))
   }
-  
-  // Type Filter
   if (filters.value.type.includes('leader')) {
     list = list.filter(m => m.finalTags.isDgroupLeader)
   }
@@ -89,8 +78,6 @@ const filteredMembers = computed(() => {
   if (filters.value.type.includes('volunteer')) {
     list = list.filter(m => m.finalTags.isVolunteer)
   }
-  
-  // Ministry Filter
   if (filters.value.ministries.length > 0) {
     list = list.filter(m => 
       m.finalTags.isVolunteer &&
@@ -98,22 +85,20 @@ const filteredMembers = computed(() => {
     )
   }
   
-  // --- C. Sorting (Request 1) ---
+  // --- C. Sorting ---
   list.sort((a, b) => {
     const aIsPresent = presentMemberIds.value.has(a.id)
     const bIsPresent = presentMemberIds.value.has(b.id)
     
-    if (aIsPresent && !bIsPresent) return -1 // a comes first
-    if (!aIsPresent && bIsPresent) return 1  // b comes first
+    if (aIsPresent && !bIsPresent) return -1
+    if (!aIsPresent && bIsPresent) return 1
     
-    // If both present or both absent, sort by name
     return a.lastName.localeCompare(b.lastName)
   })
   
   return list
 })
 
-// 6. NEW: Sorted Dgroups (Request 2)
 const sortedDgroups = computed(() => {
   const groups = {}
   leaders.value.forEach(leader => {
@@ -135,24 +120,14 @@ const sortedDgroups = computed(() => {
     delete groups['Unassigned']
   }
   
-  // Convert object to array and add presence/sorting info
   return Object.entries(groups).map(([leaderName, members]) => {
-    // Find the leader's own member object
     const leaderObj = leaders.value.find(l => `${l.firstName} ${l.lastName}` === leaderName)
-    
-    // Check if the LEADER is present
     const isLeaderPresent = leaderObj ? presentMemberIds.value.has(leaderObj.id) : false
     
-    return {
-      leaderName,
-      members,
-      isLeaderPresent
-    }
+    return { leaderName, members, isLeaderPresent }
   }).sort((a, b) => {
-    // Sort by present leaders first
     if (a.isLeaderPresent && !b.isLeaderPresent) return -1
     if (!a.isLeaderPresent && b.isLeaderPresent) return 1
-    // Then sort by name
     return a.leaderName.localeCompare(b.leaderName)
   })
 })
@@ -166,19 +141,28 @@ function openMemberDetails(member) {
 function handleSaveChanges(updatedMember) {
   membersStore.updateMember(updatedMember)
   showMemberModal.value = false
+  searchQuery.value = '' // Clear search after successful save/edit
 }
 
 function handleDeleteMember(memberId) {
   membersStore.deleteMember(memberId)
   showMemberModal.value = false 
+  searchQuery.value = '' // CRITICAL FIX: Clear search after deletion
 }
+
+// NEW: Function to clear search on general modal close
+function handleModalClose() {
+    showMemberModal.value = false;
+    searchQuery.value = ''; // CRITICAL FIX: Clear search when canceling delete or closing edit
+}
+
 
 function toggleDgroup(leaderName) {
   const index = expandedDgroups.value.indexOf(leaderName)
   if (index > -1) {
-    expandedDgroups.value.splice(index, 1) // Collapse
+    expandedDgroups.value.splice(index, 1)
   } else {
-    expandedDgroups.value.push(leaderName) // Expand
+    expandedDgroups.value.push(leaderName)
   }
 }
 
@@ -201,14 +185,15 @@ function getDgroupAttendance(leaderMembers) {
       <h1>Members Directory</h1>
     </div>
 
-    <!-- Controls: Search and View Toggle -->
     <div class="controls-wrapper">
       <div class="search-bar">
         <Search :size="20" class="search-icon" />
+        <!-- ADD: autocomplete="off" to discourage browser autofill -->
         <input 
           type="text" 
           placeholder="Search by name or email..."
           v-model="searchQuery"
+          autocomplete="off" 
         >
       </div>
       
@@ -228,7 +213,6 @@ function getDgroupAttendance(leaderMembers) {
       </div>
     </div>
     
-    <!-- 7. NEW: Filter Button -->
     <div class="filter-controls" v-if="viewMode === 'list'">
       <button class="filter-btn" @click="showFilterModal = true">
         <SlidersHorizontal :size="16" />
@@ -239,7 +223,6 @@ function getDgroupAttendance(leaderMembers) {
       </button>
     </div>
     
-    <!-- Member List Section -->
     <div class="member-list" v-if="viewMode === 'list'">
       <MemberCard 
         v-for="member in filteredMembers" 
@@ -253,7 +236,6 @@ function getDgroupAttendance(leaderMembers) {
       </div>
     </div>
 
-    <!-- 8. NEW: Dgroup View with Colors & Sorting -->
     <div class="dgroup-view" v-if="viewMode === 'dgroup'">
       <div v-if="sortedDgroups.length === 0" class="no-results">
         <p>No members found to group.</p>
@@ -296,22 +278,23 @@ function getDgroupAttendance(leaderMembers) {
 
   </div>
   
-  <!-- Member Details Modal -->
-  <Modal v-if="showMemberModal" @close="showMemberModal = false">
+  <!-- CRITICAL FIX: Use the new handleModalClose function on the main modal -->
+  <Modal v-if="showMemberModal" @close="handleModalClose"> 
     <MemberDetailsModal 
       v-if="selectedMember"
       :member="selectedMember" 
-      @close="showMemberModal = false"
+      @close="handleModalClose" 
       @saveChanges="handleSaveChanges"
       @deleteMember="handleDeleteMember"
     />
   </Modal>
 
-  <!-- 9. NEW: Filter Modal -->
+  <!-- Filter Modal -->
   <Modal v-if="showFilterModal" @close="showFilterModal = false">
     <FilterModal 
       v-model="filters"
       @apply="showFilterModal = false"
+      @clear="showFilterModal = false"
     />
   </Modal>
 
@@ -380,7 +363,6 @@ function getDgroupAttendance(leaderMembers) {
   box-shadow: 0 1px 3px rgba(0,0,0,0.1);
 }
 
-/* --- NEW Filter Button Styles --- */
 .filter-controls {
   margin-bottom: 24px;
 }
@@ -436,14 +418,13 @@ function getDgroupAttendance(leaderMembers) {
   background-color: #fff;
   border-radius: 12px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
-  /* --- NEW Border Styles --- */
-  border-left: 4px solid #CFD8DC; /* Default */
+  border-left: 4px solid #CFD8DC;
 }
 .dgroup-card.is-present {
-  border-left-color: #4CAF50; /* Green */
+  border-left-color: #4CAF50;
 }
 .dgroup-card.is-absent {
-  border-left-color: #F44336; /* Red */
+  border-left-color: #F44336;
 }
 
 .dgroup-header {

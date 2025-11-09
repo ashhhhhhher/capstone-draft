@@ -4,10 +4,11 @@ import { storeToRefs } from 'pinia'
 import Modal from '../components/Modal.vue'
 import RegistrationSuccess from '../components/RegistrationSuccess.vue'
 import { useMembersStore } from '../stores/members'
+import { useAuthStore } from '../stores/auth'; // Ensure this is imported for the branch check
 
-// --- Store Setup ---
+const authStore = useAuthStore();
 const membersStore = useMembersStore()
-const { leaders } = storeToRefs(membersStore) 
+const { leaders } = storeToRefs(membersStore)
 
 // --- Form Data Refs ---
 const lastName = ref('')
@@ -29,7 +30,7 @@ const selectedDgroupLeader = ref('')
 const tags = ref({
   isRegular: false,
   isVolunteer: false,
-  volunteerMinistry: [],
+  volunteerMinistry: [], 
   isDgroupLeader: false,
   isSeeker: false
 })
@@ -37,6 +38,12 @@ const tags = ref({
 // --- Modal State ---
 const showSuccessModal = ref(false)
 const newMemberData = ref(null)
+
+// --- Helper Function ---
+function toTitleCase(str) {
+  if (!str) return '';
+  return str.toLowerCase().replace(/\b\w/g, char => char.toUpperCase());
+}
 
 // --- Computed Properties ---
 const filteredLeaders = computed(() => {
@@ -51,6 +58,7 @@ const filteredLeaders = computed(() => {
   }).map(leader => `${leader.firstName} ${leader.lastName}`)
 })
 
+// A member is only a First Timer if they DON'T have a leader AND are NOT a leader
 const isFirstTimer = computed(() => !selectedDgroupLeader.value && !tags.value.isDgroupLeader)
 
 const age = computed(() => {
@@ -87,28 +95,24 @@ function clearForm() {
   tags.value = { isRegular: false, isVolunteer: false, volunteerMinistry: [], isDgroupLeader: false, isSeeker: false };
 }
 
-function handleSubmit() {
+async function handleSubmit() {
   // --- Validation ---
   if (!lastName.value || !firstName.value || !birthday.value || !gender.value || !email.value) {
       alert('Please fill in all required fields (marked with *).');
       return;
   }
   
-  // --- THIS IS THE FIX ---
-  // If text is in the search box but no leader is officially selected, it's an error.
   if (dgroupLeaderSearch.value && !selectedDgroupLeader.value) {
     alert('Invalid Dgroup Leader. Please select a valid leader from the list or leave the field blank.');
     return;
   }
   
-  const hasSelectedLeader = !!selectedDgroupLeader.value
-  const hasSelectedTag = tags.value.isRegular || tags.value.isVolunteer || tags.value.isDgroupLeader
-  
-  if (tags.value.isRegular && !hasSelectedLeader) {
+  if (tags.value.isRegular && !selectedDgroupLeader.value) {
     alert('A "Regular Member" must be assigned to a Dgroup Leader. Please select a leader or uncheck "Regular Member".');
     return;
   }
   
+  // --- Data Assembly ---
   const newId = 'Q-' + Math.floor(100000 + Math.random() * 900000).toString();
 
   const memberData = {
@@ -132,16 +136,21 @@ function handleSubmit() {
     }
   }
 
-  membersStore.registerNewMember(memberData);
-  newMemberData.value = memberData;
-  showSuccessModal.value = true;
-  clearForm();
-}
+  // --- CRITICAL FIX: Error Handling ---
+  try {
+    // Call the store action which now handles Auth account creation and email sending
+    await membersStore.registerNewMember(memberData);
 
-// Helper function
-function toTitleCase(str) {
-  if (!str) return '';
-  return str.toLowerCase().replace(/\b\w/g, char => char.toUpperCase());
+    // If successful, show modal and clear form
+    newMemberData.value = memberData;
+    showSuccessModal.value = true;
+    clearForm();
+
+  } catch (error) {
+    // Catch the specific error thrown by the store (e.g., duplicate email)
+    alert(`Registration Error: ${error.message}`);
+    console.error("Registration failed:", error);
+  }
 }
 </script>
 

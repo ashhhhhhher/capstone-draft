@@ -1,7 +1,7 @@
 <script setup>
 import { ref } from 'vue'
+import { RouterLink, useRouter } from 'vue-router' // 1. Import RouterLink
 import { useAuthStore } from '../stores/auth'
-import { useRouter } from 'vue-router'
 
 const authStore = useAuthStore()
 const router = useRouter()
@@ -11,17 +11,20 @@ const password = ref('')
 const errorMessage = ref('')
 
 async function handleLogin() {
-  errorMessage.value = '' // Clear any old errors
+  errorMessage.value = ''
   try {
     await authStore.login(email.value, password.value)
-    // On success, go to the homepage
-    router.push('/')
+    
+    // 2. NEW: Role-based redirect
+    if (authStore.userRole === 'admin') {
+      router.push('/')
+    } else {
+      router.push('/member-dashboard') // We'll build this page next
+    }
+
   } catch (error) {
-    // On failure, show an error
     switch (error.code) {
       case 'auth/invalid-email':
-        errorMessage.value = 'Invalid email address.'
-        break;
       case 'auth/user-not-found':
       case 'auth/wrong-password':
       case 'auth/invalid-credential':
@@ -37,8 +40,8 @@ async function handleLogin() {
 <template>
   <div class="login-container">
     <div class="login-box">
-      <h2>Admin Login</h2>
-      <p>Please sign in to manage your dashboard.</p>
+      <h2>Login</h2>
+      <p>Please sign in to continue.</p>
       <form @submit.prevent="handleLogin" class="login-form">
         <div class="form-group">
           <label for="email">Email</label>
@@ -53,10 +56,16 @@ async function handleLogin() {
           {{ errorMessage }}
         </p>
 
-        <button type="submit" class="login-btn">
+        <button type="submit" class="login-btn" :disabled="authStore.isLoading">
           {{ authStore.isLoading ? 'Loading...' : 'Login' }}
         </button>
       </form>
+      
+      <!-- 3. NEW: Sign Up Link -->
+      <p class="signup-link">
+        Don't have an account? 
+        <RouterLink to="/signup">Sign Up</RouterLink>
+      </p>
     </div>
   </div>
 </template>
@@ -118,8 +127,8 @@ p {
   cursor: pointer;
   transition: background-color 0.2s ease;
 }
-.login-btn:hover {
-  background-color: #1565C0;
+.login-btn:disabled {
+  background-color: #90A4AE;
 }
 .error-message {
   color: #D32F2F;
@@ -128,5 +137,9 @@ p {
   padding: 10px;
   border-radius: 8px;
   margin-bottom: 20px;
+}
+.signup-link {
+  margin-top: 24px;
+  font-size: 14px;
 }
 </style>

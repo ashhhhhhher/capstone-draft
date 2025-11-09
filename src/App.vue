@@ -15,23 +15,29 @@ const attendanceStore = useAttendanceStore()
 const route = useRoute()
 
 const isAuthReady = computed(() => authStore.isAuthReady)
-const showNav = computed(() => route.name !== 'login')
+const userRole = computed(() => authStore.userRole)
 
-// Watch for the user to log in
-watch(() => authStore.user, (newUser, oldUser) => {
-  if (newUser && !oldUser) {
-    // User has just logged in
-    console.log("User logged in! Fetching data...")
+// Show Nav Bar only on admin pages
+const showNav = computed(() => {
+  return route.name !== 'login' && 
+         route.name !== 'signup' &&
+         userRole.value === 'admin'
+})
+
+// --- FIX: Watch for both user and branchId ---
+watch(() => [authStore.user, authStore.branchId], ([newUser, newBranchId]) => {
+  if (newUser && newBranchId) {
+    console.log(`User logged in to branch: ${newBranchId}. Fetching data...`)
+    // Fetch data for the determined branch
     membersStore.fetchMembers()
     eventsStore.fetchEvents()
-    attendanceStore.fetchAllAttendance() // <-- ADD THIS LINE
+    attendanceStore.fetchAllAttendance()
   }
 }, { immediate: true })
 
 // Watch for the currentEvent to be loaded
 watch(() => eventsStore.currentEvent, (newEvent, oldEvent) => {
-  if (newEvent) {
-    // As soon as we know the current event, fetch its attendance
+  if (newEvent && authStore.userRole === 'admin') {
     console.log("Current event set. Fetching attendance for:", newEvent.id)
     attendanceStore.fetchAttendanceForEvent(newEvent.id)
   }
@@ -39,9 +45,13 @@ watch(() => eventsStore.currentEvent, (newEvent, oldEvent) => {
 </script>
 
 <template>
+  <!-- 
+    The router now handles the redirect, but we still ensure 
+    the app doesn't show garbage while data loads.
+  -->
   <div v-if="!isAuthReady" class="loading-container">
     <div class="spinner"></div>
-    <p>Loading Your Dashboard...</p>
+    <p>Loading Authentication...</p>
   </div>
 
   <div v-else class="app-wrapper">

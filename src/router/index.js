@@ -11,62 +11,77 @@ const router = createRouter({
       component: () => import('../views/Login.vue')
     },
     {
+      path: '/signup',
+      name: 'signup',
+      component: () => import('../views/Signup.vue')
+    },
+    // --- Member Dashboard Route ---
+    {
+      path: '/member-dashboard',
+      name: 'memberDashboard',
+      component: () => import('../views/MemberDashboard.vue'), // <-- NEW FILE REFERENCE
+      meta: { requiresAuth: true, role: 'member' } 
+    },
+    
+    // --- ADMIN ROUTES ---
+    {
       path: '/',
       name: 'home',
       component: Home,
-      meta: { requiresAuth: true }
+      meta: { requiresAuth: true, role: 'admin' }
     },
     {
       path: '/members',
       name: 'members',
       component: () => import('../views/Members.vue'),
-      meta: { requiresAuth: true }
+      meta: { requiresAuth: true, role: 'admin' }
     },
     {
       path: '/scan',
       name: 'scan',
       component: () => import('../views/Scan.vue'),
-      meta: { requiresAuth: true }
+      meta: { requiresAuth: true, role: 'admin' }
     },
     {
       path: '/register',
       name: 'register',
       component: () => import('../views/Register.vue'),
-      meta: { requiresAuth: true }
+      meta: { requiresAuth: true, role: 'admin' }
     },
     {
       path: '/insights',
       name: 'insights',
       component: () => import('../views/Insights.vue'),
-      meta: { requiresAuth: true }
+      meta: { requiresAuth: true, role: 'admin' }
     },
-    // --- NEW PROFILE ROUTE ---
     {
       path: '/profile',
       name: 'profile',
       component: () => import('../views/Profile.vue'),
-      meta: { requiresAuth: true }
+      meta: { requiresAuth: true, role: 'admin' }
     }
   ]
 })
 
 // --- Navigation Guard ---
-router.beforeEach(async (to, from) => {
+router.beforeEach((to, from) => {
   const authStore = useAuthStore()
 
-  if (!authStore.isAuthReady) {
-    await authStore.init()
+  const isAuthenticated = !!authStore.user
+  const userRole = authStore.userRole
+
+  if (to.meta.requiresAuth && !isAuthenticated) {
+    return { name: 'login', query: { redirect: to.fullPath } }
   }
 
-  if (to.meta.requiresAuth && !authStore.user) {
-    return { 
-      name: 'login',
-      query: { redirect: to.fullPath } 
+  if (isAuthenticated) {
+    if (to.name === 'login' || to.name === 'signup') {
+      return { name: userRole === 'admin' ? 'home' : 'memberDashboard' }
     }
-  }
-
-  if (to.name === 'login' && authStore.user) {
-    return { name: 'home' }
+    
+    if (to.meta.role && to.meta.role !== userRole) {
+      return { name: userRole === 'admin' ? 'home' : 'memberDashboard' }
+    }
   }
 })
 

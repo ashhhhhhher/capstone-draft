@@ -2,8 +2,10 @@
 import { initializeApp } from "firebase/app";
 import { getFirestore } from "firebase/firestore";
 import { getAuth } from "firebase/auth";
+import { getStorage } from "firebase/storage";
 
-// --- PASTE YOUR CONFIG KEYS HERE ---
+// Your web app's Firebase configuration
+// This is your config object, it looks correct.
 const firebaseConfig = {
   apiKey: "AIzaSyANwkyWzLGl8KoWMKoBsGrjZ6FEcwyvGQM",
   authDomain: "capstone-d6595.firebaseapp.com",
@@ -13,13 +15,13 @@ const firebaseConfig = {
   appId: "1:263003975385:web:d7987746d62e025e29d8c8"
 };
 
-
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 
 // Get references to the services we need
 const db = getFirestore(app);
 const auth = getAuth(app);
+const storage = getStorage(app);
 
 // Export them for use in other files
-export { db, auth };
+export { db, auth, storage };

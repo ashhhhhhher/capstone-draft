@@ -7,30 +7,36 @@ import { useEventsStore } from '../stores/events'
 import { useAttendanceStore } from '../stores/attendance'
 
 // --- Stores ---
-const membersStore = useMembersStore()
-const { members } = storeToRefs(membersStore) // Get members to find name
-const eventsStore = useEventsStore()
-const { currentEvent } = storeToRefs(eventsStore) // Get the current event
-const attendanceStore = useAttendanceStore() // The new store
+const { members } = storeToRefs(useMembersStore())
+const { currentEvent } = storeToRefs(useEventsStore())
+const attendanceStore = useAttendanceStore()
 
 // --- Refs ---
 const manualIdInput = ref('')
 const scanResult = ref({ status: null, message: '' })
 let scannerInstance = null
 
-// --- Core Logic ---
+// --- NEW: Computed check for event type ---
+const isAttendanceEvent = computed(() => {
+  return currentEvent.value && currentEvent.value.eventType === 'service'
+})
 
+// --- Core Logic ---
 async function processMemberId(memberId) {
   const trimmedId = memberId.trim()
   
   // 1. Check if an event is active
   if (!currentEvent.value) {
-    scanResult.value = { status: 'error', message: 'No active event. Please create an event on the Home page.' }
+    scanResult.value = { status: 'error', message: 'No active event.' }
     return
   }
+  // 2. NEW: Check if this event type records attendance
+  if (!isAttendanceEvent.value) {
+    scanResult.value = { status: 'error', message: `Attendance is not recorded for this event type (${currentEvent.value.name}).` }
+    return
+  }
+  
   const currentEventId = currentEvent.value.id
-
-  // 2. Find the member's name from the members store
   const member = members.value.find(m => m.id === trimmedId)
   
   if (!member) {
@@ -38,10 +44,8 @@ async function processMemberId(memberId) {
     return
   }
 
-  // 3. Call the new attendance store action
   const result = await attendanceStore.markAttendance(trimmedId, currentEventId)
 
-  // 4. Set feedback message
   if (result.status === 'success') {
     scanResult.value = { 
       status: 'success', 
@@ -74,7 +78,6 @@ function onScanError(errorMessage) {
   // We can ignore these
 }
 
-// --- Manual Input ---
 function handleManualSubmit() {
   if (!manualIdInput.value) return
   processMemberId(manualIdInput.value)
@@ -82,16 +85,21 @@ function handleManualSubmit() {
 
 // --- Lifecycle Hooks ---
 onMounted(() => {
+  if (isAttendanceEvent.value) {
+    startScanner()
+  }
+})
+
+function startScanner() {
   const scannerConfig = {
     fps: 10,
     qrbox: { width: 250, height: 250 },
     rememberLastUsedCamera: true,
     supportedScanTypes: [0]
   }
-  
   scannerInstance = new Html5QrcodeScanner("qr-reader", scannerConfig, false)
   scannerInstance.render(onScanSuccess, onScanError)
-})
+}
 
 onUnmounted(() => {
   if (scannerInstance) {
@@ -114,8 +122,12 @@ onUnmounted(() => {
       </p>
     </div>
 
-    <div class="scanner-wrapper">
+    <!-- NEW: Conditional rendering of scanner -->
+    <div v-if="isAttendanceEvent" class="scanner-wrapper">
       <div id="qr-reader"></div>
+    </div>
+    <div v-else class="scanner-disabled">
+      <p>Attendance is not recorded for this event type.</p>
     </div>
     
     <div v-if="scanResult.status" class="result-box-wrapper">
@@ -144,11 +156,13 @@ onUnmounted(() => {
           class="manual-input"
           placeholder="e.g., Q-100001"
           v-model="manualIdInput"
+          :disabled="!isAttendanceEvent"
         >
-        <button type="submit" class="submit-btn">Submit ID</button>
+        <button type="submit" class="submit-btn" :disabled="!isAttendanceEvent">
+          Submit ID
+        </button>
       </form>
     </div>
-
   </div>
 </template>
 
@@ -189,6 +203,19 @@ onUnmounted(() => {
 }
 :deep(#qr-reader__dashboard_section_csr) {
   display: none;
+}
+
+/* NEW: Style for disabled scanner */
+.scanner-disabled {
+  width: 100%;
+  border-radius: 12px;
+  background: #ECEFF1;
+  text-align: center;
+  padding: 60px 20px;
+  box-sizing: border-box;
+  color: #546E7A;
+  font-weight: 600;
+  font-size: 16px;
 }
 
 /* --- Result Box Styles --- */
@@ -266,5 +293,11 @@ onUnmounted(() => {
   border: none;
   border-radius: 8px;
   cursor: pointer;
+}
+/* NEW: Disabled state */
+.submit-btn:disabled, .manual-input:disabled {
+  background-color: #90A4AE;
+  cursor: not-allowed;
+  opacity: 0.7;
 }
 </style>

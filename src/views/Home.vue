@@ -10,7 +10,7 @@ import AttendanceStats from '../components/AttendanceStats.vue'
 import Modal from '../components/Modal.vue'
 import CreateEventForm from '../components/CreateEventForm.vue'
 import AttendanceListModal from '../components/AttendanceListModal.vue'
-import EventListModal from '../components/EventListModal.vue' // 1. Import new modal
+import EventListModal from '../components/EventListModal.vue'
 
 // --- Store Setup ---
 const { members } = storeToRefs(useMembersStore())
@@ -20,12 +20,14 @@ const { currentEventAttendees } = storeToRefs(useAttendanceStore())
 // --- Modal State ---
 const showCreateEventModal = ref(false)
 const showAttendanceModal = ref(false)
-const showEventListModal = ref(false) // 2. Add state for new modal
-const eventToEdit = ref(null) // 3. Add state to hold event for editing
+const showEventListModal = ref(false) 
+const eventToEdit = ref(null) 
 const selectedStatFilter = ref('All')
 
 // --- Dynamic Data ---
 const presentMembers = computed(() => {
+  // CRITICAL FIX: Ensure members.value is an array before mapping
+  if (!members.value || members.value.length === 0) return [];
   const attendeeIds = new Set(
     currentEventAttendees.value.map(att => att.memberId)
   );
@@ -34,12 +36,15 @@ const presentMembers = computed(() => {
 
 const totalAttendance = computed(() => presentMembers.value.length)
 
-const dynamicStats = computed(() => [
-  { id: 1, title: "Regulars", count: presentMembers.value.filter(m => m.finalTags.isRegular).length },
-  { id: 2, title: "Volunteers", count: presentMembers.value.filter(m => m.finalTags.isVolunteer).length },
-  { id: 3, title: "Dgroup Leaders", count: presentMembers.value.filter(m => m.finalTags.isDgroupLeader).length },
-  { id: 4, title: "First Timers", count: presentMembers.value.filter(m => m.finalTags.isFirstTimer).length }
-])
+const dynamicStats = computed(() => {
+  if (!members.value) return []; // Defensive check
+  return [
+    { id: 1, title: "Regulars", count: presentMembers.value.filter(m => m.finalTags.isRegular).length },
+    { id: 2, title: "Volunteers", count: presentMembers.value.filter(m => m.finalTags.isVolunteer).length },
+    { id: 3, title: "Dgroup Leaders", count: presentMembers.value.filter(m => m.finalTags.isDgroupLeader).length },
+    { id: 4, title: "First Timers", count: presentMembers.value.filter(m => m.finalTags.isFirstTimer).length }
+  ]
+})
 
 const filteredAttendees = computed(() => {
   const filter = selectedStatFilter.value
@@ -65,9 +70,8 @@ function openAttendanceList(filter) {
   showAttendanceModal.value = true
 }
 
-// 4. NEW: Functions to handle event modals
 function openCreateEvent() {
-  eventToEdit.value = null // Make sure it's in "create" mode
+  eventToEdit.value = null 
   showCreateEventModal.value = true
 }
 
@@ -76,7 +80,6 @@ function openEventList() {
 }
 
 function handleEditEvent(event) {
-  // This is the magic: close one modal, save the data, open the other
   eventToEdit.value = event
   showEventListModal.value = false
   showCreateEventModal.value = true
@@ -100,7 +103,6 @@ function handleEditEvent(event) {
       </div>
     </header>
 
-    <!-- 5. Update event listeners -->
     <CurrentEvent 
       @open-create-event="openCreateEvent"
       @open-event-list="openEventList"
@@ -122,7 +124,6 @@ function handleEditEvent(event) {
     v-if="showCreateEventModal" 
     @close="showCreateEventModal = false"
   >
-    <!-- 6. Pass the eventToEdit prop down -->
     <CreateEventForm 
       :eventToEdit="eventToEdit"
       @close="showCreateEventModal = false" 
@@ -144,7 +145,7 @@ function handleEditEvent(event) {
     />
   </Modal>
   
-  <!-- 7. NEW: Event List Modal -->
+  <!-- Event List Modal -->
   <Modal
     v-if="showEventListModal"
     @close="showEventListModal = false"
@@ -214,7 +215,7 @@ function handleEditEvent(event) {
 /* --- Mobile Adjustments --- */
 @media (max-width: 768px) {
   .dashboard-container {
-    padding: 10px;
+    padding: 0 10px 10px 10px;
   }
 
   .total-attendance-card {
@@ -230,7 +231,13 @@ function handleEditEvent(event) {
   }
 
   .stats-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: 1fr 1fr; /* Keep 2 columns on mobile */
+  }
+}
+
+@media (max-width: 480px) {
+  .stats-grid {
+    grid-template-columns: 1fr; /* Stack to 1 column on very small screens */
   }
 }
 </style>

@@ -8,18 +8,16 @@ const emit = defineEmits(['close', 'editEvent'])
 const eventsStore = useEventsStore()
 const { allEvents } = storeToRefs(eventsStore)
 
-// Sort events into upcoming and past
+// 1. Get today's date string (based on your time)
+const todayStr = '2025-11-08'
+
+// 2. This computed prop now gets today AND all future events
 const upcomingEvents = computed(() => {
-  const today = new Date().toISOString().split('T')[0]
-  return allEvents.value.filter(e => e.date >= today)
+  return allEvents.value.filter(e => e.date >= todayStr)
     .sort((a, b) => new Date(a.date) - new Date(b.date)) // Show soonest first
 })
 
-const pastEvents = computed(() => {
-  const today = new Date().toISOString().split('T')[0]
-  return allEvents.value.filter(e => e.date < today)
-    // Already sorted desc by default from store
-})
+// 3. The "Past Events" computed prop is REMOVED
 
 function handleEdit(event) {
   emit('editEvent', event)
@@ -37,11 +35,20 @@ function handleDelete(event) {
     <h2>Manage Events</h2>
     
     <div class="list-section">
-      <h3>Upcoming Events</h3>
+      <h3>Current & Upcoming Events</h3>
       <ul v-if="upcomingEvents.length > 0">
         <li v-for="event in upcomingEvents" :key="event.id">
           <div class="event-details">
-            <strong>{{ event.name }}</strong>
+            <div class="event-name">
+              <strong>{{ event.name }}</strong>
+              <span v-if="event.eventType" class="event-type-tag">
+                {{ event.eventType === 'service' ? 'Service' : 'CCF Event' }}
+              </span>
+              <!-- NEW: Add a tag if it's today -->
+              <span v-if="event.date === todayStr" class="event-type-tag today-tag">
+                Today
+              </span>
+            </div>
             <span>{{ new Date(event.date + 'T00:00:00').toLocaleDateString('en-US', {dateStyle: 'full'}) }} at {{ event.time }}</span>
           </div>
           <div class="event-actions">
@@ -57,23 +64,7 @@ function handleDelete(event) {
       <p v-else class="no-data-text">No upcoming events scheduled.</p>
     </div>
 
-    <div class="list-section">
-      <h3>Past Events</h3>
-      <ul v-if="pastEvents.length > 0">
-        <li v-for="event in pastEvents" :key="event.id">
-          <div class="event-details">
-            <strong>{{ event.name }}</strong>
-            <span>{{ new Date(event.date + 'T00:00:00').toLocaleDateString('en-US', {dateStyle: 'full'}) }}</span>
-          </div>
-          <div class="event-actions">
-            <button class="btn-icon btn-delete" @click="handleDelete(event)">
-              <Trash2 :size="16" />
-            </button>
-          </div>
-        </li>
-      </ul>
-      <p v-else class="no-data-text">No past events found.</p>
-    </div>
+    <!-- 4. The "Past Events" list is REMOVED -->
     
     <button class="close-btn" @click="emit('close')">Close</button>
   </div>
@@ -104,7 +95,7 @@ ul {
   list-style: none;
   padding: 0;
   margin: 0;
-  max-height: 30vh;
+  max-height: 60vh; /* Increased height */
   overflow-y: auto;
 }
 li {
@@ -121,9 +112,28 @@ li:last-child {
   display: flex;
   flex-direction: column;
 }
+.event-name {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap; /* Allow tags to wrap on small screens */
+  gap: 8px;
+}
 .event-details strong {
   font-weight: 600;
   font-size: 16px;
+}
+.event-type-tag {
+  background: #ECEFF1;
+  color: #37474F;
+  padding: 2px 8px;
+  border-radius: 8px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+.event-type-tag.today-tag {
+  background-color: #E8F5E9;
+  color: #2E7D32;
 }
 .event-details span {
   font-size: 14px;

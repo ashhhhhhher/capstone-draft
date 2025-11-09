@@ -2,6 +2,7 @@
 import { ref, computed } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useMembersStore } from '../stores/members'
+import { useAttendanceStore } from '../stores/attendance' // 1. Import Attendance Store
 
 const props = defineProps({
   member: Object
@@ -12,19 +13,43 @@ const emit = defineEmits(['close', 'saveChanges', 'deleteMember'])
 // --- Store Setup ---
 const membersStore = useMembersStore()
 const { leaders } = storeToRefs(membersStore) 
+const attendanceStore = useAttendanceStore() // 2. Initialize Attendance Store
+const { allAttendance } = storeToRefs(attendanceStore); // 3. Get ALL historical data
 
-// --- Mode State ---
+// --- Mode State (unchanged) ---
 const isEditMode = ref(false)
 const showDeleteConfirmation = ref(false)
 const adminPasswordInput = ref('')
 const deleteError = ref('')
-
 const editableMember = ref(JSON.parse(JSON.stringify(props.member)))
-if (!Array.isArray(editableMember.value.finalTags.volunteerMinistry)) {
-  editableMember.value.finalTags.volunteerMinistry = []
-}
 
-// --- Computed Properties ---
+// Helper function to get the member's last attendance timestamp or status
+const memberAttendanceStatus = computed(() => {
+  const memberId = props.member.id;
+  
+  // 1. Check if Present Today (using the current event attendees set)
+  // Since we can't access currentEventAttendees here easily, we'll check history:
+  const isPresentToday = attendanceStore.currentEventAttendees.some(att => att.memberId === memberId);
+  if (isPresentToday) {
+    return 'Present Today';
+  }
+  
+  // 2. Find the last time they attended *any* event
+  const lastAttendance = allAttendance.value
+    .filter(att => att.memberId === memberId)
+    // CRITICAL: Sort by timestamp (which is a Firebase Timestamp object)
+    .sort((a, b) => b.timestamp.toMillis() - a.timestamp.toMillis())[0]; 
+
+  if (lastAttendance) {
+    const date = lastAttendance.timestamp.toDate();
+    const formattedDate = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    return `Last seen: ${formattedDate}`;
+  }
+  
+  return 'Never Attended';
+});
+
+// (Other computed properties and functions are unchanged)
 const dgroupLeadersList = computed(() => {
   if (!editableMember.value.gender) return [] 
   return leaders.value
@@ -60,13 +85,11 @@ const editableAge = computed(() => {
   return age
 })
 
-// --- Helper Function ---
 function toTitleCase(str) {
   if (!str) return '';
   return str.toLowerCase().replace(/\b\w/g, char => char.toUpperCase());
 }
 
-// --- Functions ---
 function save() {
   if (editableMember.value.finalTags.isRegular && !editableMember.value.dgroupLeader) {
     alert('A "Regular Member" must be assigned to a Dgroup Leader. Please select a leader or uncheck "Regular Member".');
@@ -123,9 +146,6 @@ function confirmDelete() {
 </script>
 
 <template>
-  <!-- 
-    This is the new 3-part layout: Header, Body (scrolling), Footer.
-  -->
   <div class="details-modal-container">
     
     <!-- 1. HEADER (Stays at the top) -->
@@ -311,9 +331,10 @@ function confirmDelete() {
             <span class="label">Dgroup Leader</span>
             <span class="value">{{ member.dgroupLeader || 'N/A' }}</span>
           </div>
+          <!-- NEW: Attendance Status from computed property -->
           <div class="detail-item">
             <span class="label">Attendance</span>
-            <span class="value">See Home/Members List</span>
+            <span class="value">{{ memberAttendanceStatus }}</span>
           </div>
         </div>
       </div>
@@ -344,8 +365,8 @@ function confirmDelete() {
 .details-modal-container {
   display: flex;
   flex-direction: column;
-  flex-grow: 1; /* Fills the parent modal */
-  overflow: hidden; /* Clips content */
+  flex-grow: 1; 
+  overflow: hidden; 
   height: 100%;
 }
 .modal-header-section {
@@ -357,7 +378,6 @@ function confirmDelete() {
   overflow-y: auto; /* This is the scrollbar! */
   flex-grow: 1;
   padding-top: 20px;
-  /* Add padding to account for scrollbar width */
   padding-right: 16px;
   margin-right: -16px;
 }
@@ -390,21 +410,15 @@ function confirmDelete() {
   border-radius: 8px; box-sizing: border-box; font-size: 14px;
 }
 .form-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 16px;
-  margin-bottom: 16px;
+  display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;
 }
 .modal-title {
-  font-size: 20px;
-  font-weight: 600;
-  margin: 0;
+  font-size: 20px; font-weight: 600; margin: 0;
 }
 .delete-header { color: #D32F2F; }
 .edit-view h4 {
   font-size: 16px; font-weight: 600; color: #0D47A1;
-  border-bottom: 2px solid #E3F2FD; padding-bottom: 8px;
-  margin-top: 16px; margin-bottom: 16px;
+  border-bottom: 2px solid #E3F2FD; padding-bottom: 8px; margin-top: 16px; margin-bottom: 16px;
 }
 .edit-view h4:first-of-type { margin-top: 0; }
 .tag-group {
@@ -417,10 +431,7 @@ function confirmDelete() {
 .checkbox-item label { margin: 0; font-weight: 400; font-size: 14px; }
 .indented { margin-left: 28px; margin-top: 10px; }
 .checkbox-subgroup {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
-  margin-top: 10px;
+  display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px;
 }
 
 /* --- View Mode --- */
@@ -453,7 +464,6 @@ function confirmDelete() {
   display: block; font-size: 14px; font-weight: 600;
   color: #333; word-wrap: break-word;
 }
-
 /* --- Delete Confirmation --- */
 .delete-confirmation h3 { margin-top: 0; }
 .error-message { color: #D32F2F; font-size: 14px; margin: 10px 0 0 0; }

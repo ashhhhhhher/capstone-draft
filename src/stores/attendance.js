@@ -8,17 +8,30 @@ import {
   query, 
   where 
 } from "firebase/firestore";
+import { useAuthStore } from './auth'; // Import Auth Store
+
 
 export const useAttendanceStore = defineStore('attendance', () => {
   // --- State ---
   const currentEventAttendees = ref([])
-  const allAttendance = ref([]) // NEW: To store all historical records
+  const allAttendance = ref([])
   const isLoading = ref(false)
+
+  // Helper to get the correct Firestore collection path
+  const getAttendanceCollection = () => {
+    const authStore = useAuthStore();
+    if (!authStore.branchId) {
+        console.error("Branch ID not available. Cannot fetch attendance.");
+        return collection(db, "attendance_error");
+    }
+    // CRITICAL: Use the dynamic branch path
+    return collection(db, "branches", authStore.branchId, "attendance");
+  };
 
   // --- Actions ---
 
   /**
-   * Fetches all attendance records for a specific event ID.
+   * Fetches attendance records for a specific event ID within the branch.
    */
   function fetchAttendanceForEvent(eventId) {
     if (!eventId) {
@@ -28,7 +41,7 @@ export const useAttendanceStore = defineStore('attendance', () => {
     
     this.isLoading = true;
     const attQuery = query(
-      collection(db, "attendance"), 
+      getAttendanceCollection(), // Use the branch-aware collection
       where("eventId", "==", eventId)
     );
 
@@ -47,10 +60,10 @@ export const useAttendanceStore = defineStore('attendance', () => {
   }
   
   /**
-   * NEW: Fetches ALL attendance records for historical insights.
+   * Fetches ALL attendance records for historical insights within the branch.
    */
   function fetchAllAttendance() {
-    const allQuery = query(collection(db, "attendance"));
+    const allQuery = query(getAttendanceCollection());
     
     onSnapshot(allQuery, (querySnapshot) => {
       const allRecords = [];
@@ -65,7 +78,7 @@ export const useAttendanceStore = defineStore('attendance', () => {
   }
 
   /**
-   * Marks a member's attendance by creating a new document.
+   * Marks a member's attendance by creating a new document in the branch.
    */
   async function markAttendance(memberId, eventId) {
     if (!memberId || !eventId) {
@@ -87,8 +100,10 @@ export const useAttendanceStore = defineStore('attendance', () => {
         eventId: eventId,
         timestamp: new Date()
       };
-      await addDoc(collection(db, "attendance"), newRecord);
+      await addDoc(getAttendanceCollection(), newRecord);
+      
       return { status: 'success', message: 'Attendance recorded.' };
+
     } catch (error) {
       return { status: 'error', message: 'Database error.' };
     }
@@ -96,10 +111,10 @@ export const useAttendanceStore = defineStore('attendance', () => {
 
   return { 
     currentEventAttendees, 
-    allAttendance, // <-- Expose new state
+    allAttendance,
     isLoading, 
     fetchAttendanceForEvent, 
-    fetchAllAttendance, // <-- Expose new action
+    fetchAllAttendance,
     markAttendance 
   }
 })

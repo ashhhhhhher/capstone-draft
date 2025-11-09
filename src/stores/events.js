@@ -7,10 +7,11 @@ import {
   onSnapshot, 
   query, 
   orderBy,
-  doc,       
-  updateDoc, 
-  deleteDoc  
+  doc,
+  updateDoc,
+  deleteDoc
 } from "firebase/firestore";
+import { useAuthStore } from './auth'; // Import Auth Store
 
 export const useEventsStore = defineStore('events', {
   state: () => ({
@@ -19,19 +20,29 @@ export const useEventsStore = defineStore('events', {
     isLoading: true
   }),
   actions: {
+    // Helper to get the correct Firestore collection path
+    getEventCollection() {
+      const authStore = useAuthStore();
+      if (!authStore.branchId) {
+          console.error("Branch ID not available. Cannot fetch events.");
+          return collection(db, "events_error");
+      }
+      // CRITICAL: Use the dynamic branch path
+      return collection(db, "branches", authStore.branchId, "events");
+    },
+    
     async createEvent(eventData) {
       try {
-        await addDoc(collection(db, "events"), eventData);
+        await addDoc(this.getEventCollection(), eventData);
         console.log("Event created");
       } catch (error) {
         console.error("Error creating event: ", error);
       }
     },
     
-    
     async updateEvent(eventId, eventData) {
       try {
-        const eventRef = doc(db, "events", eventId);
+        const eventRef = doc(this.getEventCollection(), eventId);
         await updateDoc(eventRef, eventData);
         console.log("Event updated: ", eventId);
       } catch (error) {
@@ -39,14 +50,11 @@ export const useEventsStore = defineStore('events', {
       }
     },
     
-  
     async deleteEvent(eventId) {
       try {
-        const eventRef = doc(db, "events", eventId);
+        const eventRef = doc(this.getEventCollection(), eventId);
         await deleteDoc(eventRef);
         console.log("Event deleted: ", eventId);
-        // Note: This does not delete associated attendance records.
-        // That requires a more complex backend function.
       } catch (error) {
         console.error("Error deleting event: ", error);
       }
@@ -55,7 +63,7 @@ export const useEventsStore = defineStore('events', {
     fetchEvents() {
       this.isLoading = true;
       const eventsQuery = query(
-        collection(db, "events"), 
+        this.getEventCollection(), 
         orderBy("date", "desc")
       );
 
@@ -65,27 +73,27 @@ export const useEventsStore = defineStore('events', {
           events.push({ id: doc.id, ...doc.data() });
         });
         
-        this.allEvents = events;
+        this.allEvents = events; 
         
         const today = new Date();
-        today.setHours(0, 0, 0, 0); 
+        const year = today.getFullYear();
+        const month = (today.getMonth() + 1).toString().padStart(2, '0');
+        const day = today.getDate().toString().padStart(2, '0');
+        const todayStr = `${year}-${month}-${day}`;
         
-        let eventToSet = null;
-        const todayStr = today.toISOString().split('T')[0];
         const todayEvent = events.find(e => e.date === todayStr);
 
         if (todayEvent) {
-          eventToSet = todayEvent;
+          this.currentEvent = todayEvent;
+          console.log("Current Event: Found event for today:", todayEvent.name);
         } else {
-          const upcomingEvent = [...events].reverse().find(e => new Date(e.date + 'T00:00:00') > today);
-          if (upcomingEvent) {
-            eventToSet = upcomingEvent;
-          } else {
-            eventToSet = events[0] || null;
-          }
+          this.currentEvent = null;
+          console.log("Current Event: No event scheduled for today.");
         }
-        this.currentEvent = eventToSet;
+        
         this.isLoading = false;
+        
+        console.log("Events store updated from Firebase.");
       }, (error) => {
         console.error("Error fetching events: ", error);
         this.isLoading = false;
