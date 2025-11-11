@@ -8,6 +8,9 @@ import BarChart from '../components/charts/BarChart.vue'
 import DoughnutChart from '../components/charts/DoughnutChart.vue'
 import Modal from '../components/Modal.vue'
 import DgroupMatchingModal from '../components/DgroupMatchingModal.vue'
+import ServiceAttendanceHistory from '../components/ServiceAttendanceHistory.vue'
+import AttendanceForecastChart from '../components/charts/AttendanceForecastChart.vue'
+import DgroupAnnualForecast from '../components/charts/DgroupAnnualForecast.vue'
 
 // --- Store Setup ---
 const membersStore = useMembersStore()
@@ -17,6 +20,7 @@ const { allAttendance } = storeToRefs(useAttendanceStore())
 
 // --- Modal State ---
 const showDgroupModal = ref(false)
+const showHistoryModal = ref(false)
 
 // --- Chart Options ---
 
@@ -305,7 +309,12 @@ const inactiveMembers = computed(() => {
 
     <!-- 3. Historical Attendance Chart -->
     <div class="chart-card-full">
-      <h3>Historical Attendance (Last 10 Events)</h3>
+      <div class="section-title-with-button">
+        <h3>Historical Attendance (Last 10 Events)</h3>
+        <button class="view-details-btn" @click="showHistoryModal = true">
+          View Weekend Service History
+        </button>
+      </div>
       <div class="chart-wrapper" style="height: 350px;">
         <BarChart 
           v-if="historicalAttendanceData.labels.length > 0"
@@ -328,10 +337,48 @@ const inactiveMembers = computed(() => {
       </ul>
       <p v-else class="no-data-text">No inactive members found. Great job!</p>
     </div>
+
+    <!-- === ML FORECASTING SECTION === -->
+    <div class="forecasting-section">
+      <div class="section-header">
+        <h2>Forecasts</h2>
+        <p class="section-subtitle">Machine learning predictions based on historical patterns</p>
+      </div>
+
+      <!-- Attendance Forecast -->
+      <AttendanceForecastChart 
+        v-if="allEvents.length >= 5"
+        :events="allEvents"
+        :attendance="allAttendance"
+        :forecastPeriod="4"
+        :isBiWeekly="true"
+      />
+      <div v-else class="no-data-card">
+        <p>Need at least 5 events with attendance data to generate attendance forecasts.</p>
+      </div>
+
+      <!-- D-Group Growth & Volunteer Availability in 2-column grid -->
+      <div class="forecast-grid">
+        <DgroupAnnualForecast 
+          v-if="members.length > 0 && allAttendance.length > 0"
+          :members="members"
+          :attendance="allAttendance"
+        />
+        <div v-else class="no-data-card">
+          <p>Need members and attendance history to forecast annual D-Group totals.</p>
+        </div>
+
+        <!-- Resource allocation integrated into AttendanceForecastChart; removed standalone component -->
+      </div>
+    </div>
   </div>
   
   <Modal v-if="showDgroupModal" @close="showDgroupModal = false" size="xl">
     <DgroupMatchingModal @close="showDgroupModal = false" />
+  </Modal>
+  
+  <Modal v-if="showHistoryModal" @close="showHistoryModal = false" size="xl">
+    <ServiceAttendanceHistory @close="showHistoryModal = false" />
   </Modal>
   
 </template>
@@ -413,8 +460,8 @@ const inactiveMembers = computed(() => {
 .kpi-detail-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap-y: 8px;
-  gap-x: 4px;
+  row-gap: 8px;
+  column-gap: 4px;
   font-size: 14px;
   color: #546E7A;
   margin-top: 12px;
@@ -538,5 +585,105 @@ const inactiveMembers = computed(() => {
   text-align: center;
   padding: 40px;
   color: #78909C;
+}
+
+/* --- ML Forecasting Section --- */
+.forecasting-section {
+  margin-top: 40px;
+  padding-top: 40px;
+  border-top: 3px solid #E3F2FD;
+}
+
+.section-header {
+  margin-bottom: 32px;
+  text-align: center;
+}
+
+.section-header h2 {
+  font-size: 32px;
+  font-weight: 800;
+  margin: 0 0 8px 0;
+  background: linear-gradient(135deg, #1976D2 0%, #42A5F5 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.section-subtitle {
+  font-size: 16px;
+  color: #546E7A;
+  margin: 0;
+}
+
+.forecast-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 24px;
+  margin-top: 24px;
+}
+
+@media (min-width: 1100px) {
+  .forecast-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.no-data-card {
+  background: linear-gradient(135deg, #fff8e1 0%, #ffffff 100%);
+  border-radius: 16px;
+  padding: 40px 24px;
+  text-align: center;
+  border: 2px dashed #FFB300;
+  box-shadow: 0 4px 12px rgba(255, 179, 0, 0.1);
+}
+
+.no-data-card p {
+  margin: 0;
+  font-size: 16px;
+  color: #F57C00;
+  font-weight: 600;
+}
+
+/* --- Section Title with Button --- */
+.section-title-with-button {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.section-title-with-button h3 {
+  margin: 0;
+}
+
+.view-details-btn {
+  padding: 10px 20px;
+  background: linear-gradient(135deg, #1976D2 0%, #1565C0 100%);
+  color: white;
+  font-size: 14px;
+  font-weight: 600;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 8px rgba(25, 118, 210, 0.2);
+}
+
+.view-details-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(25, 118, 210, 0.3);
+  background: linear-gradient(135deg, #1565C0 0%, #0D47A1 100%);
+}
+
+@media (max-width: 600px) {
+  .section-title-with-button {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+  
+  .view-details-btn {
+    width: 100%;
+  }
 }
 </style>
