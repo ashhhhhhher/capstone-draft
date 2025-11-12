@@ -8,6 +8,7 @@ import BarChart from '../components/charts/BarChart.vue'
 import DoughnutChart from '../components/charts/DoughnutChart.vue'
 import Modal from '../components/Modal.vue'
 import DgroupMatchingModal from '../components/DgroupMatchingModal.vue'
+import ServiceAttendanceHistory from '../components/ServiceAttendanceHistory.vue'
 
 // --- Store Setup ---
 const membersStore = useMembersStore()
@@ -17,6 +18,7 @@ const { allAttendance } = storeToRefs(useAttendanceStore())
 
 // --- Modal State ---
 const showDgroupModal = ref(false)
+const showHistoryModal = ref(false)
 
 // --- Chart Options ---
 
@@ -305,7 +307,12 @@ const inactiveMembers = computed(() => {
 
     <!-- 3. Historical Attendance Chart -->
     <div class="chart-card-full">
-      <h3>Historical Attendance (Last 10 Events)</h3>
+      <div class="section-title-with-button">
+        <h3>Historical Attendance (Last 10 Events)</h3>
+        <button class="view-details-btn" @click="showHistoryModal = true">
+          View Weekend Service History
+        </button>
+      </div>
       <div class="chart-wrapper" style="height: 350px;">
         <BarChart 
           v-if="historicalAttendanceData.labels.length > 0"
@@ -328,10 +335,16 @@ const inactiveMembers = computed(() => {
       </ul>
       <p v-else class="no-data-text">No inactive members found. Great job!</p>
     </div>
+
+
   </div>
   
   <Modal v-if="showDgroupModal" @close="showDgroupModal = false" size="xl">
     <DgroupMatchingModal @close="showDgroupModal = false" />
+  </Modal>
+  
+  <Modal v-if="showHistoryModal" @close="showHistoryModal = false" size="xl">
+    <ServiceAttendanceHistory @close="showHistoryModal = false" />
   </Modal>
   
 </template>
@@ -413,8 +426,8 @@ const inactiveMembers = computed(() => {
 .kpi-detail-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap-y: 8px;
-  gap-x: 4px;
+  row-gap: 8px;
+  column-gap: 4px;
   font-size: 14px;
   color: #546E7A;
   margin-top: 12px;
@@ -538,5 +551,48 @@ const inactiveMembers = computed(() => {
   text-align: center;
   padding: 40px;
   color: #78909C;
+}
+
+/* --- Section Title with Button --- */
+.section-title-with-button {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.section-title-with-button h3 {
+  margin: 0;
+}
+
+.view-details-btn {
+  padding: 10px 20px;
+  background: linear-gradient(135deg, #1976D2 0%, #1565C0 100%);
+  color: white;
+  font-size: 14px;
+  font-weight: 600;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 8px rgba(25, 118, 210, 0.2);
+}
+
+.view-details-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(25, 118, 210, 0.3);
+  background: linear-gradient(135deg, #1565C0 0%, #0D47A1 100%);
+}
+
+@media (max-width: 600px) {
+  .section-title-with-button {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+  
+  .view-details-btn {
+    width: 100%;
+  }
 }
 </style>
