@@ -9,8 +9,6 @@ import DoughnutChart from '../components/charts/DoughnutChart.vue'
 import Modal from '../components/Modal.vue'
 import DgroupMatchingModal from '../components/DgroupMatchingModal.vue'
 import ServiceAttendanceHistory from '../components/ServiceAttendanceHistory.vue'
-import AttendanceForecastChart from '../components/charts/AttendanceForecastChart.vue'
-import DgroupAnnualForecast from '../components/charts/DgroupAnnualForecast.vue'
 
 // --- Store Setup ---
 const membersStore = useMembersStore()
@@ -338,39 +336,7 @@ const inactiveMembers = computed(() => {
       <p v-else class="no-data-text">No inactive members found. Great job!</p>
     </div>
 
-    <!-- === ML FORECASTING SECTION === -->
-    <div class="forecasting-section">
-      <div class="section-header">
-        <h2>Forecasts</h2>
-        <p class="section-subtitle">Machine learning predictions based on historical patterns</p>
-      </div>
 
-      <!-- Attendance Forecast -->
-      <AttendanceForecastChart 
-        v-if="allEvents.length >= 5"
-        :events="allEvents"
-        :attendance="allAttendance"
-        :forecastPeriod="4"
-        :isBiWeekly="true"
-      />
-      <div v-else class="no-data-card">
-        <p>Need at least 5 events with attendance data to generate attendance forecasts.</p>
-      </div>
-
-      <!-- D-Group Growth & Volunteer Availability in 2-column grid -->
-      <div class="forecast-grid">
-        <DgroupAnnualForecast 
-          v-if="members.length > 0 && allAttendance.length > 0"
-          :members="members"
-          :attendance="allAttendance"
-        />
-        <div v-else class="no-data-card">
-          <p>Need members and attendance history to forecast annual D-Group totals.</p>
-        </div>
-
-        <!-- Resource allocation integrated into AttendanceForecastChart; removed standalone component -->
-      </div>
-    </div>
   </div>
   
   <Modal v-if="showDgroupModal" @close="showDgroupModal = false" size="xl">
@@ -585,63 +551,6 @@ const inactiveMembers = computed(() => {
   text-align: center;
   padding: 40px;
   color: #78909C;
-}
-
-/* --- ML Forecasting Section --- */
-.forecasting-section {
-  margin-top: 40px;
-  padding-top: 40px;
-  border-top: 3px solid #E3F2FD;
-}
-
-.section-header {
-  margin-bottom: 32px;
-  text-align: center;
-}
-
-.section-header h2 {
-  font-size: 32px;
-  font-weight: 800;
-  margin: 0 0 8px 0;
-  background: linear-gradient(135deg, #1976D2 0%, #42A5F5 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-}
-
-.section-subtitle {
-  font-size: 16px;
-  color: #546E7A;
-  margin: 0;
-}
-
-.forecast-grid {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 24px;
-  margin-top: 24px;
-}
-
-@media (min-width: 1100px) {
-  .forecast-grid {
-    grid-template-columns: 1fr 1fr;
-  }
-}
-
-.no-data-card {
-  background: linear-gradient(135deg, #fff8e1 0%, #ffffff 100%);
-  border-radius: 16px;
-  padding: 40px 24px;
-  text-align: center;
-  border: 2px dashed #FFB300;
-  box-shadow: 0 4px 12px rgba(255, 179, 0, 0.1);
-}
-
-.no-data-card p {
-  margin: 0;
-  font-size: 16px;
-  color: #F57C00;
-  font-weight: 600;
 }
 
 /* --- Section Title with Button --- */
