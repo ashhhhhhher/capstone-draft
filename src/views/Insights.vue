@@ -9,6 +9,8 @@ import DoughnutChart from '../components/charts/DoughnutChart.vue'
 import Modal from '../components/Modal.vue'
 import DgroupMatchingModal from '../components/DgroupMatchingModal.vue'
 import ServiceAttendanceHistory from '../components/ServiceAttendanceHistory.vue'
+import AttendanceForecast from '../components/charts/AttendanceForecast.vue'
+import EventRecommendations from '../components/EventRecommendations.vue'
 
 // --- Store Setup ---
 const membersStore = useMembersStore()
@@ -19,6 +21,14 @@ const { allAttendance } = storeToRefs(useAttendanceStore())
 // --- Modal State ---
 const showDgroupModal = ref(false)
 const showHistoryModal = ref(false)
+
+// --- Forecast State ---
+const forecastData = ref(null)
+
+// Handle forecast ready event
+const onForecastReady = (data) => {
+  forecastData.value = data
+}
 
 // --- Chart Options ---
 
@@ -323,7 +333,31 @@ const inactiveMembers = computed(() => {
       </div>
     </div>
     
-    <!-- 4. Inactive Member List -->
+    <!-- 4. Forecasting Section -->
+    <div class="forecasting-section">
+      <!-- Attendance Forecast -->
+      <AttendanceForecast 
+        v-if="allEvents.length >= 3"
+        :events="allEvents"
+        :attendance="allAttendance"
+        :forecastPeriods="3"
+        :isBiWeekly="true"
+        @forecast-ready="onForecastReady"
+      />
+      <div v-else class="no-data-card">
+        <p>Need at least 3 events with attendance data to generate forecasts</p>
+      </div>
+      
+      <!-- Event Recommendations -->
+      <EventRecommendations 
+        v-if="forecastData"
+        :forecastData="forecastData"
+        :safetyBuffer="1.2"
+        :volunteerRatio="4.5"
+      />
+    </div>
+
+    <!-- 5. Inactive Member List -->
     <div class="list-card">
       <h3>Inactive Members (For Follow-up)</h3>
       <p class="list-subtitle">Members who have not attended the last 3 events.</p>
@@ -551,6 +585,52 @@ const inactiveMembers = computed(() => {
   text-align: center;
   padding: 40px;
   color: #78909C;
+}
+
+/* --- Forecasting Section --- */
+.forecasting-section {
+  margin: 40px 0;
+  padding: 32px 0;
+  border-top: 3px solid #E3F2FD;
+  border-bottom: 3px solid #E3F2FD;
+}
+
+.section-header {
+  margin-bottom: 32px;
+  text-align: center;
+}
+
+.section-header h2 {
+  font-size: 28px;
+  font-weight: 800;
+  margin: 0 0 8px 0;
+  background: linear-gradient(135deg, #1976D2 0%, #42A5F5 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.section-subtitle {
+  font-size: 16px;
+  color: #546E7A;
+  margin: 0;
+}
+
+.no-data-card {
+  background: linear-gradient(135deg, #fff8e1 0%, #ffffff 100%);
+  border-radius: 16px;
+  padding: 40px 24px;
+  text-align: center;
+  border: 2px dashed #FFB300;
+  box-shadow: 0 4px 12px rgba(255, 179, 0, 0.1);
+  margin-bottom: 24px;
+}
+
+.no-data-card p {
+  margin: 0;
+  font-size: 16px;
+  color: #F57C00;
+  font-weight: 600;
 }
 
 /* --- Section Title with Button --- */
