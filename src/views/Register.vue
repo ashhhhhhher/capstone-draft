@@ -115,6 +115,18 @@ async function handleSubmit() {
   // --- Data Assembly ---
   const newId = 'Q-' + Math.floor(100000 + Math.random() * 900000).toString();
 
+  // 🚀 AUTOMATION: When first-timer gets assigned to D-group during registration, automatically tag as regular
+  const finalTags = {
+    ...tags.value,
+    ageCategory: ageCategory.value,
+    isFirstTimer: isFirstTimer.value
+  };
+  
+  if (finalTags.isFirstTimer && selectedDgroupLeader.value) {
+    finalTags.isFirstTimer = false;
+    finalTags.isRegular = true;
+  }
+  
   const memberData = {
     id: newId,
     lastName: toTitleCase(lastName.value.trim()),
@@ -129,11 +141,7 @@ async function handleSubmit() {
     fbAccount: fbAccount.value.trim(),
     dgroupLeader: selectedDgroupLeader.value,
     dgroupCapacity: tags.value.isDgroupLeader ? dgroupCapacity.value : null,
-    finalTags: {
-      ...tags.value,
-      ageCategory: ageCategory.value,
-      isFirstTimer: isFirstTimer.value
-    }
+    finalTags: finalTags
   }
 
   // --- CRITICAL FIX: Error Handling ---

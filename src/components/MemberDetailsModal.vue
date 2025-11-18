@@ -95,6 +95,13 @@ function save() {
     alert('A "Regular Member" must be assigned to a Dgroup Leader. Please select a leader or uncheck "Regular Member".');
     return;
   }
+  
+  // 🚀 AUTOMATION: When first-timer gets assigned to D-group, automatically tag as regular
+  if (editableMember.value.finalTags.isFirstTimer && editableMember.value.dgroupLeader) {
+    editableMember.value.finalTags.isFirstTimer = false;
+    editableMember.value.finalTags.isRegular = true;
+  }
+  
   editableMember.value.age = editableAge.value
   if (editableAge.value >= 12 && editableAge.value <= 21) {
     editableMember.value.finalTags.ageCategory = 'Elevate'

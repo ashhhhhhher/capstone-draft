@@ -9,6 +9,8 @@ import DoughnutChart from '../components/charts/DoughnutChart.vue'
 import Modal from '../components/Modal.vue'
 import DgroupMatchingModal from '../components/DgroupMatchingModal.vue'
 import ServiceAttendanceHistory from '../components/ServiceAttendanceHistory.vue'
+import AttendanceForecast from '../components/charts/AttendanceForecast.vue'
+import ForecastInsights from '../components/ForecastInsights.vue'
 
 // --- Store Setup ---
 const membersStore = useMembersStore()
@@ -19,6 +21,13 @@ const { allAttendance } = storeToRefs(useAttendanceStore())
 // --- Modal State ---
 const showDgroupModal = ref(false)
 const showHistoryModal = ref(false)
+
+// --- Forecast State ---
+const forecastData = ref(null)
+
+const onForecastReady = (data) => {
+  forecastData.value = data
+}
 
 // --- Chart Options ---
 
@@ -323,7 +332,23 @@ const inactiveMembers = computed(() => {
       </div>
     </div>
     
-    <!-- 4. Inactive Member List -->
+    <!-- 4. Forecasting Section -->
+    <div class="forecasting-section">
+      <div class="forecast-grid">
+        <AttendanceForecast 
+          :events="allEvents"
+          :attendance="allAttendance"
+          @forecast-ready="onForecastReady"
+        />
+        
+        <ForecastInsights 
+          v-if="forecastData"
+          :forecastData="forecastData"
+        />
+      </div>
+    </div>
+
+    <!-- 5. Inactive Member List -->
     <div class="list-card">
       <h3>Inactive Members (For Follow-up)</h3>
       <p class="list-subtitle">Members who have not attended the last 3 events.</p>
@@ -593,6 +618,26 @@ const inactiveMembers = computed(() => {
   
   .view-details-btn {
     width: 100%;
+  }
+}
+
+/* --- Forecasting Section --- */
+.forecasting-section {
+  margin: 40px 0;
+  padding: 24px 0;
+  border-top: 2px solid #E3F2FD;
+}
+
+.forecast-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0;
+}
+
+@media (min-width: 768px) {
+  .forecast-grid {
+    grid-template-columns: 1fr;
+    gap: 0;
   }
 }
 </style>
