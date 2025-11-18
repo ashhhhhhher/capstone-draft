@@ -79,6 +79,7 @@ async function assignLeader(seekerId, leaderName) {
     finalTags: {
       ...seeker.finalTags,
       isSeeker: false,
+      isFirstTimer: false,
       isRegular: true
     }
   }

@@ -45,7 +45,7 @@ const presentMemberIds = computed(() => {
 const filteredMembers = computed(() => {
   let list = members.value
 
-  // --- A. Text Search ---
+  // ---  Text Search ---
   if (searchQuery.value.trim() !== '') {
     const query = searchQuery.value.toLowerCase()
     list = list.filter(member => 
@@ -55,7 +55,7 @@ const filteredMembers = computed(() => {
     )
   }
 
-  // --- B. Checkbox Filters (all are AND) ---
+  // --- Checkbox Filters  ---
   if (filters.value.attendance.length > 0) {
     list = list.filter(m => {
       const isPresent = presentMemberIds.value.has(m.id)
@@ -85,7 +85,7 @@ const filteredMembers = computed(() => {
     )
   }
   
-  // --- C. Sorting ---
+  // --- Sorting ---
   list.sort((a, b) => {
     const aIsPresent = presentMemberIds.value.has(a.id)
     const bIsPresent = presentMemberIds.value.has(b.id)
@@ -141,19 +141,19 @@ function openMemberDetails(member) {
 function handleSaveChanges(updatedMember) {
   membersStore.updateMember(updatedMember)
   showMemberModal.value = false
-  searchQuery.value = '' // Clear search after successful save/edit
+  searchQuery.value = ''
 }
 
 function handleDeleteMember(memberId) {
   membersStore.deleteMember(memberId)
   showMemberModal.value = false 
-  searchQuery.value = '' // CRITICAL FIX: Clear search after deletion
+  searchQuery.value = '' 
 }
 
-// NEW: Function to clear search on general modal close
+//  Function to clear search on general modal close
 function handleModalClose() {
     showMemberModal.value = false;
-    searchQuery.value = ''; // CRITICAL FIX: Clear search when canceling delete or closing edit
+    searchQuery.value = ''; 
 }
 
 
@@ -188,7 +188,6 @@ function getDgroupAttendance(leaderMembers) {
     <div class="controls-wrapper">
       <div class="search-bar">
         <Search :size="20" class="search-icon" />
-        <!-- ADD: autocomplete="off" to discourage browser autofill -->
         <input 
           type="text" 
           placeholder="Search by name or email..."
@@ -278,7 +277,7 @@ function getDgroupAttendance(leaderMembers) {
 
   </div>
   
-  <!-- CRITICAL FIX: Use the new handleModalClose function on the main modal -->
+  <!-- Use the new handleModalClose function on the main modal -->
   <Modal v-if="showMemberModal" @close="handleModalClose"> 
     <MemberDetailsModal 
       v-if="selectedMember"

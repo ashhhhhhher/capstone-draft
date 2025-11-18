@@ -11,7 +11,7 @@ const router = useRouter()
 // Get the specific member profile object (which contains the Q-ID)
 const memberProfile = computed(() => authStore.userProfile);
 
-// CRITICAL FIX: Use the short Q-ID for the QR code value
+// Use the short Q-ID for the QR code value
 const qrCodeValue = computed(() => memberProfile.value?.id || authStore.user?.uid);
 const displayName = computed(() => memberProfile.value 
     ? `${memberProfile.value.firstName} ${memberProfile.value.lastName}` 

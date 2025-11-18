@@ -1,6 +1,6 @@
 <script setup>
 import { ref } from 'vue'
-import { RouterLink, useRouter } from 'vue-router' // 1. Import RouterLink
+import { RouterLink, useRouter } from 'vue-router' 
 import { useAuthStore } from '../stores/auth'
 
 const authStore = useAuthStore()
@@ -15,11 +15,10 @@ async function handleLogin() {
   try {
     await authStore.login(email.value, password.value)
     
-    // 2. NEW: Role-based redirect
     if (authStore.userRole === 'admin') {
       router.push('/')
     } else {
-      router.push('/member-dashboard') // We'll build this page next
+      router.push('/member-dashboard') 
     }
 
   } catch (error) {
@@ -61,7 +60,7 @@ async function handleLogin() {
         </button>
       </form>
       
-      <!-- 3. NEW: Sign Up Link -->
+      <!--  Sign Up Link -->
       <p class="signup-link">
         Don't have an account? 
         <RouterLink to="/signup">Sign Up</RouterLink>

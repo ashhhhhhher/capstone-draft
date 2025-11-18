@@ -50,7 +50,7 @@ async function handleUpdateProfile() {
     profileMessage.value = { type: 'error', text: 'Failed to update profile. Is your password correct?' }
     console.error(error)
   } finally {
-    profileConfirmPassword.value = '' // Always clear password field
+    profileConfirmPassword.value = '' 
   }
 }
 

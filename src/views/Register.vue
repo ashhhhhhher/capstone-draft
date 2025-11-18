@@ -289,8 +289,8 @@ async function handleSubmit() {
               <label for="vol-exalt">Exalt (Worship)</label>
             </div>
             <div class="checkbox-item">
-              <input type="checkbox" id="vol-usher" value="Usher" v-model="tags.volunteerMinistry" />
-              <label for="vol-usher">Usher</label>
+              <input type="checkbox" id="vol-dgm" value="DGM" v-model="tags.volunteerMinistry" />
+              <label for="vol-dgm">DGM</label>
             </div>
           </div>
         </div>

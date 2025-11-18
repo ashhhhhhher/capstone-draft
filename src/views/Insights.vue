@@ -8,9 +8,9 @@ import BarChart from '../components/charts/BarChart.vue'
 import DoughnutChart from '../components/charts/DoughnutChart.vue'
 import Modal from '../components/Modal.vue'
 import DgroupMatchingModal from '../components/DgroupMatchingModal.vue'
-import ServiceAttendanceHistory from '../components/ServiceAttendanceHistory.vue'
+import ExportButton from '../components/ExportButton.vue'
 import AttendanceForecast from '../components/charts/AttendanceForecast.vue'
-import ForecastInsights from '../components/ForecastInsights.vue'
+import ForecastInsights from '../components/ForecastInsights.vue' 
 
 // --- Store Setup ---
 const membersStore = useMembersStore()
@@ -25,171 +25,178 @@ const showHistoryModal = ref(false)
 // --- Forecast State ---
 const forecastData = ref(null)
 
+// Receives forecast data from the AttendanceForecast component
 const onForecastReady = (data) => {
-  forecastData.value = data
+  forecastData.value = data
 }
 
+
 // --- Chart Options ---
-
-// 1. Options for Historical Bar Chart (no labels)
 const historicalChartOptions = ref({
-  responsive: true,
-  maintainAspectRatio: false,
-  plugins: { 
-    legend: { display: false },
-    datalabels: {
-      display: false // Labels are OFF for this chart
-    }
-  },
-  scales: {
-    y: {
-      beginAtZero: true,
-      ticks: { stepSize: 1 }
-    }
-  }
+  responsive: true,
+  maintainAspectRatio: false,
+  plugins: { 
+    legend: { display: false },
+    datalabels: { display: false }
+  },
+  scales: {
+    y: { beginAtZero: true, ticks: { stepSize: 1 } }
+  }
 })
 
-// 2. NEW: Options for Doughnut Chart (with labels)
 const doughnutChartOptions = ref({
-  responsive: true,
-  maintainAspectRatio: false,
-  plugins: {
-    legend: {
-      position: 'bottom' // Move legend to bottom
-    },
-    datalabels: {
-      formatter: (value) => {
-        return value > 0 ? value : ''; // Show number if > 0
-      },
-      color: '#333', // Dark text for labels
-      font: {
-        weight: 'bold',
-        size: 14
-      }
-    }
-  }
+  responsive: true,
+  maintainAspectRatio: false,
+  plugins: {
+    legend: { position: 'bottom' },
+    datalabels: {
+      formatter: (value) => { return value > 0 ? value : ''; },
+      color: '#333',
+      font: { weight: 'bold', size: 14 }
+    }
+  }
 })
 
-// 3. NEW: Options for Grouped Bar Chart (with labels)
 const genderAgeChartOptions = ref({
-  responsive: true,
-  maintainAspectRatio: false,
-  plugins: {
-    legend: {
-      display: true
-    },
-    datalabels: {
-      formatter: (value) => {
-        return value > 0 ? value : ''; // Show number if > 0
-      },
-      color: '#fff', // White text inside the bars
-      anchor: 'center', // Position of the label
-      align: 'center', // Alignment of the label
-      font: {
-        weight: 'bold'
-      }
-    }
-  },
-  scales: {
-    x: { stacked: false },
-    y: {
-      beginAtZero: true,
-      stacked: false,
-      ticks: { stepSize: 1 }
-    }
-  }
+  responsive: true,
+  maintainAspectRatio: false,
+  plugins: {
+    legend: { display: true },
+    datalabels: {
+      formatter: (value) => { return value > 0 ? value : ''; },
+      color: '#fff',
+      anchor: 'center',
+      align: 'center',
+      font: { weight: 'bold' }
+    }
+  },
+  scales: {
+    x: { stacked: false },
+    y: { beginAtZero: true, stacked: false, ticks: { stepSize: 1 } }
+  }
 })
 
-// --- KPI Data Computations ---
+// --- KPI Data Computations  ---
 const demographics = computed(() => {
-  return {
-    total: members.value.length,
-    regulars: members.value.filter(m => m.finalTags.isRegular).length,
-    leaders: members.value.filter(m => m.finalTags.isDgroupLeader).length,
-    firstTimers: members.value.filter(m => m.finalTags.isFirstTimer).length,
-    volunteers: members.value.filter(m => m.finalTags.isVolunteer).length,
-  }
+  return {
+    total: members.value.length,
+    regulars: members.value.filter(m => m.finalTags.isRegular).length,
+    leaders: members.value.filter(m => m.finalTags.isDgroupLeader).length,
+    firstTimers: members.value.filter(m => m.finalTags.isFirstTimer).length,
+    volunteers: members.value.filter(m => m.finalTags.isVolunteer).length,
+  }
 })
 
 const attendanceTrends = computed(() => {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const pastEvents = allEvents.value.filter(
-    e => new Date(e.date + 'T00:00:00') <= today
-  );
-  if (pastEvents.length === 0) return { avg: 0, high: 0, low: 0 };
-  
-  const attendanceCounts = pastEvents.map(event => {
-    return allAttendance.value.filter(att => att.eventId === event.id).length;
-  });
-  const totalAttendance = attendanceCounts.reduce((sum, count) => sum + count, 0);
-  const avg = (totalAttendance / pastEvents.length).toFixed(1);
-  const high = Math.max(...attendanceCounts);
-  const low = Math.min(...attendanceCounts);
-  return { avg, high, low };
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const pastEvents = allEvents.value.filter(e => new Date(e.date + 'T00:00:00') <= today);
+  if (pastEvents.length === 0) return { avg: 0, high: 0, low: 0 };
+  
+  const attendanceCounts = pastEvents.map(event => allAttendance.value.filter(att => att.eventId === event.id).length);
+  const totalAttendance = attendanceCounts.reduce((sum, count) => sum + count, 0);
+  const avg = (totalAttendance / pastEvents.length).toFixed(1);
+  const high = Math.max(...attendanceCounts);
+  const low = Math.min(...attendanceCounts);
+  return { avg, high, low };
 })
 
 const conversionRate = computed(() => {
-  const firstTimers = members.value.filter(m => m.finalTags.isFirstTimer);
-  const totalFirstTimers = firstTimers.length;
-  let convertedCount = 0;
-  firstTimers.forEach(ft => {
-    const isConverted = ft.finalTags.isRegular || !!ft.dgroupLeader
-    const attendanceCount = allAttendance.value.filter(att => att.memberId === ft.id).length
-    if (isConverted && attendanceCount >= 2) {
-      convertedCount++
-    }
-  })
-  const total = totalFirstTimers + convertedCount;
-  if (total === 0) return { rate: 0, converted: 0, total: 0 };
-  const rate = Math.round((convertedCount / total) * 100);
-  return { rate, converted: convertedCount, total: total };
+  const firstTimers = members.value.filter(m => m.finalTags.isFirstTimer);
+  const totalFirstTimers = firstTimers.length;
+  let convertedCount = 0;
+  firstTimers.forEach(ft => {
+    const isConverted = ft.finalTags.isRegular || !!ft.dgroupLeader
+    const attendanceCount = allAttendance.value.filter(att => att.memberId === ft.id).length
+    if (isConverted && attendanceCount >= 2) {
+      convertedCount++
+    }
+  })
+  const total = totalFirstTimers + convertedCount;
+  if (total === 0) return { rate: 0, converted: 0, total: 0 };
+  const rate = Math.round((convertedCount / total) * 100);
+  return { rate, converted: convertedCount, total: total };
 })
 
 const dgroupMatching = computed(() => {
-  const totalCapacity = leaders.value.reduce((sum, leader) => sum + (leader.dgroupCapacity || 8), 0)
-  const totalMembersInDgroups = members.value.filter(m => !!m.dgroupLeader).length
-  const openSlots = totalCapacity - totalMembersInDgroups
-  return {
-    seekers: seekers.value.length,
-    openSlots: openSlots > 0 ? openSlots : 0
-  }
+  const totalCapacity = leaders.value.reduce((sum, leader) => sum + (leader.dgroupCapacity || 8), 0)
+  const totalMembersInDgroups = members.value.filter(m => !!m.dgroupLeader).length
+  const openSlots = totalCapacity - totalMembersInDgroups
+  return {
+    seekers: seekers.value.length,
+    openSlots: openSlots > 0 ? openSlots : 0
+  }
 })
 
 // --- Chart Data Computations ---
 const categoryDistributionData = computed(() => {
-  const d = demographics.value;
-  return {
-    labels: ['Regulars', 'Dgroup Leaders', 'First Timers', 'Volunteers'],
-    datasets: [{
-      backgroundColor: ['#1976D2', '#42A5F5', '#FFCA28', '#90A4AE'],
-      data: [d.regulars, d.leaders, d.firstTimers, d.volunteers]
-    }]
-  }
+  const d = demographics.value;
+  return {
+    labels: ['Regulars', 'Dgroup Leaders', 'First Timers'], 
+    datasets: [{
+      backgroundColor: ['#1976D2', '#42A5F5', '#FFCA28'], 
+      data: [d.regulars, d.leaders, d.firstTimers]
+    }]
+  }
 })
 
 const genderAgeDistributionData = computed(() => {
-  const malesElevate = members.value.filter(m => m.gender === 'Male' && m.finalTags.ageCategory === 'Elevate').length;
-  const malesB1G = members.value.filter(m => m.gender === 'Male' && m.finalTags.ageCategory === 'B1G').length;
-  const femalesElevate = members.value.filter(m => m.gender === 'Female' && m.finalTags.ageCategory === 'Elevate').length;
-  const femalesB1G = members.value.filter(m => m.gender === 'Female' && m.finalTags.ageCategory === 'B1G').length;
-  
-  return {
-    labels: ['Elevate (12-21)', 'B1G (22+)'],
-    datasets: [
-      {
-        label: 'Male',
-        backgroundColor: '#0D47A1',
-        data: [malesElevate, malesB1G]
-      },
-      {
-        label: 'Female',
-        backgroundColor: '#42A5F5',
-        data: [femalesElevate, femalesB1G]
-      }
-    ]
-  }
+  const malesElevate = members.value.filter(m => m.gender === 'Male' && m.finalTags.ageCategory === 'Elevate').length;
+  const malesB1G = members.value.filter(m => m.gender === 'Male' && m.finalTags.ageCategory === 'B1G').length;
+  const femalesElevate = members.value.filter(m => m.gender === 'Female' && m.finalTags.ageCategory === 'Elevate').length;
+  const femalesB1G = members.value.filter(m => m.gender === 'Female' && m.finalTags.ageCategory === 'B1G').length;
+  
+  return {
+    labels: ['Elevate (12-21)', 'B1G (22+)'],
+    datasets: [
+      {
+        label: 'Male',
+        backgroundColor: '#0D47A1',
+        data: [malesElevate, malesB1G]
+      },
+      {
+        label: 'Female',
+        backgroundColor: '#42A5F5',
+        data: [femalesElevate, femalesB1G]
+      }
+    ]
+  }
 })
+
+const volunteerBreakdown = computed(() => {
+    const ministries = ['Host', 'Live Prod', 'Exalt', 'DGM'];
+    const counts = {};
+    let totalVolunteers = 0;
+
+    members.value.filter(m => m.finalTags.isVolunteer).forEach(m => {
+        m.finalTags.volunteerMinistry.forEach(ministry => {
+            if (ministries.includes(ministry)) {
+                counts[ministry] = (counts[ministry] || 0) + 1;
+                totalVolunteers++;
+            }
+        });
+    });
+
+    return {
+        total: totalVolunteers,
+        data: ministries.map(name => ({
+            name,
+            count: counts[name] || 0,
+            percent: totalVolunteers > 0 ? Math.round((counts[name] || 0) / totalVolunteers * 100) : 0
+        }))
+    }
+})
+
+const getMinistryColor = (name) => {
+    switch(name) {
+        case 'Host': return '#F57C00';
+        case 'Live Prod': return '#00BCD4';
+        case 'Exalt': return '#4CAF50';
+        case 'Usher': return '#9C27B0';
+        default: return '#90A4AE';
+    }
+}
+
 
 const historicalAttendanceData = computed(() => {
   const recentEvents = allEvents.value.slice(0, 10).reverse()
@@ -208,7 +215,7 @@ const historicalAttendanceData = computed(() => {
 })
 
 const inactiveMembers = computed(() => {
-  const recentEventIds = allEvents.value.slice(0, 3).map(e => e.id)
+  const recentEventIds = allEvents.value.filter(e => e.eventType === 'service').slice(0, 5).map(e => e.id)
   if (recentEventIds.length === 0) return []
   const activeMemberIds = new Set(
     allAttendance.value
@@ -228,10 +235,15 @@ const inactiveMembers = computed(() => {
       <p>Analyze historical trends and member engagement.</p>
     </div>
 
-    <!-- 1. Key Metrics Row (NEW STYLES) -->
+    <!--Key Metrics Row -->
     <div class="kpi-grid">
+      <!-- Total Members KPI Card -->
       <div class="kpi-card">
-        <h4>Total Members</h4>
+        <div class="kpi-card-header">
+            <h4>Total Members</h4>
+            <ExportButton exportType="members" /> 
+        </div>
+        
         <div class="kpi-value">{{ demographics.total }}</div>
         <div class="kpi-detail-grid">
           <div>
@@ -287,7 +299,7 @@ const inactiveMembers = computed(() => {
       </div>
     </div>
 
-    <!-- 2. Charts Grid (UPDATED) -->
+    <!-- Charts Grid -->
     <div class="charts-grid">
       <div class="chart-card">
         <h3>Member Category Distribution</h3>
@@ -313,14 +325,37 @@ const inactiveMembers = computed(() => {
         </div>
       </div>
     </div>
+    
+    <!--  Volunteer Breakdown Section -->
+    <div class="chart-card-full">
+        <h3>Volunteers (Total: {{ volunteerBreakdown.total }})</h3>
+        <div v-if="volunteerBreakdown.total > 0" class="volunteer-progress-list">
+            <div 
+                v-for="item in volunteerBreakdown.data" 
+                :key="item.name" 
+                class="ministry-item"
+            >
+                <div class="ministry-label">
+                    <strong>{{ item.name }}</strong>
+                    <span>{{ item.count }} Members ({{ item.percent }}%)</span>
+                </div>
+                <div class="progress-bar-wrapper">
+                    <div 
+                        class="ministry-progress-bar"
+                        :style="{ width: item.percent + '%', backgroundColor: getMinistryColor(item.name) }"
+                    ></div>
+                </div>
+            </div>
+        </div>
+        <p v-else class="no-data-text">No volunteers currently tagged to a specific ministry.</p>
+    </div>
 
-    <!-- 3. Historical Attendance Chart -->
+
+    <!--  Historical Attendance Chart -->
     <div class="chart-card-full">
       <div class="section-title-with-button">
         <h3>Historical Events Attendance</h3>
-        <button class="view-details-btn" @click="showHistoryModal = true">
-          View Weekend Service History
-        </button>
+        <ExportButton exportType="events" />
       </div>
       <div class="chart-wrapper" style="height: 350px;">
         <BarChart 
@@ -331,27 +366,42 @@ const inactiveMembers = computed(() => {
         <p v-else class="no-data-text">No event data yet. Create an event and record attendance to see a trend.</p>
       </div>
     </div>
-    
-    <!-- 4. Forecasting Section -->
+
+    <!--  Forecasting Section  -->
     <div class="forecasting-section">
+      <h3>Attendance Forecast & Planning</h3>
       <div class="forecast-grid">
-        <AttendanceForecast 
-          :events="allEvents"
-          :attendance="allAttendance"
-          @forecast-ready="onForecastReady"
-        />
         
-        <ForecastInsights 
-          v-if="forecastData"
-          :forecastData="forecastData"
-        />
+        <!-- Forecasting Model (Chart) -->
+        <div class="forecast-chart-wrapper">
+            <AttendanceForecast 
+                :events="allEvents"
+                :attendance="allAttendance"
+                :onForecastReady="onForecastReady"
+            />
+        </div>
+        
+        <!-- Forecast Insights (KPIs) -->
+        <div class="forecast-insights-wrapper">
+            <ForecastInsights 
+                v-if="forecastData"
+                :forecastData="forecastData"
+            />
+            <div v-else class="loading-insight-placeholder">
+                <p>Generating forecast...</p>
+                <small>Requires historical weekend services data.</small>
+            </div>
+        </div>
       </div>
     </div>
 
-    <!-- 5. Inactive Member List -->
+
+    <!-- Inactive Member List -->
     <div class="list-card">
-      <h3>Inactive Members (For Follow-up)</h3>
-      <p class="list-subtitle">Members who have not attended the last 3 events.</p>
+      <div class="section-title-with-button">
+        <h3>Inactive Members (For Follow-up)</h3>
+      </div>
+      <p class="list-subtitle">Members who have not attended the last 5 services.</p>
       <ul v-if="inactiveMembers.length > 0" class="member-follow-list">
         <li v-for="member in inactiveMembers" :key="member.id">
           <strong>{{ member.firstName }} {{ member.lastName }}</strong>
@@ -360,16 +410,10 @@ const inactiveMembers = computed(() => {
       </ul>
       <p v-else class="no-data-text">No inactive members found. Great job!</p>
     </div>
-
-
   </div>
   
   <Modal v-if="showDgroupModal" @close="showDgroupModal = false" size="xl">
     <DgroupMatchingModal @close="showDgroupModal = false" />
-  </Modal>
-  
-  <Modal v-if="showHistoryModal" @close="showHistoryModal = false" size="xl">
-    <ServiceAttendanceHistory @close="showHistoryModal = false" />
   </Modal>
   
 </template>
@@ -392,7 +436,7 @@ const inactiveMembers = computed(() => {
   margin-top: 4px;
 }
 
-/* --- NEW KPI Card Styles --- */
+/* --- KPI Cards --- */
 .kpi-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
@@ -406,6 +450,16 @@ const inactiveMembers = computed(() => {
   box-shadow: 0 4px 12px rgba(0,0,0,0.05);
   transition: all 0.2s ease;
 }
+.kpi-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+}
+.kpi-card-header h4 {
+    margin: 0;
+}
+
 .kpi-card.is-clickable {
   cursor: pointer;
   border: 2px solid transparent;
@@ -424,8 +478,6 @@ const inactiveMembers = computed(() => {
 }
 
 .kpi-card h4 {
-  margin-top: 0;
-  margin-bottom: 12px;
   font-size: 16px;
   font-weight: 600;
   color: #546E7A;
@@ -498,7 +550,7 @@ const inactiveMembers = computed(() => {
   gap: 20px;
   margin-bottom: 20px;
 }
-@media (min-width: 900px) { /* Changed breakpoint */
+@media (min-width: 900px) {
   .charts-grid {
     grid-template-columns: 1fr 1fr;
   }
@@ -525,6 +577,60 @@ const inactiveMembers = computed(() => {
 }
 .chart-wrapper {
   position: relative;
+}
+
+/* --- Export/Title Styles --- */
+.section-title-with-button {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+.section-title-with-button h3 {
+  margin: 0;
+}
+@media (max-width: 600px) {
+  .section-title-with-button {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+}
+
+/* --- Volunteer Progress Bar Styles --- */
+.volunteer-progress-list {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    margin-top: 10px;
+}
+.ministry-item {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+.ministry-label {
+    display: flex;
+    justify-content: space-between;
+    font-size: 14px;
+}
+.ministry-label strong {
+    color: #37474F;
+    font-weight: 600;
+}
+.ministry-label span {
+    color: #546E7A;
+}
+.progress-bar-wrapper {
+    height: 12px;
+    background-color: #ECEFF1;
+    border-radius: 6px;
+    overflow: hidden;
+}
+.ministry-progress-bar {
+    height: 100%;
+    border-radius: 6px;
+    transition: width 0.5s ease;
 }
 
 /* --- List Card --- */
@@ -577,50 +683,6 @@ const inactiveMembers = computed(() => {
   padding: 40px;
   color: #78909C;
 }
-
-/* --- Section Title with Button --- */
-.section-title-with-button {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 20px;
-}
-
-.section-title-with-button h3 {
-  margin: 0;
-}
-
-.view-details-btn {
-  padding: 10px 20px;
-  background: linear-gradient(135deg, #1976D2 0%, #1565C0 100%);
-  color: white;
-  font-size: 14px;
-  font-weight: 600;
-  border: none;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  box-shadow: 0 2px 8px rgba(25, 118, 210, 0.2);
-}
-
-.view-details-btn:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(25, 118, 210, 0.3);
-  background: linear-gradient(135deg, #1565C0 0%, #0D47A1 100%);
-}
-
-@media (max-width: 600px) {
-  .section-title-with-button {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 12px;
-  }
-  
-  .view-details-btn {
-    width: 100%;
-  }
-}
-
 /* --- Forecasting Section --- */
 .forecasting-section {
   margin: 40px 0;
@@ -631,13 +693,43 @@ const inactiveMembers = computed(() => {
 .forecast-grid {
   display: grid;
   grid-template-columns: 1fr;
-  gap: 0;
+  gap: 20px;
 }
 
 @media (min-width: 768px) {
-  .forecast-grid {
-    grid-template-columns: 1fr;
-    gap: 0;
-  }
+  .forecast-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 20px;
 }
+}
+.forecast-chart-wrapper {
+    height: 100%;
+}
+.loading-insight-placeholder {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+    background: #FFFDE7;
+    border: 1px dashed #FFECB3;
+    border-radius: 12px;
+    padding: 30px;
+}
+.loading-insight-placeholder p {
+    font-weight: 600;
+    color: #FF8F00;
+    margin: 5px 0;
+}
+.loading-insight-placeholder small {
+    font-size: 12px;
+    color: #FFB300;
+}
+
+.forecast-insights-wrapper {
+    height: 100%;
+}
+
 </style>

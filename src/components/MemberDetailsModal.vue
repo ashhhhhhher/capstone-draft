@@ -295,8 +295,8 @@ function confirmDelete() {
                 <label for="edit-vol-exalt">Exalt (Worship)</label>
               </div>
               <div class="checkbox-item">
-                <input type="checkbox" id="edit-vol-usher" value="Usher" v-model="editableMember.finalTags.volunteerMinistry" />
-                <label for="edit-vol-usher">Usher</label>
+                <input type="checkbox" id="edit-vol-dgm" value="dgm" v-model="editableMember.finalTags.volunteerMinistry" />
+                <label for="edit-vol-dgm">DGM</label>
               </div>
             </div>
           </div>
