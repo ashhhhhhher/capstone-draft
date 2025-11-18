@@ -1,16 +1,14 @@
 <script setup>
 import { computed } from 'vue'
-import { Plus, Settings } from 'lucide-vue-next'
+import { Calendar } from 'lucide-vue-next'
 import { useEventsStore } from '../stores/events'
 
-const emit = defineEmits(['open-create-event', 'open-event-list'])
+const emit = defineEmits(['open-calendar']) 
 
 const eventsStore = useEventsStore()
 const currentEvent = computed(() => eventsStore.currentEvent)
 
 // --- Computed Properties ---
-
-// NEW: Check if a photo URL exists
 const hasPhoto = computed(() => {
   return currentEvent.value && currentEvent.value.photoURL
 })
@@ -38,7 +36,7 @@ const backgroundStyle = computed(() => {
   if (hasPhoto.value) {
     return { backgroundImage: `url(${currentEvent.value.photoURL})` }
   }
-  return {} // No style if no photo
+  return {}
 })
 
 const eventTypeDisplay = computed(() => {
@@ -48,28 +46,19 @@ const eventTypeDisplay = computed(() => {
   return null
 })
 
-function createEvent() {
-  emit('open-create-event')
-}
-function manageEvents() {
-  emit('open-event-list')
+function openCalendar() {
+  emit('open-calendar')
 }
 </script>
 
 <template>
-  <!-- 
-    The 'has-photo' class is now dynamic.
-    It will be added ONLY if a photoURL exists.
-  -->
   <div class="card event-snapshot" 
-    :class="{ 'has-photo': hasPhoto }" 
+    :class="{ 'has-photo': hasPhoto, 'blue-bg': !hasPhoto }" 
     :style="backgroundStyle"
   >
-    <!-- The overlay is now conditional -->
     <div class="overlay" v-if="hasPhoto"></div>
     
     <div class="event-info">
-      <!-- The tag is also conditional -->
       <span v-if="eventTypeDisplay" 
         class="event-type-tag"
         :class="{ 'light': !hasPhoto }"
@@ -80,13 +69,10 @@ function manageEvents() {
       <h2 class="event-name">{{ currentEvent ? currentEvent.name : "No Event Active" }}</h2>
     </div>
     
+    <!-- calendar button -->
     <div class="button-wrapper">
-      <button class="btn-secondary" @click="manageEvents">
-        <Settings :size="18" />
-      </button>
-      <button class="create-btn" @click="createEvent">
-        <Plus :size="20" />
-        <span>Create</span>
+      <button class="manage-btn" @click="openCalendar">
+        <Calendar :size="20" />
       </button>
     </div>
   </div>
@@ -95,7 +81,6 @@ function manageEvents() {
 <style scoped>
 /* --- DEFAULT (NO-PHOTO) STYLES --- */
 .event-snapshot {
-  background-color: #fff; /* Default white background */
   border-radius: 12px;
   padding: 24px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
@@ -105,7 +90,11 @@ function manageEvents() {
   margin-bottom: 20px;
   position: relative;
   overflow: hidden;
-  border: 1px solid #ECEFF1;
+  border: 1px solid #BBDEFB; 
+}
+
+.event-snapshot.blue-bg {
+  background-color: #E3F2FD; 
 }
 
 .event-info {
@@ -125,15 +114,14 @@ function manageEvents() {
   font-weight: 600;
   margin-bottom: 8px;
 }
-/* Style for no-photo state */
 .event-type-tag.light {
-  background: #E3F2FD;
+  background: #BBDEFB;
   color: #0D47A1;
 }
 
 .event-info .date {
   font-size: 14px;
-  color: #546E7A; /* Default dark text */
+  color: #546E7A; 
   font-weight: 500;
   display: block;
 }
@@ -141,7 +129,7 @@ function manageEvents() {
 .event-info .event-name {
   font-size: 22px;
   font-weight: 600;
-  color: #333; /* Default dark text */
+  color: #333;
   margin: 4px 0 0 0;
 }
 
@@ -153,74 +141,55 @@ function manageEvents() {
   z-index: 2;
 }
 
-.create-btn {
+.manage-btn {
   background-color: #1976D2;
   color: white;
   border: none;
   border-radius: 8px;
-  padding: 10px 16px;
+  padding: 12px; 
   font-size: 14px;
   font-weight: 600;
   display: flex;
   align-items: center;
-  gap: 8px;
+  justify-content: center;
   cursor: pointer;
   box-shadow: 0 2px 8px rgba(25, 118, 210, 0.3);
   transition: all 0.2s ease;
 }
-.create-btn:hover {
+.manage-btn:hover {
   background-color: #1565C0;
 }
-
-.btn-secondary {
-  background-color: #ECEFF1; /* Default light background */
-  color: #37474F; /* Default dark text */
-  border: 1px solid #CFD8DC;
-  border-radius: 8px;
-  padding: 10px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-.btn-secondary:hover {
-  background-color: #CFD8DC;
-}
-
 
 /* --- PHOTO STYLES (Overrides) --- */
 .event-snapshot.has-photo {
   background-size: cover;
   background-position: center;
-  color: white; /* Switch all text to white */
+  color: white;
+  border: none;
 }
 
 .has-photo .overlay {
   position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
+  top: 0; left: 0; right: 0; bottom: 0;
   background: linear-gradient(90deg, rgba(0,0,0,0.7) 0%, rgba(0,0,0,0.3) 100%);
   z-index: 1;
 }
 
 .has-photo .event-info .date {
-  color: #E0E0E0; /* Override to light text */
+  color: #E0E0E0;
 }
 
 .has-photo .event-info .event-name {
-  color: #fff; /* Override to light text */
+  color: #fff;
   text-shadow: 0 1px 3px rgba(0,0,0,0.4);
 }
 
-.has-photo .btn-secondary {
-  background-color: rgba(255, 255, 255, 0.2); /* Override to transparent */
-  color: white; /* Override to light text */
+.has-photo .manage-btn {
+  background-color: rgba(255, 255, 255, 0.2);
   border: 1px solid rgba(255, 255, 255, 0.5);
+  box-shadow: none;
 }
-.has-photo .btn-secondary:hover {
+.has-photo .manage-btn:hover {
   background-color: rgba(255, 255, 255, 0.3);
 }
 </style>

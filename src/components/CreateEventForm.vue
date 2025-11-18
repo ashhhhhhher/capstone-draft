@@ -19,6 +19,7 @@ const eventDate = ref('')
 const eventTime = ref('')
 const eventDescription = ref('')
 const eventType = ref('service')
+const eventLocation = ref('') 
 const photoURL = ref('')
 const imageFile = ref(null)
 
@@ -35,12 +36,13 @@ watch(() => props.eventToEdit, (newEvent) => {
     eventTime.value = newEvent.time
     eventDescription.value = newEvent.description || ''
     eventType.value = newEvent.eventType
+    eventLocation.value = newEvent.eventLocation || '' 
     photoURL.value = newEvent.photoURL
   } else {
     isEditMode.value = false
     eventId.value = null; eventName.value = ''; eventDate.value = '';
     eventTime.value = ''; eventDescription.value = '';
-    eventType.value = 'service'; photoURL.value = ''; imageFile.value = null;
+    eventType.value = 'service'; eventLocation.value = ''; photoURL.value = ''; imageFile.value = null; // Clear location
   }
 }, { immediate: true })
 
@@ -58,7 +60,7 @@ function uploadImage(file) {
     const uploadTask = uploadBytesResumable(fileRef, file)
     
     uploadTask.on('state_changed', 
-      (snapshot) => {
+      (snapshot) => { 
         uploadProgress.value = (snapshot.bytesTransferred / snapshot.totalBytes) * 100
       },
       (error) => {
@@ -93,6 +95,7 @@ async function handleSubmit() {
       time: eventTime.value,
       description: eventDescription.value,
       eventType: eventType.value,
+      eventLocation: eventLocation.value, 
       photoURL: newPhotoURL
     }
 
@@ -113,16 +116,14 @@ async function handleSubmit() {
 </script>
 
 <template>
-  <!-- NEW: Header/Body/Footer structure -->
   <div class="form-container">
     
-    <!-- 1. HEADER (Stays at top) -->
     <div class="form-header">
       <h2>{{ isEditMode ? 'Edit Event' : 'Create New Event' }}</h2>
     </div>
-    
-    <!-- 2. BODY (Scrolls) -->
+      <!-- 2. Scroll BODY -->
     <form class="form-body" @submit.prevent="handleSubmit">
+      
       <div class="form-group">
         <label>Event Type</label>
         <div class="radio-group">
@@ -154,6 +155,12 @@ async function handleSubmit() {
           <input type="time" id="eventTime" v-model="eventTime" required />
         </div>
       </div>
+      
+      <!-- Location Field -->
+      <div class="form-group">
+        <label for="eventLocation">Location</label>
+        <input type="text" id="eventLocation" v-model="eventLocation" placeholder="e.g., Baguio Convention Center" />
+      </div>
 
       <div class="form-group">
         <label for="eventDescription">Description (Optional)</label>
@@ -164,8 +171,12 @@ async function handleSubmit() {
         <label for="eventPhoto">Background Photo (Optional)</label>
         <input type="file" id="eventPhoto" @change="onFileChange" accept="image/png, image/jpeg">
         <small v-if="isEditMode && photoURL && !imageFile">A photo is already set. Upload a new one to replace it.</small>
+        <div v-if="photoURL" class="current-photo-preview">
+          <img :src="photoURL" alt="Current Event Background" style="max-width: 100px; height: auto; border-radius: 4px;">
+        </div>
       </div>
       
+      <!-- Upload Progress Bar -->
       <div v-if="isUploading" class="progress-bar">
         <div class="progress" :style="{ width: uploadProgress + '%' }"></div>
         <span>Uploading... {{ Math.round(uploadProgress) }}%</span>
@@ -175,7 +186,7 @@ async function handleSubmit() {
       <div class="form-footer-spacer"></div>
     </form>
     
-    <!-- 3. FOOTER (Stays at bottom) -->
+    <!-- 3. FOOTER -->
     <div class="form-footer">
       <button 
         type="submit" 
@@ -191,7 +202,6 @@ async function handleSubmit() {
 </template>
 
 <style scoped>
-/* --- NEW: Header/Body/Footer styles --- */
 .form-container {
   width: 100%;
   display: flex;
@@ -209,7 +219,7 @@ async function handleSubmit() {
   color: #333;
 }
 .form-body {
-  overflow-y: auto; /* This is the scrollbar */
+  overflow-y: auto; 
   flex-grow: 1;
   padding: 0 16px;
   margin: 0 -16px;
@@ -221,10 +231,9 @@ async function handleSubmit() {
   margin-top: 20px;
 }
 .form-footer-spacer {
-  /* This is just to push content up from the footer */
   height: 1px; 
 }
-/* --- End new styles --- */
+
 
 .form-grid {
   display: grid;
@@ -258,6 +267,11 @@ async function handleSubmit() {
   color: #546E7A;
   margin-top: 4px;
 }
+.current-photo-preview {
+  margin-top: 10px;
+}
+
+/* Radio Button Styles */
 .radio-group {
   display: flex;
   gap: 16px;
@@ -272,6 +286,7 @@ async function handleSubmit() {
 .radio-label input {
   width: auto;
 }
+
 .progress-bar {
   width: 100%;
   background-color: #ECEFF1;
@@ -295,6 +310,7 @@ async function handleSubmit() {
   background-color: #42A5F5;
   transition: width 0.3s ease;
 }
+
 .submit-btn {
   width: 100%;
   padding: 14px;

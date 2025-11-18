@@ -317,7 +317,7 @@ const inactiveMembers = computed(() => {
     <!-- 3. Historical Attendance Chart -->
     <div class="chart-card-full">
       <div class="section-title-with-button">
-        <h3>Historical Attendance (Last 10 Events)</h3>
+        <h3>Historical Events Attendance</h3>
         <button class="view-details-btn" @click="showHistoryModal = true">
           View Weekend Service History
         </button>
