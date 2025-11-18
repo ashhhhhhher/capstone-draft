@@ -35,7 +35,7 @@ const leaderStats = computed(() => {
   }).sort((a, b) => b.openSlots - a.openSlots)
 })
 
-// Suggestions per seeker (same gender + age gap >=5 + open slots)
+// Suggestions per seeker (same gender + age gap >=3 + open slots)
 const suggestions = computed(() => {
   return seekers.value.map(seeker => {
     const sAge = seeker.age ?? null
@@ -45,7 +45,7 @@ const suggestions = computed(() => {
       if (l.openSlots <= 0) return false
       if (sGender && l.gender && l.gender !== sGender) return false
       if (sAge !== null && l.age !== null) {
-        return (l.age - sAge) >= 5
+        return (l.age - sAge) >= 3
       }
       return false
     })
