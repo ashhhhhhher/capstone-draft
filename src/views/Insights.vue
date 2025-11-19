@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, ref, onMounted } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useMembersStore } from '../stores/members'
 import { useEventsStore } from '../stores/events'
@@ -269,6 +269,43 @@ const monitoringList = computed(() => {
   });
 
   return results.sort((a, b) => b.consecutiveAbsences - a.consecutiveAbsences);
+});
+
+// --- Testing helper: clear msgSent/leaderNotified for "Inactive" members on each reload ---
+onMounted(() => {
+  try {
+    const today = new Date().toISOString().split('T')[0];
+    const pastServices = allEvents.value
+      .filter(e => e.eventType === 'service' && e.date <= today)
+      .sort((a, b) => new Date(b.date) - new Date(a.date));
+
+    if (!pastServices.length) return;
+
+    // For each active member compute consecutiveAbsences and reset monitoring flags if Inactive (>=5)
+    activeMembers.value.forEach(member => {
+      let consecutiveAbsences = 0;
+      for (const event of pastServices) {
+        const attended = allAttendance.value.some(
+          att => att.eventId === event.id && att.memberId === member.id
+        );
+        if (!attended) consecutiveAbsences++;
+        else break;
+      }
+
+      if (consecutiveAbsences >= 5) {
+        // ensure object exists and clear stored flags so testing can re-send messages
+        if (!member.monitoringState || typeof member.monitoringState !== 'object') {
+          member.monitoringState = {};
+        }
+        // clear saved sent/leader-notified dates (allow UI buttons to appear again)
+        member.monitoringState.msgSentDate = null;
+        member.monitoringState.leaderNotifiedDate = null;
+      }
+    });
+  } catch (err) {
+    // fail silently for safety during testing
+    // console.warn('Failed to reset monitoring flags for testing', err)
+  }
 });
 
 // --- Action Functions ---
