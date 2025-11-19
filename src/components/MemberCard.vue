@@ -3,11 +3,9 @@ import { computed } from 'vue'
 
 const props = defineProps({
   member: Object,
-  // This prop is passed down from the Members.vue page
   isPresent: Boolean 
 })
 
-// This "smart" computed property fixes the display logic
 const leaderDisplay = computed(() => {
   // 1. If they have a leader, show the leader's name
   if (props.member.dgroupLeader) {
@@ -36,7 +34,6 @@ const leaderDisplay = computed(() => {
       <div class="member-details">
         <div class="detail-item">
           <span class="label">Leader:</span>
-          <!-- This now uses the correct logic -->
           <span class="value">{{ leaderDisplay }}</span>
         </div>
       </div>
@@ -105,11 +102,11 @@ const leaderDisplay = computed(() => {
   border-radius: 50%;
 }
 .status-dot.is-present {
-  background-color: #4CAF50; /* Green */
+  background-color: #4CAF50; 
   color: #2E7D32;
 }
 .status-dot.is-absent {
-  background-color: #F44336; /* Red */
+  background-color: #F44336; 
   color: #C62828;
 }
 /* This makes the text color match the dot */

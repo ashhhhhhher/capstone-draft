@@ -57,11 +57,11 @@ const modalSizeClass = computed(() => {
   position: relative;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
   
-  /* --- THIS IS THE SCROLLING FIX --- */
-  max-height: 90vh; /* Set a max height */
+  /* --- SCROLLING  --- */
+  max-height: 90vh; 
   display: flex;
-  flex-direction: column; /* Allow content to grow */
-  overflow: hidden; /* The modal itself does not scroll */
+  flex-direction: column; 
+  overflow: hidden; 
 }
 
 /* This targets the <slot> and makes its content (MemberDetailsModal) grow */
@@ -69,7 +69,7 @@ const modalSizeClass = computed(() => {
   display: flex;
   flex-direction: column;
   flex-grow: 1;
-  overflow: hidden; /* The slotted content also clips */
+  overflow: hidden; 
 }
 
 .modal-content.modal-default {

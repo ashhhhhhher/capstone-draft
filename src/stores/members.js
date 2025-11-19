@@ -13,29 +13,31 @@ import {
 import { useAuthStore } from './auth';
 
 export const useMembersStore = defineStore('members', () => {
-  // --- State ---
   const members = ref([])
   const isLoading = ref(true)
 
-  // --- Getters (Unchanged) ---
+  const activeMembers = computed(() => {
+    return members.value.filter(m => m.status !== 'archived')
+  })
+  const archivedMembers = computed(() => {
+    return members.value.filter(m => m.status === 'archived')
+  })
+
   const leaderNames = computed(() => {
-    return members.value
+    return activeMembers.value
       .filter(m => m.finalTags.isDgroupLeader)
       .map(m => `${m.firstName} ${m.lastName}`)
   })
   const leaders = computed(() => {
-    return members.value.filter(m => m.finalTags.isDgroupLeader)
+    return activeMembers.value.filter(m => m.finalTags.isDgroupLeader)
   })
   const seekers = computed(() => {
-    return members.value.filter(m => m.finalTags.isSeeker)
+    return activeMembers.value.filter(m => m.finalTags.isSeeker)
   })
-
-  // --- Actions ---
 
   const getMemberCollection = () => {
     const authStore = useAuthStore();
     if (!authStore.branchId) {
-        console.error("Branch ID not available. Cannot fetch members.");
         return collection(db, "members_error"); 
     }
     return collection(db, "branches", authStore.branchId, "members");
@@ -48,11 +50,14 @@ export const useMembersStore = defineStore('members', () => {
     onSnapshot(membersQuery, (querySnapshot) => {
       const allMembers = [];
       querySnapshot.forEach((doc) => {
-        allMembers.push(doc.data());
+        const data = doc.data();
+        if (!data.status) data.status = 'active';
+        // Ensure monitoringState object exists
+        if (!data.monitoringState) data.monitoringState = { msgSentDate: null, leaderNotifiedDate: null };
+        allMembers.push(data);
       });
       members.value = allMembers;
       this.isLoading = false;
-      console.log(`Members store updated for branch ${useAuthStore().branchId}.`);
     }, (error) => {
       console.error("Error fetching members: ", error);
       this.isLoading = false;
@@ -62,17 +67,15 @@ export const useMembersStore = defineStore('members', () => {
   async function registerNewMember(memberData) {
     const authStore = useAuthStore();
     memberData.authUid = null; 
+    memberData.status = 'active'; 
+    memberData.monitoringState = { msgSentDate: null, leaderNotifiedDate: null }; // Init state
 
     try {
       const memberRef = doc(getMemberCollection(), memberData.id);
       await setDoc(memberRef, memberData);
-      
-      authStore.sendCreationEmail(memberData.email);
-      console.log(`[SIMULATED BACKEND]: Account creation link sent to ${memberData.email}.`);
-      
+      await authStore.sendCreationEmail(memberData.email);
     } catch (error) {
       console.error("Error during member registration:", error);
-      throw new Error(`Registration failed: ${error.message}`);
     }
   }
 
@@ -85,25 +88,47 @@ export const useMembersStore = defineStore('members', () => {
     }
   }
 
-  async function deleteMember(memberId) {
+  async function archiveMember(memberId) {
     try {
       const memberRef = doc(getMemberCollection(), memberId);
-      await deleteDoc(memberRef);
+      await updateDoc(memberRef, { status: 'archived' });
     } catch (error) {
-      console.error("Error deleting member: ", error);
+      console.error("Error archiving member: ", error);
+    }
+  }
+
+  async function restoreMember(memberId) {
+    try {
+      const memberRef = doc(getMemberCollection(), memberId);
+      await updateDoc(memberRef, { status: 'active' });
+    } catch (error) {
+      console.error("Error restoring member: ", error);
+    }
+  }
+
+  // ---  Log Monitoring Actions ---
+  async function logMonitoringAction(memberId, actionType) {
+    // actionType = 'message' or 'notifyLeader'
+    try {
+      const memberRef = doc(getMemberCollection(), memberId);
+      const updateData = {};
+      
+      if (actionType === 'message') {
+        updateData['monitoringState.msgSentDate'] = new Date().toISOString();
+      } else if (actionType === 'notifyLeader') {
+        updateData['monitoringState.leaderNotifiedDate'] = new Date().toISOString();
+      }
+
+      await updateDoc(memberRef, updateData);
+    } catch (error) {
+      console.error("Error logging action:", error);
     }
   }
   
-  // --- CRITICAL FIX: EXPOSE ALL ACTIONS ---
   return { 
-    members, 
-    isLoading,
-    leaderNames,
-    leaders,
-    seekers,
-    fetchMembers, // <-- FIX: This function is now exposed
-    registerNewMember, 
-    updateMember, 
-    deleteMember
+    members, activeMembers, archivedMembers, isLoading,
+    leaderNames, leaders, seekers,
+    fetchMembers, registerNewMember, updateMember, archiveMember, restoreMember,
+    logMonitoringAction 
   }
 })

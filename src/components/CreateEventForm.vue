@@ -19,7 +19,9 @@ const eventDate = ref('')
 const eventTime = ref('')
 const eventDescription = ref('')
 const eventType = ref('service')
-const eventLocation = ref('') 
+const eventLocation = ref('')
+const eventSpeaker = ref('') 
+const eventSeries = ref('')  
 const photoURL = ref('')
 const imageFile = ref(null)
 
@@ -36,13 +38,17 @@ watch(() => props.eventToEdit, (newEvent) => {
     eventTime.value = newEvent.time
     eventDescription.value = newEvent.description || ''
     eventType.value = newEvent.eventType
-    eventLocation.value = newEvent.eventLocation || '' 
+    eventLocation.value = newEvent.eventLocation || ''
+    eventSpeaker.value = newEvent.eventSpeaker || '' 
+    eventSeries.value = newEvent.eventSeries || ''  
     photoURL.value = newEvent.photoURL
   } else {
     isEditMode.value = false
     eventId.value = null; eventName.value = ''; eventDate.value = '';
     eventTime.value = ''; eventDescription.value = '';
-    eventType.value = 'service'; eventLocation.value = ''; photoURL.value = ''; imageFile.value = null; // Clear location
+    eventType.value = 'service'; eventLocation.value = ''; 
+    eventSpeaker.value = ''; eventSeries.value = ''; 
+    photoURL.value = ''; imageFile.value = null;
   }
 }, { immediate: true })
 
@@ -95,7 +101,9 @@ async function handleSubmit() {
       time: eventTime.value,
       description: eventDescription.value,
       eventType: eventType.value,
-      eventLocation: eventLocation.value, 
+      eventLocation: eventLocation.value,
+      eventSpeaker: eventSpeaker.value, 
+      eventSeries: eventSeries.value,  
       photoURL: newPhotoURL
     }
 
@@ -121,7 +129,7 @@ async function handleSubmit() {
     <div class="form-header">
       <h2>{{ isEditMode ? 'Edit Event' : 'Create New Event' }}</h2>
     </div>
-      <!-- 2. Scroll BODY -->
+    
     <form class="form-body" @submit.prevent="handleSubmit">
       
       <div class="form-group">
@@ -156,10 +164,21 @@ async function handleSubmit() {
         </div>
       </div>
       
-      <!-- Location Field -->
       <div class="form-group">
         <label for="eventLocation">Location</label>
         <input type="text" id="eventLocation" v-model="eventLocation" placeholder="e.g., Baguio Convention Center" />
+      </div>
+
+      <!-- Speaker and Series Fields -->
+      <div class="form-grid">
+        <div class="form-group">
+          <label for="eventSpeaker">Speaker</label>
+          <input type="text" id="eventSpeaker" v-model="eventSpeaker" placeholder="e.g., Ptr. Danny" />
+        </div>
+        <div class="form-group">
+          <label for="eventSeries">Series Title</label>
+          <input type="text" id="eventSeries" v-model="eventSeries" placeholder="e.g., Unstoppable" />
+        </div>
       </div>
 
       <div class="form-group">
@@ -176,17 +195,14 @@ async function handleSubmit() {
         </div>
       </div>
       
-      <!-- Upload Progress Bar -->
       <div v-if="isUploading" class="progress-bar">
         <div class="progress" :style="{ width: uploadProgress + '%' }"></div>
         <span>Uploading... {{ Math.round(uploadProgress) }}%</span>
       </div>
 
-      <!-- This is a spacer so content doesn't get stuck under the button -->
       <div class="form-footer-spacer"></div>
     </form>
     
-    <!-- 3. FOOTER -->
     <div class="form-footer">
       <button 
         type="submit" 
@@ -209,46 +225,53 @@ async function handleSubmit() {
   flex-grow: 1;
   overflow: hidden;
 }
+
 .form-header {
   flex-shrink: 0;
   margin-bottom: 24px;
 }
+
 .form-header h2 {
   margin: 0;
   text-align: center;
   color: #333;
 }
+
 .form-body {
-  overflow-y: auto; 
+  overflow-y: auto;
   flex-grow: 1;
   padding: 0 16px;
   margin: 0 -16px;
 }
+
 .form-footer {
   flex-shrink: 0;
   padding-top: 20px;
   border-top: 1px solid #ECEFF1;
   margin-top: 20px;
 }
+
 .form-footer-spacer {
   height: 1px; 
 }
-
 
 .form-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 16px;
 }
+
 .form-group {
   margin-bottom: 20px;
 }
+
 .form-group label {
   display: block;
   margin-bottom: 8px;
   font-weight: 500;
   color: #555;
 }
+
 .form-group input,
 .form-group textarea,
 .form-group input[type="file"] {
@@ -259,30 +282,34 @@ async function handleSubmit() {
   box-sizing: border-box; 
   font-size: 16px;
 }
+
 .form-group input[type="file"] {
   padding: 8px;
 }
+
 .form-group small {
   font-size: 12px;
   color: #546E7A;
   margin-top: 4px;
 }
+
 .current-photo-preview {
   margin-top: 10px;
 }
 
-/* Radio Button Styles */
 .radio-group {
   display: flex;
   gap: 16px;
   margin-bottom: 8px;
 }
+
 .radio-label {
   display: flex;
   align-items: center;
   gap: 8px;
   font-size: 16px;
 }
+
 .radio-label input {
   width: auto;
 }
@@ -296,6 +323,7 @@ async function handleSubmit() {
   position: relative;
   margin-top: 10px;
 }
+
 .progress-bar span {
   position: absolute;
   width: 100%;
@@ -305,6 +333,7 @@ async function handleSubmit() {
   font-weight: 600;
   color: #333;
 }
+
 .progress {
   height: 100%;
   background-color: #42A5F5;
@@ -314,6 +343,7 @@ async function handleSubmit() {
 .submit-btn {
   width: 100%;
   padding: 14px;
+  margin-top: 20px;
   background-color: #1976D2;
   color: white;
   font-size: 16px;
@@ -322,6 +352,7 @@ async function handleSubmit() {
   border-radius: 8px;
   cursor: pointer;
 }
+
 .submit-btn:disabled {
   background-color: #90A4AE;
   cursor: not-allowed;

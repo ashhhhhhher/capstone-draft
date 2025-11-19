@@ -1,7 +1,6 @@
 <script setup>
 import { ref, computed } from 'vue'
 import { storeToRefs } from 'pinia'
-import { Calendar, Settings } from 'lucide-vue-next'
 import { useMembersStore } from '../stores/members'
 import { useEventsStore } from '../stores/events'
 import { useAttendanceStore } from '../stores/attendance'
@@ -11,6 +10,7 @@ import AttendanceStats from '../components/AttendanceStats.vue'
 import Modal from '../components/Modal.vue'
 import CreateEventForm from '../components/CreateEventForm.vue'
 import AttendanceListModal from '../components/AttendanceListModal.vue'
+import EventListModal from '../components/EventListModal.vue'
 import CalendarModal from '../components/CalendarModal.vue' 
 
 // --- Store Setup ---
@@ -21,6 +21,7 @@ const { currentEventAttendees } = storeToRefs(useAttendanceStore())
 // --- Modal State ---
 const showCreateEventModal = ref(false)
 const showAttendanceModal = ref(false)
+const showEventListModal = ref(false) 
 const showCalendarModal = ref(false) 
 const eventToEdit = ref(null) 
 const selectedStatFilter = ref('All')
@@ -58,11 +59,16 @@ const filteredAttendees = computed(() => {
 
 const formattedEventDate = computed(() => {
   if (!currentEvent.value || !currentEvent.value.date) return "No Date Set"
-  const options = { weekday: 'long', month: 'long', day: 'numeric' }
+  const options = { 
+    year: 'numeric', 
+    month: 'long', 
+    day: 'numeric' 
+  }
   const date = new Date(currentEvent.value.date + 'T00:00:00')
   return date.toLocaleDateString('en-US', options)
 })
 
+// --- Upcoming Events Logic ---
 const upcomingEvents = computed(() => {
   const today = new Date();
   const todayStr = new Date(today.getTime() - (today.getTimezoneOffset() * 60000)).toISOString().split('T')[0];
@@ -117,6 +123,7 @@ function handleEditEvent(event) {
         </div>
         <span class="click-hint">Click to view list</span>
       </div>
+      
     </header>
 
     <CurrentEvent 
@@ -133,7 +140,7 @@ function handleEditEvent(event) {
       />
     </div>
 
-    <!-- Upcoming Events Section  -->
+    <!-- Upcoming Events Section -->
     <div class="upcoming-section">
       <h3>Upcoming Events</h3>
       
@@ -176,13 +183,15 @@ function handleEditEvent(event) {
     <AttendanceListModal
       :eventName="currentEvent ? currentEvent.name : 'Event'"
       :eventDate="formattedEventDate"
+      :eventLocation="currentEvent ? currentEvent.eventLocation : 'N/A'"
+      :eventSpeaker="currentEvent ? currentEvent.eventSpeaker : ''" 
+      :eventSeries="currentEvent ? currentEvent.eventSeries : ''"
       :attendees="filteredAttendees"
       :filterTitle="selectedStatFilter"
       @close="showAttendanceModal = false"
     />
   </Modal>
   
-  <!-- Calendar Modal -->
   <Modal v-if="showCalendarModal" @close="showCalendarModal = false" size="xl">
     <CalendarModal 
       @close="showCalendarModal = false"
@@ -220,35 +229,30 @@ function handleEditEvent(event) {
   border: 2px solid transparent;
   text-align: center;
 }
+
 .total-attendance-card:hover {
   transform: translateY(-2px);
   box-shadow: 0 6px 16px rgba(0, 0, 0, 0.08);
   border-color: #1976D2;
 }
-.total-attendance { font-size: 20px; color: #37474F; }
-.total-attendance strong { color: #0D47A1; font-weight: 700; font-size: 24px; }
-.click-hint { font-size: 12px; color: #1976D2; font-weight: 500; margin-top: 4px; display: block; }
 
-.calendar-btn {
-  background-color: #fff;
-  border: 1px solid #B0BEC5;
-  border-radius: 12px;
-  width: 80px; 
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  color: #546E7A;
-  cursor: pointer;
-  font-weight: 600;
-  font-size: 12px;
-  gap: 4px;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+.total-attendance {
+  font-size: 20px;
+  color: #37474F;
 }
-.calendar-btn:hover {
-  background-color: #E3F2FD;
+
+.total-attendance strong {
+  color: #0D47A1;
+  font-weight: 700;
+  font-size: 24px;
+}
+
+.click-hint {
+  font-size: 12px;
   color: #1976D2;
-  border-color: #1976D2;
+  font-weight: 500;
+  margin-top: 4px;
+  display: block;
 }
 
 /* --- Stats Grid --- */
@@ -259,13 +263,14 @@ function handleEditEvent(event) {
   margin-bottom: 30px;
 }
 
-/* --- Upcoming Events Section  --- */
+/* --- Upcoming Events Section --- */
 .upcoming-section {
   margin-top: 10px;
   flex-grow: 1; 
   display: flex;
   flex-direction: column;
 }
+
 .upcoming-section h3 {
   margin: 0 0 16px 0;
   font-size: 18px;
@@ -282,14 +287,14 @@ function handleEditEvent(event) {
   padding-bottom: 16px;
 }
 
-/* --- EVENT CARD SIZING --- */
 .upcoming-card-wrapper {
   flex-shrink: 0;
   width: 100%;
 }
+
 .upcoming-card {
   width: 100%;
-  height: 150px; 
+  height: 150px;
   border-radius: 12px;
   background-color: #37474F; 
   background-size: cover;
@@ -300,6 +305,7 @@ function handleEditEvent(event) {
   transition: transform 0.2s ease;
   cursor: pointer;
 }
+
 .upcoming-card:hover {
   transform: translateY(-2px);
   box-shadow: 0 6px 16px rgba(0,0,0,0.15);
@@ -318,13 +324,15 @@ function handleEditEvent(event) {
   color: white;
   width: 100%;
 }
+
 .card-date {
-  font-size: 16px; 
+  font-size: 16px;
   font-weight: 700;
   color: #FFCA28;
   display: block;
   margin-bottom: 4px;
 }
+
 .card-title {
   margin: 0;
   font-size: 24px;
@@ -335,8 +343,9 @@ function handleEditEvent(event) {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
 .card-type {
-  font-size: 14px; 
+  font-size: 14px;
   opacity: 0.8;
   text-transform: uppercase;
   margin-top: 4px;
@@ -351,6 +360,7 @@ function handleEditEvent(event) {
   color: #78909C;
   border: 1px dashed #CFD8DC;
 }
+
 .link-btn {
   background: none;
   border: none;
@@ -368,6 +378,7 @@ function handleEditEvent(event) {
   .upcoming-card { height: 120px; }
   .card-title { font-size: 20px; }
 }
+
 @media (max-width: 480px) {
   .stats-grid { grid-template-columns: 1fr; }
 }

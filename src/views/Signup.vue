@@ -132,7 +132,7 @@ async function handleSignup() {
             </div>
           </div>
           
-          <!-- New Optional Fields -->
+          <!-- Optional Fields -->
           <div class="form-grid">
             <div class="form-group">
               <label for="dgroupLeader">Dgroup Leader </label>

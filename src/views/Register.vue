@@ -4,7 +4,7 @@ import { storeToRefs } from 'pinia'
 import Modal from '../components/Modal.vue'
 import RegistrationSuccess from '../components/RegistrationSuccess.vue'
 import { useMembersStore } from '../stores/members'
-import { useAuthStore } from '../stores/auth'; // Ensure this is imported for the branch check
+import { useAuthStore } from '../stores/auth'; 
 
 const authStore = useAuthStore();
 const membersStore = useMembersStore()
@@ -115,7 +115,7 @@ async function handleSubmit() {
   // --- Data Assembly ---
   const newId = 'Q-' + Math.floor(100000 + Math.random() * 900000).toString();
 
-  // 🚀 AUTOMATION: When first-timer gets assigned to D-group during registration, automatically tag as regular
+  // AUTOMATION: When first-timer gets assigned to D-group during registration, automatically tag as regular
   const finalTags = {
     ...tags.value,
     ageCategory: ageCategory.value,
@@ -144,7 +144,7 @@ async function handleSubmit() {
     finalTags: finalTags
   }
 
-  // --- CRITICAL FIX: Error Handling ---
+  // --- Error Handling ---
   try {
     // Call the store action which now handles Auth account creation and email sending
     await membersStore.registerNewMember(memberData);

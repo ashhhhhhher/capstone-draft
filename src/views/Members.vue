@@ -1,6 +1,6 @@
 <script setup>
 import { ref, computed } from 'vue'
-import { Search, List, LayoutGrid, SlidersHorizontal } from 'lucide-vue-next'
+import { Search, List, LayoutGrid, SlidersHorizontal, Archive } from 'lucide-vue-next'
 import { storeToRefs } from 'pinia'
 import { useMembersStore } from '../stores/members'
 import { useAttendanceStore } from '../stores/attendance'
@@ -11,12 +11,13 @@ import FilterModal from '../components/FilterModal.vue'
 
 // --- Store Setup ---
 const membersStore = useMembersStore()
-const { members, leaders } = storeToRefs(membersStore)
+const { activeMembers, archivedMembers, leaders } = storeToRefs(membersStore)
 const attendanceStore = useAttendanceStore() 
 const { currentEventAttendees } = storeToRefs(attendanceStore)
 
 // --- Page State ---
 const viewMode = ref('list')
+const showArchived = ref(false) 
 const showMemberModal = ref(false)
 const selectedMember = ref(null)
 const expandedDgroups = ref([])
@@ -42,10 +43,12 @@ const presentMemberIds = computed(() => {
   return new Set(currentEventAttendees.value.map(att => att.memberId))
 })
 
+// --- Main Filter Logic ---
 const filteredMembers = computed(() => {
-  let list = members.value
+  // 1. Select Source: Active vs Archived
+  let list = showArchived.value ? archivedMembers.value : activeMembers.value
 
-  // ---  Text Search ---
+  // 2. Text Search
   if (searchQuery.value.trim() !== '') {
     const query = searchQuery.value.toLowerCase()
     list = list.filter(member => 
@@ -55,7 +58,7 @@ const filteredMembers = computed(() => {
     )
   }
 
-  // --- Checkbox Filters  ---
+  // 3. Checkbox Filters
   if (filters.value.attendance.length > 0) {
     list = list.filter(m => {
       const isPresent = presentMemberIds.value.has(m.id)
@@ -85,7 +88,7 @@ const filteredMembers = computed(() => {
     )
   }
   
-  // --- Sorting ---
+  // 4. Sorting
   list.sort((a, b) => {
     const aIsPresent = presentMemberIds.value.has(a.id)
     const bIsPresent = presentMemberIds.value.has(b.id)
@@ -100,13 +103,16 @@ const filteredMembers = computed(() => {
 })
 
 const sortedDgroups = computed(() => {
+  // If showArchived is true, we show groups of archived members.
+  const sourceList = showArchived.value ? archivedMembers.value : activeMembers.value;
+
   const groups = {}
   leaders.value.forEach(leader => {
     groups[`${leader.firstName} ${leader.lastName}`] = []
   })
   groups['Unassigned'] = []
 
-  members.value.forEach(member => {
+  sourceList.forEach(member => {
     const leaderName = member.dgroupLeader
     if (leaderName && groups.hasOwnProperty(leaderName)) {
       groups[leaderName].push(member)
@@ -141,21 +147,27 @@ function openMemberDetails(member) {
 function handleSaveChanges(updatedMember) {
   membersStore.updateMember(updatedMember)
   showMemberModal.value = false
-  searchQuery.value = ''
-}
-
-function handleDeleteMember(memberId) {
-  membersStore.deleteMember(memberId)
-  showMemberModal.value = false 
   searchQuery.value = '' 
 }
 
-//  Function to clear search on general modal close
+// Handle Archive
+function handleArchiveMember(memberId) {
+  membersStore.archiveMember(memberId)
+  showMemberModal.value = false 
+  searchQuery.value = ''
+}
+
+// Handle Restore
+function handleRestoreMember(memberId) {
+  membersStore.restoreMember(memberId)
+  showMemberModal.value = false
+  searchQuery.value = ''
+}
+
 function handleModalClose() {
     showMemberModal.value = false;
     searchQuery.value = ''; 
 }
-
 
 function toggleDgroup(leaderName) {
   const index = expandedDgroups.value.indexOf(leaderName)
@@ -182,7 +194,13 @@ function getDgroupAttendance(leaderMembers) {
 <template>
   <div class="members-container">
     <div class="members-header">
-      <h1>Members Directory</h1>
+      <h1>{{ showArchived ? 'Archived Members' : 'Members Directory' }}</h1>
+      
+      <!-- Archive Toggle -->
+      <button class="archive-toggle-btn" @click="showArchived = !showArchived">
+        <Archive :size="18" />
+        <span>{{ showArchived ? 'View Active' : 'View Archived' }}</span>
+      </button>
     </div>
 
     <div class="controls-wrapper">
@@ -231,7 +249,7 @@ function getDgroupAttendance(leaderMembers) {
         @click="openMemberDetails(member)"
       />
       <div v-if="filteredMembers.length === 0" class="no-results">
-        <p>No members match your criteria.</p>
+        <p>No {{ showArchived ? 'archived' : 'active' }} members match your criteria.</p>
       </div>
     </div>
 
@@ -277,18 +295,17 @@ function getDgroupAttendance(leaderMembers) {
 
   </div>
   
-  <!-- Use the new handleModalClose function on the main modal -->
   <Modal v-if="showMemberModal" @close="handleModalClose"> 
     <MemberDetailsModal 
       v-if="selectedMember"
       :member="selectedMember" 
       @close="handleModalClose" 
       @saveChanges="handleSaveChanges"
-      @deleteMember="handleDeleteMember"
+      @archiveMember="handleArchiveMember"
+      @restoreMember="handleRestoreMember"
     />
   </Modal>
 
-  <!-- Filter Modal -->
   <Modal v-if="showFilterModal" @close="showFilterModal = false">
     <FilterModal 
       v-model="filters"
@@ -305,12 +322,33 @@ function getDgroupAttendance(leaderMembers) {
 }
 .members-header {
   margin-bottom: 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
 }
 .members-header h1 {
   font-size: 28px;
   font-weight: 700;
   margin: 0;
 }
+.archive-toggle-btn {
+  background-color: #fff;
+  border: 1px solid #546E7A;
+  color: #546E7A;
+  padding: 8px 14px;
+  border-radius: 8px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  transition: all 0.2s ease;
+}
+.archive-toggle-btn:hover {
+  background-color: #ECEFF1;
+}
+
 .controls-wrapper {
   display: flex;
   justify-content: space-between;

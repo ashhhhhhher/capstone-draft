@@ -44,7 +44,7 @@ function handleDelete(event) {
               <span v-if="event.eventType" class="event-type-tag">
                 {{ event.eventType === 'service' ? 'Service' : 'CCF Event' }}
               </span>
-              <!-- NEW: Add a tag if it's today -->
+              <!-- Add a tag if it's today -->
               <span v-if="event.date === todayStr" class="event-type-tag today-tag">
                 Today
               </span>
@@ -64,7 +64,6 @@ function handleDelete(event) {
       <p v-else class="no-data-text">No upcoming events scheduled.</p>
     </div>
 
-    <!-- 4. The "Past Events" list is REMOVED -->
     
     <button class="close-btn" @click="emit('close')">Close</button>
   </div>
@@ -95,7 +94,7 @@ ul {
   list-style: none;
   padding: 0;
   margin: 0;
-  max-height: 60vh; /* Increased height */
+  max-height: 60vh; 
   overflow-y: auto;
 }
 li {
@@ -115,7 +114,7 @@ li:last-child {
 .event-name {
   display: flex;
   align-items: center;
-  flex-wrap: wrap; /* Allow tags to wrap on small screens */
+  flex-wrap: wrap; 
   gap: 8px;
 }
 .event-details strong {

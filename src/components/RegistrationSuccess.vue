@@ -1,5 +1,4 @@
 <script setup>
-// This is the correct default import
 import QrcodeVue from 'vue-qrcode'
 
 defineProps({
