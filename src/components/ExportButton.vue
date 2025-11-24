@@ -31,7 +31,6 @@ const showMenu = ref(false)
 
 // --- Helper: Categorize Members ---
 function getSegmentedMembers() {
-  // Safety check
   if (!activeMembers.value || !Array.isArray(activeMembers.value)) {
     console.error("Active Members data is missing or invalid.");
     return { firstTimers: [], leaders: [], volunteers: [], regulars: [], all: [] };
@@ -76,9 +75,8 @@ function getGlobalStats(allMembers) {
     }
 }
 
-// =========================================================================
+
 //  1. MEMBERS EXCEL EXPORT
-// =========================================================================
 function exportMembersExcel() {
   try {
     const { firstTimers, leaders, volunteers, regulars } = getSegmentedMembers();
@@ -151,9 +149,8 @@ function exportMembersExcel() {
   }
 }
 
-// =========================================================================
+
 //  2. MEMBER PDF EXPORT
-// =========================================================================
 function exportMembersPDF() {
   try {
     const { firstTimers, leaders, volunteers, regulars, all } = getSegmentedMembers();
@@ -202,7 +199,6 @@ function exportMembersPDF() {
     
     y += 15;
 
-    // Section Renderer
     const renderSection = (title, data, headers, rowMapper) => {
       if (data.length === 0) return;
 
@@ -213,7 +209,6 @@ function exportMembersPDF() {
 
       const stats = getDetailedStats(data);
 
-      // FIXED: Use normal text() then draw line() manually
       doc.setFont("helvetica", "normal").setFontSize(11).setTextColor(0);
       const titleText = `${title} : ${stats.total}`;
       doc.text(titleText, 15, y);
@@ -261,9 +256,7 @@ function exportMembersPDF() {
   }
 }
 
-// =========================================================================
 //  3. EVENTS EXPORT LOGIC
-// =========================================================================
 function getEventsData() {
   if (!allEvents.value || allEvents.value.length === 0) return [];
   const services = allEvents.value.filter(e => e.eventType === 'service').sort((a, b) => new Date(b.date) - new Date(a.date)); 

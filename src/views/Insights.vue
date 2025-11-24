@@ -21,17 +21,19 @@ const notificationsStore = useNotificationsStore()
 
 // --- Modal State ---
 const showDgroupModal = ref(false)
+const showHistoryModal = ref(false)
+
 
 // --- Chart Options ---
 const historicalChartOptions = ref({
   responsive: true,
   maintainAspectRatio: false,
-  plugins: {
+  plugins: { 
     legend: { display: false },
     datalabels: { display: false }
   },
   scales: {
-    y: {
+    y: { 
       beginAtZero: true,
       ticks: { stepSize: 1 }
     }
@@ -66,7 +68,11 @@ const genderAgeChartOptions = ref({
   },
   scales: {
     x: { stacked: false },
-    y: { beginAtZero: true, stacked: false, ticks: { stepSize: 1 } }
+    y: { 
+      beginAtZero: true,
+      stacked: false,
+      ticks: { stepSize: 1 }
+    }
   }
 })
 
@@ -86,7 +92,7 @@ const attendanceTrends = computed(() => {
   today.setHours(0, 0, 0, 0);
   const pastEvents = allEvents.value.filter(e => new Date(e.date + 'T00:00:00') <= today);
   if (pastEvents.length === 0) return { avg: 0, high: 0, low: 0 };
-
+  
   const attendanceCounts = pastEvents.map(event => allAttendance.value.filter(att => att.eventId === event.id).length);
   const totalAttendance = attendanceCounts.reduce((sum, count) => sum + count, 0);
   const avg = (totalAttendance / pastEvents.length).toFixed(1);
@@ -139,7 +145,7 @@ const genderAgeDistributionData = computed(() => {
   const malesB1G = activeMembers.value.filter(m => m.gender === 'Male' && m.finalTags.ageCategory === 'B1G').length;
   const femalesElevate = activeMembers.value.filter(m => m.gender === 'Female' && m.finalTags.ageCategory === 'Elevate').length;
   const femalesB1G = activeMembers.value.filter(m => m.gender === 'Female' && m.finalTags.ageCategory === 'B1G').length;
-
+  
   return {
     labels: ['Elevate (12-21)', 'B1G (22+)'],
     datasets: [
@@ -158,38 +164,39 @@ const genderAgeDistributionData = computed(() => {
 })
 
 const volunteerBreakdown = computed(() => {
-  const ministries = ['Host', 'Live Prod', 'Exalt', 'DGM'];
-  const counts = {};
-  let totalVolunteers = 0;
+    const ministries = ['Host', 'Live Prod', 'Exalt', 'DGM'];
+    const counts = {};
+    let totalVolunteers = 0;
 
-  activeMembers.value.filter(m => m.finalTags.isVolunteer).forEach(m => {
-    m.finalTags.volunteerMinistry.forEach(ministry => {
-      if (ministries.includes(ministry)) {
-        counts[ministry] = (counts[ministry] || 0) + 1;
-        totalVolunteers++;
-      }
+    activeMembers.value.filter(m => m.finalTags.isVolunteer).forEach(m => {
+        m.finalTags.volunteerMinistry.forEach(ministry => {
+            if (ministries.includes(ministry)) {
+                counts[ministry] = (counts[ministry] || 0) + 1;
+                totalVolunteers++;
+            }
+        });
     });
-  });
 
-  return {
-    total: totalVolunteers,
-    data: ministries.map(name => ({
-      name,
-      count: counts[name] || 0,
-      percent: totalVolunteers > 0 ? Math.round((counts[name] || 0) / totalVolunteers * 100) : 0
-    }))
-  }
+    return {
+        total: totalVolunteers,
+        data: ministries.map(name => ({
+            name,
+            count: counts[name] || 0,
+            percent: totalVolunteers > 0 ? Math.round((counts[name] || 0) / totalVolunteers * 100) : 0
+        }))
+    }
 })
 
 const getMinistryColor = (name) => {
-  switch(name) {
-    case 'Host': return '#F57C00';
-    case 'Live Prod': return '#00BCD4';
-    case 'Exalt': return '#4CAF50';
-    case 'Usher': return '#9C27B0';
-    default: return '#90A4AE';
-  }
+    switch(name) {
+        case 'Host': return '#F57C00';
+        case 'Live Prod': return '#00BCD4';
+        case 'Exalt': return '#4CAF50';
+        case 'Usher': return '#9C27B0';
+        default: return '#90A4AE';
+    }
 }
+
 
 const historicalAttendanceData = computed(() => {
   const recentEvents = allEvents.value.filter(e => e.eventType === 'service').slice(0, 10).reverse()
@@ -207,7 +214,6 @@ const historicalAttendanceData = computed(() => {
   }
 })
 
-// --- Absence Monitoring Logic ---
 const monitoringList = computed(() => {
   const today = new Date().toISOString().split('T')[0];
   const pastServices = allEvents.value
@@ -308,19 +314,19 @@ onMounted(() => {
   }
 });
 
-// --- Action Functions ---
+// --- Actions ---
 
 async function handleMessageMember(member) {
   if (member.email) {
-    window.location.href = `mailto:${member.email}?subject=Checking in - Elevate Baguio&body=Hi ${member.firstName}, we noticed you missed a few services. Hope everything is okay!`;
+    window.location.href = `mailto:${member.email}?subject=Checking in&body=Hi ${member.firstName}...`;
   } else {
-    alert(`No email for ${member.firstName}. Marked as sent.`);
+    alert(`No email for ${member.firstName}.`);
   }
   
   await notificationsStore.sendNotification(
     member.id, 
     "We missed you!", 
-    "Hey! We noticed you haven't been around lately. We hope to see you at the next service!"
+    "Hope to see you soon!"
   );
 
   await membersStore.logMonitoringAction(member.id, 'message');
@@ -328,7 +334,7 @@ async function handleMessageMember(member) {
 
 async function handleNotifyLeader(member) {
   if (member.dgroupLeader) {
-    alert(`Notification sent to leader (${member.dgroupLeader}) regarding ${member.firstName}.`);
+    alert(`Notification sent to leader (${member.dgroupLeader}).`);
     await membersStore.logMonitoringAction(member.id, 'notifyLeader');
   } else {
     alert("No Dgroup Leader assigned.");
@@ -336,7 +342,7 @@ async function handleNotifyLeader(member) {
 }
 
 function handleArchiveMember(member) {
-  if (confirm(`Archive ${member.firstName}? They will be moved to the Archived list.`)) {
+  if (confirm(`Archive ${member.firstName}?`)) {
     membersStore.archiveMember(member.id);
   }
 }
@@ -354,9 +360,10 @@ function handleArchiveMember(member) {
       <!-- Total Members -->
       <div class="kpi-card">
         <div class="kpi-card-header">
-          <h4>Total Members</h4>
-          <ExportButton exportType="members" /> 
+            <h4>Total Members</h4>
+            <ExportButton exportType="members" /> 
         </div>
+        
         <div class="kpi-value">{{ demographics.total }}</div>
         <div class="kpi-detail-grid">
           <div>
@@ -415,70 +422,7 @@ function handleArchiveMember(member) {
       </div>
     </div>
 
-    <!-- 2. Charts Grid -->
-    <div class="charts-grid">
-      <div class="chart-card">
-        <h3>Member Category Distribution</h3>
-        <div class="chart-wrapper" style="height: 350px;">
-          <DoughnutChart 
-            v-if="demographics.total > 0"
-            :chartData="categoryDistributionData" 
-            :chartOptions="doughnutChartOptions"
-          />
-          <p v-else class="no-data-text">No members registered yet.</p>
-        </div>
-      </div>
-      
-      <div class="chart-card">
-        <h3>Gender & Age Distribution</h3>
-        <div class="chart-wrapper" style="height: 350px;">
-          <BarChart 
-            v-if="members.length > 0"
-            :chartData="genderAgeDistributionData" 
-            :chartOptions="genderAgeChartOptions" 
-          />
-          <p v-else class="no-data-text">No members registered yet.</p>
-        </div>
-      </div>
-    </div>
-    
-    <!-- 3. Volunteer Breakdown Section -->
-    <div class="chart-card-full">
-      <h3>Volunteer Ministry Breakdown (Total: {{ volunteerBreakdown.total }})</h3>
-      <div v-if="volunteerBreakdown.total > 0" class="volunteer-progress-list">
-        <div v-for="item in volunteerBreakdown.data" :key="item.name" class="ministry-item">
-          <div class="ministry-label">
-            <strong>{{ item.name }}</strong>
-            <span>{{ item.count }} Members ({{ item.percent }}%)</span>
-          </div>
-          <div class="progress-bar-wrapper">
-            <div 
-              class="ministry-progress-bar" 
-              :style="{ width: item.percent + '%', backgroundColor: getMinistryColor(item.name) }"
-            ></div>
-          </div>
-        </div>
-      </div>
-      <p v-else class="no-data-text">No volunteers currently tagged to a specific ministry.</p>
-    </div>
-
-    <!-- 4. Historical Attendance Chart -->
-    <div class="chart-card-full">
-      <div class="section-title-with-button">
-        <h3>Historical Events Attendance</h3>
-        <ExportButton exportType="events" />
-      </div>
-      <div class="chart-wrapper" style="height: 350px;">
-        <BarChart 
-          v-if="historicalAttendanceData.labels.length > 0"
-          :chartData="historicalAttendanceData" 
-          :chartOptions="historicalChartOptions" 
-        />
-        <p v-else class="no-data-text">No event data yet. Create an event and record attendance to see a trend.</p>
-      </div>
-    </div>
-
-    <!-- 5. Absence Monitoring Table -->
+    <!-- Absence Monitoring & Engagement -->
     <div class="list-card">
       <div class="monitoring-header">
         <h3>Absence Monitoring & Engagement</h3>
@@ -535,7 +479,7 @@ function handleArchiveMember(member) {
                   </button>
 
                   <!-- Notify Leader (Only for 4+) -->
-                  <button v-if="member.showNotifyLeader && !member.leaderNotified" class="action-btn notify" @click="handleNotifyLeader(member)" title="Notify Dgroup Leader">
+                  <button v-if="member.showNotifyLeader && !member.leaderNotified" class="action-btn notify" @click="handleNotifyLeader(member)" title="Notify Leader">
                     <Bell :size="16" /> Notify Leader
                   </button>
 
@@ -554,6 +498,74 @@ function handleArchiveMember(member) {
         <p>Great news! No members are currently at risk.</p>
       </div>
     </div>
+
+    <!-- 3. Charts Grid  -->
+    <div class="charts-grid">
+      <div class="chart-card">
+        <h3>Member Category Distribution</h3>
+        <div class="chart-wrapper" style="height: 350px;">
+          <DoughnutChart 
+            v-if="demographics.total > 0"
+            :chartData="categoryDistributionData" 
+            :chartOptions="doughnutChartOptions"
+          />
+          <p v-else class="no-data-text">No members registered yet.</p>
+        </div>
+      </div>
+      
+      <div class="chart-card">
+        <h3>Gender & Age Distribution</h3>
+        <div class="chart-wrapper" style="height: 350px;">
+          <BarChart 
+            v-if="members.length > 0"
+            :chartData="genderAgeDistributionData" 
+            :chartOptions="genderAgeChartOptions" 
+          />
+          <p v-else class="no-data-text">No members registered yet.</p>
+        </div>
+      </div>
+    </div>
+    
+    <!-- 4. Volunteer Breakdown Section -->
+    <div class="chart-card-full">
+        <h3>Volunteer Ministry Breakdown (Total: {{ volunteerBreakdown.total }})</h3>
+        <div v-if="volunteerBreakdown.total > 0" class="volunteer-progress-list">
+            <div 
+                v-for="item in volunteerBreakdown.data" 
+                :key="item.name" 
+                class="ministry-item"
+            >
+                <div class="ministry-label">
+                    <strong>{{ item.name }}</strong>
+                    <span>{{ item.count }} Members ({{ item.percent }}%)</span>
+                </div>
+                <div class="progress-bar-wrapper">
+                    <div 
+                        class="ministry-progress-bar"
+                        :style="{ width: item.percent + '%', backgroundColor: getMinistryColor(item.name) }"
+                    ></div>
+                </div>
+            </div>
+        </div>
+        <p v-else class="no-data-text">No volunteers currently tagged.</p>
+    </div>
+
+    <!-- 5. Historical Attendance Chart -->
+    <div class="chart-card-full">
+      <div class="section-title-with-button">
+        <h3>Historical Events Attendance</h3>
+        <ExportButton exportType="events" />
+      </div>
+      <div class="chart-wrapper" style="height: 350px;">
+        <BarChart 
+          v-if="historicalAttendanceData.labels.length > 0"
+          :chartData="historicalAttendanceData" 
+          :chartOptions="historicalChartOptions" 
+        />
+        <p v-else class="no-data-text">No event data yet. Create an event and record attendance to see a trend.</p>
+      </div>
+    </div>
+
   </div>
   
   <Modal v-if="showDgroupModal" @close="showDgroupModal = false" size="xl">
@@ -565,14 +577,17 @@ function handleArchiveMember(member) {
 .insights-container {
   padding: 20px;
 }
+
 .insights-header {
   margin-bottom: 24px;
 }
+
 .insights-header h1 {
   font-size: 28px;
   font-weight: 700;
   margin: 0;
 }
+
 .insights-header p {
   font-size: 16px;
   color: #546E7A;
@@ -586,6 +601,7 @@ function handleArchiveMember(member) {
   gap: 20px;
   margin-bottom: 20px;
 }
+
 .kpi-card {
   background: #fff;
   border-radius: 12px;
@@ -593,27 +609,32 @@ function handleArchiveMember(member) {
   box-shadow: 0 4px 12px rgba(0,0,0,0.05);
   transition: all 0.2s ease;
 }
+
 .kpi-card-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
   margin-bottom: 12px;
 }
+
 .kpi-card-header h4 {
   margin: 0;
   font-size: 16px;
   font-weight: 600;
   color: #546E7A;
 }
+
 .kpi-card.is-clickable {
   cursor: pointer;
   border: 2px solid transparent;
 }
+
 .kpi-card.is-clickable:hover {
   transform: translateY(-2px);
   box-shadow: 0 6px 16px rgba(0, 0, 0, 0.08);
   border-color: #1976D2;
 }
+
 .click-hint {
   font-size: 12px;
   color: #1976D2;
@@ -621,12 +642,14 @@ function handleArchiveMember(member) {
   margin-top: 8px;
   display: block;
 }
+
 .kpi-value {
   font-size: 40px;
   font-weight: 700;
   color: #0D47A1;
   line-height: 1;
 }
+
 .kpi-value-alt {
   font-size: 28px;
   font-weight: 600;
@@ -634,11 +657,13 @@ function handleArchiveMember(member) {
   line-height: 1;
   margin-top: 12px;
 }
+
 .kpi-detail {
   font-size: 14px;
   color: #78909C;
   margin-top: 4px;
 }
+
 .kpi-detail-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -648,15 +673,18 @@ function handleArchiveMember(member) {
   color: #546E7A;
   margin-top: 12px;
 }
+
 .kpi-detail-grid div {
   display: flex;
   flex-direction: column;
 }
+
 .kpi-detail-grid strong {
   font-size: 16px;
   font-weight: 600;
   color: #333;
 }
+
 .kpi-sub-grid {
   display: flex;
   justify-content: space-between;
@@ -664,18 +692,21 @@ function handleArchiveMember(member) {
   padding-top: 12px;
   border-top: 1px solid #ECEFF1;
 }
+
 .kpi-sub-grid div {
   display: flex;
   flex-direction: column;
   align-items: center;
   flex-grow: 1;
 }
+
 .kpi-sub-label {
   font-size: 12px;
   font-weight: 500;
   color: #78909C;
   margin-bottom: 2px;
 }
+
 .kpi-sub-value {
   font-size: 20px;
   font-weight: 600;
@@ -689,17 +720,20 @@ function handleArchiveMember(member) {
   gap: 20px;
   margin-bottom: 20px;
 }
+
 @media (min-width: 900px) {
   .charts-grid {
     grid-template-columns: 1fr 1fr;
   }
 }
+
 .chart-card {
   background: #fff;
   border-radius: 12px;
   padding: 24px;
   box-shadow: 0 4px 12px rgba(0,0,0,0.05);
 }
+
 .chart-card-full {
   background: #fff;
   border-radius: 12px;
@@ -707,13 +741,17 @@ function handleArchiveMember(member) {
   box-shadow: 0 4px 12px rgba(0,0,0,0.05);
   margin-bottom: 20px;
 }
-.chart-card h3, .chart-card-full h3, .list-card h3 {
+
+.chart-card h3,
+.chart-card-full h3,
+.list-card h3 {
   margin-top: 0;
   margin-bottom: 20px;
   font-size: 18px;
   font-weight: 600;
   text-align: center;
 }
+
 .chart-wrapper {
   position: relative;
 }
@@ -725,9 +763,11 @@ function handleArchiveMember(member) {
   align-items: center;
   margin-bottom: 20px;
 }
+
 .section-title-with-button h3 {
   margin: 0;
 }
+
 @media (max-width: 600px) {
   .section-title-with-button {
     flex-direction: column;
@@ -743,29 +783,35 @@ function handleArchiveMember(member) {
   gap: 16px;
   margin-top: 10px;
 }
+
 .ministry-item {
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
+
 .ministry-label {
   display: flex;
   justify-content: space-between;
   font-size: 14px;
 }
+
 .ministry-label strong {
   color: #37474F;
   font-weight: 600;
 }
+
 .ministry-label span {
   color: #546E7A;
 }
+
 .progress-bar-wrapper {
   height: 12px;
   background-color: #ECEFF1;
   border-radius: 6px;
   overflow: hidden;
 }
+
 .ministry-progress-bar {
   height: 100%;
   border-radius: 6px;
@@ -778,7 +824,9 @@ function handleArchiveMember(member) {
   border-radius: 12px;
   padding: 24px;
   box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+  margin-bottom: 20px;
 }
+
 .monitoring-header {
   display: flex;
   justify-content: space-between;
@@ -787,15 +835,18 @@ function handleArchiveMember(member) {
   flex-wrap: wrap;
   gap: 10px;
 }
+
 .monitoring-header h3 {
   margin: 0;
   font-size: 18px;
   font-weight: 600;
 }
+
 .legend-badges {
   display: flex;
   gap: 8px;
 }
+
 .badge {
   font-size: 11px;
   font-weight: 700;
@@ -803,9 +854,24 @@ function handleArchiveMember(member) {
   border-radius: 4px;
   text-transform: uppercase;
 }
-.status-yellow { background: #FFF8E1; color: #FBC02D; }
-.status-orange { background: #FFF3E0; color: #F57C00; }
-.status-red { background: #FFEBEE; color: #D32F2F; }
+
+.status-yellow {
+  background: #FFF59D;
+  color: #F57F17;
+  border: 1px solid #FBC02D;
+}
+
+.status-orange {
+  background: #FFCC80;
+  color: #E65100;
+  border: 1px solid #FB8C00;
+}
+
+.status-red {
+  background: #EF9A9A;
+  color: #B71C1C;
+  border: 1px solid #E53935;
+}
 
 .list-subtitle {
   font-size: 14px;
@@ -817,11 +883,13 @@ function handleArchiveMember(member) {
 .monitoring-table-wrapper {
   overflow-x: auto;
 }
+
 .monitoring-table {
   width: 100%;
   border-collapse: collapse;
   min-width: 700px;
 }
+
 .monitoring-table th {
   text-align: left;
   font-size: 12px;
@@ -830,11 +898,13 @@ function handleArchiveMember(member) {
   padding: 12px;
   border-bottom: 1px solid #eee;
 }
+
 .monitoring-table td {
   padding: 12px;
   border-bottom: 1px solid #f5f5f5;
   vertical-align: middle;
 }
+
 .monitoring-table tr:last-child td {
   border-bottom: none;
 }
@@ -844,27 +914,21 @@ function handleArchiveMember(member) {
   color: #333;
   font-size: 14px;
 }
+
 .member-email {
   font-size: 12px;
   color: #78909C;
 }
+
 .text-center {
   text-align: center;
 }
+
 .font-bold {
   font-weight: 700;
   color: #37474F;
 }
 
-.status-cell {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-.abs-count {
-  font-size: 11px;
-  color: #78909C;
-}
 .status-pill {
   font-size: 11px;
   font-weight: 700;
@@ -872,16 +936,33 @@ function handleArchiveMember(member) {
   border-radius: 12px;
   text-transform: uppercase;
   width: fit-content;
+  display: inline-block;
 }
-.status-pill.status-yellow { background: #FFFDE7; color: #FBC02D; }
-.status-pill.status-orange { background: #FFF3E0; color: #EF6C00; }
-.status-pill.status-red { background: #FFEBEE; color: #C62828; }
+
+.status-pill.status-yellow {
+  background: #FFF59D;
+  color: #F57F17;
+  border: 1px solid #FBC02D;
+}
+
+.status-pill.status-orange {
+  background: #FFCC80;
+  color: #E65100;
+  border: 1px solid #FB8C00;
+}
+
+.status-pill.status-red {
+  background: #EF9A9A;
+  color: #B71C1C;
+  border: 1px solid #E53935;
+}
 
 .leader-cell {
   display: flex;
   flex-direction: column;
   gap: 4px;
 }
+
 .notified-badge {
   font-size: 11px;
   color: #2E7D32;
@@ -897,6 +978,7 @@ function handleArchiveMember(member) {
   justify-content: flex-start;
   align-items: center;
 }
+
 .action-btn {
   border: none;
   border-radius: 6px;
@@ -911,21 +993,56 @@ function handleArchiveMember(member) {
   font-size: 12px;
   font-weight: 600;
 }
-.action-btn.message { background: #E3F2FD; color: #1976D2; }
-.action-btn.message:hover { background: #1976D2; color: white; }
-.action-btn.notify { background: #FFF3E0; color: #F57C00; }
-.action-btn.notify:hover { background: #F57C00; color: white; }
-.action-btn.archive { background: #FFEBEE; color: #D32F2F; }
-.action-btn.archive:hover { background: #D32F2F; color: white; }
+
+.action-btn.message {
+  background: #E3F2FD;
+  color: #1976D2;
+}
+
+.action-btn.message:hover {
+  background: #1976D2;
+  color: white;
+}
+
+.action-btn.notify {
+  background: #FFF3E0;
+  color: #F57C00;
+}
+
+.action-btn.notify:hover {
+  background: #F57C00;
+  color: white;
+}
+
+.action-btn.archive {
+  background: #FFEBEE;
+  color: #D32F2F;
+}
+
+.action-btn.archive:hover {
+  background: #D32F2F;
+  color: white;
+}
 
 .action-done-badge {
   padding: 6px 10px;
   border-radius: 6px;
   font-size: 12px;
   font-weight: 700;
+  display: inline-block;
 }
-.action-done-badge.status-yellow { background: #FFFDE7; color: #FBC02D; border: 1px solid #FBC02D; }
-.action-done-badge.status-orange { background: #FFF3E0; color: #EF6C00; border: 1px solid #EF6C00; }
+
+.action-done-badge.status-yellow {
+  background: #FFF59D;
+  color: #F57F17;
+  border: 1px solid #FBC02D;
+}
+
+.action-done-badge.status-orange {
+  background: #FFCC80;
+  color: #E65100;
+  border: 1px solid #FB8C00;
+}
 
 .empty-state {
   text-align: center;
@@ -934,10 +1051,12 @@ function handleArchiveMember(member) {
   border-radius: 8px;
   border: 1px dashed #E0E0E0;
 }
+
 .empty-icon {
   font-size: 32px;
   margin-bottom: 10px;
 }
+
 .no-data-text {
   text-align: center;
   padding: 40px;
