@@ -19,7 +19,6 @@ const router = createRouter({
     // --- MEMBER APP ROUTES ---
     {
       path: '/member',
-      // UPDATED: Points to src/layout/MemberLayout.vue
       component: () => import('../layout/MemberLayout.vue'), 
       meta: { requiresAuth: true, role: 'member' },
       children: [
@@ -30,7 +29,6 @@ const router = createRouter({
         {
           path: 'home',
           name: 'memberHome',
-          // Points to src/views/MemberHome.vue
           component: () => import('../views/MemberHome.vue') 
         },
         {
@@ -47,6 +45,12 @@ const router = createRouter({
           path: 'qr',
           name: 'memberQR',
           component: () => import('../views/MemberQR.vue')
+        },
+        // NEW PROFILE ROUTE ADDED HERE
+        {
+          path: 'profile',
+          name: 'memberProfile',
+          component: () => import('../views/MemberProfile.vue')
         }
       ]
     },
@@ -91,7 +95,6 @@ const router = createRouter({
   ]
 })
 
-// --- Navigation Guard ---
 router.beforeEach((to, from) => {
   const authStore = useAuthStore()
   const isAuthenticated = !!authStore.user
@@ -105,7 +108,6 @@ router.beforeEach((to, from) => {
     if (to.name === 'login' || to.name === 'signup') {
       return { name: userRole === 'admin' ? 'home' : 'memberHome' }
     }
-    // Prevent cross-role access
     if (to.meta.role && to.meta.role !== userRole) {
       return { name: userRole === 'admin' ? 'home' : 'memberHome' }
     }

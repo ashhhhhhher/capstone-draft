@@ -14,7 +14,6 @@ function toggleDropdown() {
 }
 
 function closeDropdown(event) {
-  // Close if clicking outside the dropdown
   if (dropdownRef.value && !dropdownRef.value.contains(event.target)) {
     isDropdownOpen.value = false
   }
@@ -30,14 +29,15 @@ async function handleLogout() {
 }
 
 function handleProfileClick() {
-  // Only navigate to /profile if Admin, as per your router rules
+  // Redirect based on role
   if (authStore.userRole === 'admin') {
     router.push('/profile')
+  } else {
+    router.push('/member/profile') // New route for members
   }
   isDropdownOpen.value = false
 }
 
-// Click outside listener
 onMounted(() => {
   document.addEventListener('click', closeDropdown)
 })
@@ -72,8 +72,8 @@ onUnmounted(() => {
           </div>
           
           <div class="dropdown-items">
-            <!-- Show Profile Link only for Admins for now -->
-            <button v-if="authStore.userRole === 'admin'" @click="handleProfileClick" class="dropdown-item">
+            <!-- Universal Profile Button -->
+            <button @click="handleProfileClick" class="dropdown-item">
               <User :size="18" />
               <span>My Profile</span>
             </button>
