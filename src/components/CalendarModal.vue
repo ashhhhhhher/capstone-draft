@@ -5,6 +5,10 @@ import { storeToRefs } from 'pinia'
 import { useEventsStore } from '../stores/events'
 
 const emit = defineEmits(['close', 'createEvent', 'editEvent'])
+// accept isMember from parent; when true, hide create/edit/delete UI for members
+const props = defineProps({
+  isMember: { type: Boolean, default: false }
+})
 const eventsStore = useEventsStore()
 const { allEvents } = storeToRefs(eventsStore)
 
@@ -134,7 +138,8 @@ function handleDelete(event) {
             <div class="legend-item"><span class="dot dot-event"></span> CCF Event</div>
         </div>
         
-        <button class="create-event-btn" @click="emit('createEvent')">
+        <!-- hide create button for members -->
+        <button v-if="!props.isMember" class="create-event-btn" @click="emit('createEvent')">
             <Plus :size="20" /> Create New Event
         </button>
     </div>
@@ -152,7 +157,8 @@ function handleDelete(event) {
                             </span>
                             <h4>{{ event.name }}</h4>
                         </div>
-                        <div class="action-buttons">
+                        <!-- hide edit/delete for members -->
+                        <div class="action-buttons" v-if="!props.isMember">
                             <button class="btn-icon btn-edit" @click="handleEdit(event)">
                                 <Edit2 :size="16" />
                             </button>
@@ -174,7 +180,7 @@ function handleDelete(event) {
         </div>
         <div v-else class="no-selection">
             <Calendar :size="32" />
-            <p>Select a date to view events or click 'Create New Event'.</p>
+            <p>Select a date to view events.</p>
         </div>
     </div>
 
