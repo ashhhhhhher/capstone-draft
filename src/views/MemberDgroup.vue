@@ -2,23 +2,22 @@
 import { ref, computed, onMounted } from 'vue'
 import { useAuthStore } from '../stores/auth'
 import { useMembersStore } from '../stores/members'
-import { User, Users, ChevronRight, Plus, X } from 'lucide-vue-next'
+import { User, Users, ChevronRight, Plus, X, AlertCircle, ArrowLeft, UserMinus } from 'lucide-vue-next'
 
 const authStore = useAuthStore()
 const membersStore = useMembersStore()
 
 const activeTab = ref('upline') 
 const showCreateModal = ref(false)
-const showGroupDetailModal = ref(false)
 const showPersonModal = ref(false) 
 
-const selectedGroup = ref(null)
-const selectedPerson = ref(null) 
+// Drill-down state 
+const selectedGroup = ref(null) 
+const currentGroupMembers = ref([])
 
-// Local state to store created groups for Frontend Demo purposes
+const selectedPerson = ref(null) 
 const mockGroups = ref([])
 
-// Form state with defaults
 const newGroupForm = ref({ 
   name: '', 
   capacity: 12, 
@@ -31,8 +30,6 @@ onMounted(() => {
 
 const myProfile = computed(() => authStore.userProfile)
 const isLeader = computed(() => myProfile.value?.finalTags?.isDgroupLeader)
-
-// UPLINE: My Leader & Co-members
 const myLeaderName = computed(() => myProfile.value?.dgroupLeader)
 
 const myLeaderObject = computed(() => {
@@ -49,11 +46,8 @@ const myUplineGroup = computed(() => {
   )
 })
 
-// DOWNLINE: Members I lead (Combines real data + Mock data)
 const myDownlineGroups = computed(() => {
   const groups = []
-
-  // 1. Existing default group from Profile/Store data
   if (isLeader.value) {
     const myName = `${myProfile.value?.firstName} ${myProfile.value?.lastName}`
     const members = membersStore.activeMembers.filter(m => m.dgroupLeader === myName)
@@ -66,14 +60,19 @@ const myDownlineGroups = computed(() => {
       capacity: myProfile.value?.dgroupCapacity || 12
     })
   }
-  
-  // 2. Add locally created groups (Frontend Demo)
   return [...groups, ...mockGroups.value]
 })
 
 function openGroupDetails(group) {
+  // Switch to drill-down view (List view)
+  currentGroupMembers.value = [...group.members]
   selectedGroup.value = group
-  showGroupDetailModal.value = true
+}
+
+function closeGroupDetails() {
+  // Go back to Grid view
+  selectedGroup.value = null
+  currentGroupMembers.value = []
 }
 
 function viewPerson(person) {
@@ -82,23 +81,25 @@ function viewPerson(person) {
   showPersonModal.value = true
 }
 
+function removeMember(member) {
+  if(confirm(`Are you sure you want to remove ${member.firstName} from this Dgroup?`)) {
+    currentGroupMembers.value = currentGroupMembers.value.filter(m => m.id !== member.id)
+  }
+}
+
 function createDgroup() {
   if(!newGroupForm.value.name) return alert("Please enter a group name")
   
-  // Create a new group object locally to simulate the backend creation
   const newGroup = {
     id: `new-${Date.now()}`,
     name: newGroupForm.value.name,
     capacity: newGroupForm.value.capacity,
     lifeStage: newGroupForm.value.lifeStage,
-    members: [] // Start with 0 members
+    members: [] 
   }
 
-  // Push to local list so it appears in the UI
   mockGroups.value.push(newGroup)
-  
   showCreateModal.value = false
-  // Reset form
   newGroupForm.value = { name: '', capacity: 12, lifeStage: 'Elevate' }
 }
 </script>
@@ -106,8 +107,8 @@ function createDgroup() {
 <template>
   <div class="dgroup-view">
     
-    <!-- Tab Switcher -->
-    <div class="tabs">
+    <!-- Tab Switcher (Hidden when viewing group details to simulate drill-down navigation) -->
+    <div class="tabs" v-if="!selectedGroup">
       <button :class="{ active: activeTab === 'upline' }" @click="activeTab = 'upline'">
         My Dgroup (Upline)
       </button>
@@ -117,8 +118,7 @@ function createDgroup() {
     </div>
 
     <!-- UPLINE VIEW -->
-    <div v-if="activeTab === 'upline'" class="tab-content">
-      
+    <div v-if="activeTab === 'upline' && !selectedGroup" class="tab-content">
       <div 
         class="leader-card" 
         v-if="myLeaderName"
@@ -157,28 +157,116 @@ function createDgroup() {
 
     <!-- DOWNLINE VIEW (Leader Only) -->
     <div v-if="activeTab === 'downline'" class="tab-content">
-      <div class="groups-header">
-        <h3>Your Groups</h3>
-        <button class="create-btn" @click="showCreateModal = true"><Plus :size="16" /> New</button>
+      
+      <!-- 1. GROUPS GRID (Shown when NO group is selected) -->
+      <div v-if="!selectedGroup">
+        <div class="groups-header">
+          <h3>Your Groups</h3>
+          <button class="create-btn" @click="showCreateModal = true"><Plus :size="16" /> New</button>
+        </div>
+
+        <div class="groups-grid">
+          <div v-for="group in myDownlineGroups" :key="group.id" class="group-card" @click="openGroupDetails(group)">
+            <div class="group-icon"><Users :size="24" color="white"/></div>
+            <div class="group-info">
+              <h4>{{ group.name }}</h4>
+              <p>{{ group.members.length }} / {{ group.capacity }} Members • {{ group.lifeStage }}</p>
+            </div>
+            <ChevronRight :size="20" color="#B0BEC5" />
+          </div>
+          <div v-if="myDownlineGroups.length === 0" class="empty-state">
+            <p>You don't have any members yet.</p>
+          </div>
+        </div>
       </div>
 
-      <div class="groups-grid">
-        <div v-for="group in myDownlineGroups" :key="group.id" class="group-card" @click="openGroupDetails(group)">
-          <div class="group-icon"><Users :size="24" color="white"/></div>
-          <div class="group-info">
-            <h4>{{ group.name }}</h4>
-            <p>{{ group.members.length }} / {{ group.capacity }} Members • {{ group.lifeStage }}</p>
+      <!-- 2. GROUP DETAIL LIST VIEW (Shown when A group IS selected) -->
+      <div v-else class="drill-down-view">
+        <!-- Back Header -->
+        <div class="drill-header">
+          <button @click="closeGroupDetails" class="back-btn">
+            <ArrowLeft :size="20" />
+          </button>
+          <div class="header-info">
+            <h3>{{ selectedGroup.name }}</h3>
+            <span class="subtitle">{{ currentGroupMembers.length }} / {{ selectedGroup.capacity }} Members</span>
           </div>
-          <ChevronRight :size="20" color="#B0BEC5" />
         </div>
-        <div v-if="myDownlineGroups.length === 0" class="empty-state">
-          <p>You don't have any members yet.</p>
+
+        <!-- Members List -->
+        <div class="members-list-full">
+          <div 
+            v-for="m in currentGroupMembers" 
+            :key="m.id" 
+            class="member-row clickable"
+            @click="viewPerson(m)"
+          >
+            <div class="member-avatar">{{ m.firstName.charAt(0) }}</div>
+            <div class="member-name-col">
+              <span class="name">{{ m.firstName }} {{ m.lastName }}</span>
+              <span class="status-sub">{{ m.status }}</span>
+            </div>
+            
+            <!-- Remove Dmember Button -->
+            <button class="icon-btn remove" @click.stop="removeMember(m)" title="Remove Member">
+              <UserMinus :size="18" />
+            </button>
+          </div>
+
+          <div v-if="currentGroupMembers.length === 0" class="empty-members">
+            <AlertCircle :size="32" color="#B0BEC5" />
+            <p>No members in this group yet.</p>
+          </div>
+        </div>
+      </div>
+
+    </div>
+    
+    <!-- CREATE NEW DGROUP MODAL -->
+    <div v-if="showCreateModal" class="modal-overlay">
+      <div class="modal create-modal">
+        <h3>New Dgroup</h3>
+        <div class="preview-section">
+          <span class="preview-label">Preview</span>
+          <div class="group-card preview-card">
+            <div class="group-icon"><Users :size="24" color="white"/></div>
+            <div class="group-info">
+              <h4>{{ newGroupForm.name || 'Dgroup Name' }}</h4>
+              <p>0 / {{ newGroupForm.capacity }} Members • {{ newGroupForm.lifeStage }}</p>
+            </div>
+            <ChevronRight :size="20" color="#B0BEC5" />
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>Dgroup Name</label>
+          <input v-model="newGroupForm.name" placeholder="Ex. Elevate Baguio Boys" />
+        </div>
+
+        <div class="form-row">
+          <div class="form-group half">
+            <label>Capacity</label>
+            <input type="number" v-model="newGroupForm.capacity" min="1" />
+          </div>
+          <div class="form-group half">
+            <label>Life Stage</label>
+            <select v-model="newGroupForm.lifeStage">
+              <option>Elevate</option>
+              <option>B1G</option>
+              <option>Mixed</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="actions">
+          <button @click="showCreateModal = false" class="cancel">Cancel</button>
+          <button @click="createDgroup" class="confirm">Create</button>
         </div>
       </div>
     </div>
 
     <!-- Person Profile Modal -->
-    <div v-if="showPersonModal && selectedPerson" class="modal-overlay" @click.self="showPersonModal = false">
+    <div v-if="showPersonModal && selectedPerson" class="modal-overlay person-overlay" @click.self="showPersonModal = false">
       <div class="modal profile-modal">
         <button class="close-icon-btn" @click="showPersonModal = false"><X :size="24" /></button>
         
@@ -209,79 +297,6 @@ function createDgroup() {
       </div>
     </div>
 
-    <!-- Group Detail Modal -->
-    <div v-if="showGroupDetailModal && selectedGroup" class="modal-overlay" @click.self="showGroupDetailModal = false">
-      <div class="modal full-height">
-        <div class="modal-header">
-          <h3>{{ selectedGroup.name }}</h3>
-          <button class="close-btn" @click="showGroupDetailModal = false">&times;</button>
-        </div>
-        <div class="modal-body">
-          <p class="stat">Total Members: {{ selectedGroup.members.length }}</p>
-          <div class="member-list-full">
-            <div 
-              v-for="m in selectedGroup.members" 
-              :key="m.id" 
-              class="member-item clickable"
-              @click="viewPerson(m)"
-            >
-              <span>{{ m.firstName }} {{ m.lastName }}</span>
-              <span class="status-tag">{{ m.status }}</span>
-            </div>
-            <div v-if="selectedGroup.members.length === 0" class="empty-members">
-              No members in this group yet.
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-    
-    <!-- CREATE NEW DGROUP MODAL -->
-    <div v-if="showCreateModal" class="modal-overlay">
-      <div class="modal create-modal">
-        <h3>New Dgroup</h3>
-        
-        <!-- Live Preview Section -->
-        <div class="preview-section">
-          <span class="preview-label">Preview</span>
-          <div class="group-card preview-card">
-            <div class="group-icon"><Users :size="24" color="white"/></div>
-            <div class="group-info">
-              <h4>{{ newGroupForm.name || 'Dgroup Name' }}</h4>
-              <p>0 / {{ newGroupForm.capacity }} Members • {{ newGroupForm.lifeStage }}</p>
-            </div>
-            <ChevronRight :size="20" color="#B0BEC5" />
-          </div>
-        </div>
-
-        <!-- Form Inputs -->
-        <div class="form-group">
-          <label>Dgroup Name</label>
-          <input v-model="newGroupForm.name" placeholder="Ex. Elevate Baguio Boys" />
-        </div>
-
-        <div class="form-row">
-          <div class="form-group half">
-            <label>Capacity</label>
-            <input type="number" v-model="newGroupForm.capacity" min="1" />
-          </div>
-          <div class="form-group half">
-            <label>Life Stage</label>
-            <select v-model="newGroupForm.lifeStage">
-              <option>Elevate</option>
-              <option>B1G</option>
-              <option>Mixed</option>
-            </select>
-          </div>
-        </div>
-
-        <div class="actions">
-          <button @click="showCreateModal = false" class="cancel">Cancel</button>
-          <button @click="createDgroup" class="confirm">Create</button>
-        </div>
-      </div>
-    </div>
-
   </div>
 </template>
 
@@ -302,14 +317,23 @@ function createDgroup() {
 .leader-info .label { font-size: 11px; text-transform: uppercase; color: #78909C; font-weight: 700; }
 .leader-info h3 { margin: 4px 0 0 0; font-size: 18px; color: #263238; }
 
-/* Member List */
+/* Member List Style */
 .members-list h4 { color: #546E7A; margin-bottom: 12px; }
 .member-row { background: white; padding: 12px; border-bottom: 1px solid #ECEFF1; display: flex; align-items: center; gap: 12px; transition: background 0.2s; }
 .member-row:first-of-type { border-radius: 12px 12px 0 0; }
 .member-row:last-of-type { border-radius: 0 0 12px 12px; border-bottom: none; }
 .member-row.clickable { cursor: pointer; }
 .member-row.clickable:hover { background: #F5F5F5; }
-.member-avatar { width: 32px; height: 32px; background: #ECEFF1; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; color: #546E7A; }
+.member-avatar { width: 32px; height: 32px; background: #ECEFF1; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; color: #546E7A; flex-shrink: 0; }
+.member-name { font-weight: 600; color: #37474F; font-size: 14px; }
+.member-name-col { display: flex; flex-direction: column; flex: 1; }
+.member-name-col .name { font-weight: 600; color: #37474F; font-size: 14px; }
+.member-name-col .status-sub { font-size: 11px; color: #90A4AE; text-transform: capitalize; }
+
+/* remove button */
+.icon-btn { background: transparent; border: none; cursor: pointer; padding: 8px; border-radius: 8px; transition: background 0.2s; display: flex; align-items: center; justify-content: center; }
+.icon-btn.remove { color: #B0BEC5; }
+.icon-btn.remove:hover { background: #FFEBEE; color: #D32F2F; }
 
 /* Group Card */
 .groups-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
@@ -321,33 +345,33 @@ function createDgroup() {
 .group-info h4 { margin: 0 0 4px 0; color: #263238; font-size: 15px; }
 .group-info p { margin: 0; font-size: 12px; color: #78909C; }
 
+.drill-header { display: flex; align-items: center; gap: 16px; margin-bottom: 20px; }
+.back-btn { background: #ECEFF1; border: none; width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; color: #546E7A; transition: background 0.2s; }
+.back-btn:hover { background: #CFD8DC; }
+.drill-header h3 { margin: 0; font-size: 18px; color: #263238; }
+.drill-header .subtitle { font-size: 12px; color: #78909C; }
+
 /* Modals */
 .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 100; display: flex; align-items: center; justify-content: center; }
+.person-overlay { z-index: 200; }
+
 .modal { background: white; width: 90%; max-width: 400px; padding: 24px; border-radius: 16px; position: relative; }
 
-/* Create Modal Specifics */
 .create-modal { padding-top: 20px; }
 .form-group { margin-bottom: 16px; }
 .form-group label { display: block; font-size: 12px; font-weight: 600; color: #546E7A; margin-bottom: 6px; }
 .form-group input, .form-group select { width: 100%; padding: 10px; border: 1px solid #CFD8DC; border-radius: 8px; font-size: 14px; box-sizing: border-box; }
 .form-row { display: flex; gap: 12px; }
 .form-group.half { flex: 1; }
-
 .preview-section { margin-bottom: 20px; background: #F5F7FA; padding: 16px; border-radius: 12px; }
 .preview-label { font-size: 11px; text-transform: uppercase; color: #90A4AE; font-weight: 700; display: block; margin-bottom: 8px; }
 .preview-card { margin-bottom: 0; border: 1px solid #E0E0E0; box-shadow: 0 2px 5px rgba(0,0,0,0.05); pointer-events: none; }
-
 .actions { display: flex; gap: 10px; margin-top: 24px; }
 .actions button { flex: 1; padding: 12px; border-radius: 8px; border: none; font-weight: 600; cursor: pointer; }
 .confirm { background: #1976D2; color: white; }
 .cancel { background: #ECEFF1; color: #333; }
-
 .close-btn { background: none; border: none; font-size: 24px; cursor: pointer; }
-.modal-header { display: flex; justify-content: space-between; align-items: center; }
-.member-item { padding: 12px; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; }
-.member-item.clickable { cursor: pointer; transition: background 0.1s; }
-.member-item.clickable:hover { background: #F5F5F5; }
-.empty-members { text-align: center; color: #B0BEC5; padding: 20px; font-style: italic; font-size: 13px; }
+.empty-members { text-align: center; color: #B0BEC5; padding: 30px 20px; display: flex; flex-direction: column; align-items: center; gap: 10px; font-size: 13px; }
 
 /* Profile Modal */
 .profile-modal { text-align: center; padding-top: 40px; }
@@ -355,7 +379,6 @@ function createDgroup() {
 .profile-header { margin-bottom: 24px; display: flex; flex-direction: column; align-items: center; }
 .profile-avatar-lg { width: 80px; height: 80px; background: #E3F2FD; color: #1565C0; font-size: 32px; font-weight: 700; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin-bottom: 12px; border: 4px solid white; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
 .role-badge { background: #FFF3E0; color: #F57C00; font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 12px; text-transform: uppercase; margin-top: 8px; }
-
 .profile-details { text-align: left; background: #FAFAFA; border-radius: 12px; padding: 16px; }
 .detail-row { display: flex; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid #EEE; }
 .detail-row:last-child { border-bottom: none; }
