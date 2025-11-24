@@ -20,6 +20,7 @@ const isEditMode = ref(false)
 const showArchiveConfirmation = ref(false)
 const editableMember = ref(JSON.parse(JSON.stringify(props.member)))
 
+// Ensure array exists for ministries
 if (!Array.isArray(editableMember.value.finalTags.volunteerMinistry)) {
   editableMember.value.finalTags.volunteerMinistry = []
 }
@@ -135,7 +136,6 @@ function confirmRestore() {
 <template>
   <div class="details-modal-container">
     
-    <!-- 1. HEADER -->
     <div class="modal-header-section">
       <div v-if="!isEditMode && !showArchiveConfirmation" class="modal-header">
         <div class="header-text">
@@ -151,10 +151,8 @@ function confirmRestore() {
       <h3 v-if="showArchiveConfirmation" class="modal-title delete-header">Archive Member</h3>
     </div>
 
-    <!-- 2. BODY -->
     <div class="modal-body-scrollable">
 
-      <!-- Archive Confirmation -->
       <div v-if="showArchiveConfirmation" class="delete-confirmation">
         <p>
           Are you sure you want to archive 
@@ -169,8 +167,8 @@ function confirmRestore() {
         </div>
       </div>
 
-      <!-- Edit View -->
       <div v-else-if="isEditMode" class="edit-view">
+        
         <h4>Personal Information</h4>
         <div class="form-grid">
           <div class="form-group">
@@ -226,13 +224,69 @@ function confirmRestore() {
             </select>
           </div>
         </div>
-        <div class="button-group">
+        
+        <h4>Categories & Ministry</h4>
+        <div class="tag-group">
+            <div class="checkbox-item">
+                <input type="checkbox" id="firstTimer" v-model="editableMember.finalTags.isFirstTimer">
+                <label for="firstTimer">First Timer</label>
+            </div>
+            <div class="checkbox-item">
+                <input type="checkbox" id="seeker" v-model="editableMember.finalTags.isSeeker">
+                <label for="seeker">Seeker</label>
+            </div>
+            <div class="checkbox-item">
+                <input type="checkbox" id="regular" v-model="editableMember.finalTags.isRegular">
+                <label for="regular">Regular Member</label>
+            </div>
+            <div class="checkbox-item">
+                <input type="checkbox" id="leader" v-model="editableMember.finalTags.isDgroupLeader">
+                <label for="leader">Dgroup Leader</label>
+            </div>
+             
+             <div v-if="editableMember.finalTags.isDgroupLeader" class="form-group indented">
+                 <label>Dgroup Capacity</label>
+                 <input type="number" v-model="editableMember.dgroupCapacity" min="1">
+            </div>
+
+            <div class="checkbox-item">
+                <input type="checkbox" id="volunteer" v-model="editableMember.finalTags.isVolunteer">
+                <label for="volunteer">Volunteer</label>
+            </div>
+
+             <div v-if="editableMember.finalTags.isVolunteer" class="indented">
+                <label class="sub-label">Select Ministries:</label>
+                <div class="checkbox-subgroup">
+                     <div class="checkbox-item">
+                        <input type="checkbox" value="Host" v-model="editableMember.finalTags.volunteerMinistry">
+                        <label>Host Team</label>
+                    </div>
+                     <div class="checkbox-item">
+                        <input type="checkbox" value="Live Prod" v-model="editableMember.finalTags.volunteerMinistry">
+                        <label>Live Prod</label>
+                    </div>
+                    <div class="checkbox-item">
+                        <input type="checkbox" value="Exalt" v-model="editableMember.finalTags.volunteerMinistry">
+                        <label>Exalt (Music)</label>
+                    </div>
+                     <div class="checkbox-item">
+                        <input type="checkbox" value="DGM" v-model="editableMember.finalTags.volunteerMinistry">
+                        <label>DGM (Graphics)</label>
+                    </div>
+                     <div class="checkbox-item">
+                        <input type="checkbox" value="Usher" v-model="editableMember.finalTags.volunteerMinistry">
+                        <label>Usher</label>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="button-group mt-20">
           <button class="btn-secondary" @click="cancelEdit">Cancel</button>
           <button class="btn-primary" @click="save">Save Changes</button>
         </div>
       </div>
 
-      <!-- Default View -->
       <div v-else class="view-mode">
         <div class="tag-list">
           <span v-for="tag in allTags" :key="tag" class="tag">{{ tag }}</span>
@@ -275,9 +329,7 @@ function confirmRestore() {
       </div>
     </div>
 
-    <!-- 3. FOOTER -->
     <div class="modal-footer-section">
-      <!-- ARCHIVE / RESTORE ACTIONS -->
       <div v-if="!isEditMode && !showArchiveConfirmation" class="danger-zone">
         
         <button v-if="isArchived" class="btn-restore" @click="confirmRestore">
@@ -329,12 +381,16 @@ function confirmRestore() {
 .delete-header { color: #D32F2F; }
 .edit-view h4 { font-size: 16px; font-weight: 600; color: #0D47A1; border-bottom: 2px solid #E3F2FD; padding-bottom: 8px; margin-top: 16px; margin-bottom: 16px; }
 .edit-view h4:first-of-type { margin-top: 0; }
+
+/* Category Tags */
 .tag-group { display: flex; flex-direction: column; gap: 12px; }
 .checkbox-item { display: flex; align-items: center; gap: 10px; }
-.checkbox-item input { width: auto; }
-.checkbox-item label { margin: 0; font-weight: 400; font-size: 14px; }
-.indented { margin-left: 28px; margin-top: 10px; }
-.checkbox-subgroup { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
+.checkbox-item input { width: auto; transform: scale(1.2); cursor: pointer; }
+.checkbox-item label { margin: 0; font-weight: 400; font-size: 14px; cursor: pointer; }
+.indented { margin-left: 28px; margin-top: 10px; padding: 12px; background: #F5F7FA; border-radius: 8px; }
+.sub-label { font-weight: 600; margin-bottom: 8px; display: block; color: #546E7A; }
+.checkbox-subgroup { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.mt-20 { margin-top: 20px; }
 
 /* View Mode */
 .modal-header { display: flex; justify-content: space-between; align-items: flex-start; }
