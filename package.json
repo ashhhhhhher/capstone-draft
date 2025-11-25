@@ -9,11 +9,15 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@emailjs/browser": "^4.4.1",
     "chart.js": "^4.5.1",
     "chartjs-plugin-datalabels": "^2.2.0",
     "dayjs": "^1.11.19",
+    "emailjs": "^4.0.3",
     "firebase": "^12.5.0",
     "html5-qrcode": "^2.3.8",
+    "jspdf": "^3.0.4",
+    "jspdf-autotable": "^5.0.2",
     "lucide-vue-next": "^0.552.0",
     "ml-regression": "^6.3.0",
     "pinia": "^3.0.3",
@@ -24,7 +28,8 @@
     "vue-qrcode": "^2.2.2",
     "vue-qrcode-reader": "^5.7.3",
     "vue-router": "^4.6.3",
-    "xlsx": "^0.18.5"
+    "xlsx": "^0.18.5",
+    "xlsx-js-style": "^1.2.0"
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^6.0.1",

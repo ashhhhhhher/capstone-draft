@@ -17,6 +17,15 @@ const props = defineProps({
   filterTitle: String
 })
 
+// Safe, reactive wrappers around props so template and script don't error
+const attendees = computed(() => props.attendees || [])
+const eventName = computed(() => props.eventName || '')
+const eventDate = computed(() => props.eventDate || '')
+const eventLocation = computed(() => props.eventLocation || '')
+const eventSpeaker = computed(() => props.eventSpeaker || '')
+const eventSeries = computed(() => props.eventSeries || '')
+const filterTitle = computed(() => props.filterTitle || '')
+
 const emit = defineEmits(['close'])
 
 // --- Store Access for Attendance Rate ---
@@ -25,29 +34,31 @@ const { members } = storeToRefs(membersStore)
 
 // --- SORTING LOGIC ---
 const sortedAttendees = computed(() => {
-  return [...props.attendees].sort((a, b) => 
+  return [...attendees.value].sort((a, b) =>
     a.lastName.localeCompare(b.lastName) || a.firstName.localeCompare(b.firstName)
   )
 })
 
 // Helper for sorting
 function sortByName(list) {
-  return list.sort((a, b) => a.lastName.localeCompare(b.lastName) || a.firstName.localeCompare(b.firstName));
+  if (!Array.isArray(list)) return [];
+  return list.slice().sort((a, b) => a.lastName.localeCompare(b.lastName) || a.firstName.localeCompare(b.firstName));
 }
 
 // =========================================================================
 //  1. EXCEL EXPORT (Preserved Existing Logic)
 // =========================================================================
 function exportToExcel() {
-  const firstTimers = sortByName(props.attendees.filter(m => m.finalTags.isFirstTimer));
-  const leaders = sortByName(props.attendees.filter(m => !m.finalTags.isFirstTimer && m.finalTags.isDgroupLeader));
-  const volunteers = sortByName(props.attendees.filter(m => !m.finalTags.isFirstTimer && !m.finalTags.isDgroupLeader && m.finalTags.isVolunteer));
-  const regulars = props.attendees.filter(m => !m.finalTags.isFirstTimer && !m.finalTags.isDgroupLeader && !m.finalTags.isVolunteer);
+  const source = attendees.value;
+  const firstTimers = sortByName(source.filter(m => m.finalTags?.isFirstTimer));
+  const leaders = sortByName(source.filter(m => !m.finalTags?.isFirstTimer && m.finalTags?.isDgroupLeader));
+  const volunteers = sortByName(source.filter(m => !m.finalTags?.isFirstTimer && !m.finalTags?.isDgroupLeader && m.finalTags?.isVolunteer));
+  const regulars = source.filter(m => !m.finalTags?.isFirstTimer && !m.finalTags?.isDgroupLeader && !m.finalTags?.isVolunteer);
   
-  const elevateMales = sortByName(regulars.filter(m => m.gender === 'Male' && m.finalTags.ageCategory === 'Elevate'));
-  const elevateFemales = sortByName(regulars.filter(m => m.gender === 'Female' && m.finalTags.ageCategory === 'Elevate'));
-  const b1gMales = sortByName(regulars.filter(m => m.gender === 'Male' && m.finalTags.ageCategory === 'B1G'));
-  const b1gFemales = sortByName(regulars.filter(m => m.gender === 'Female' && m.finalTags.ageCategory === 'B1G'));
+  const elevateMales = sortByName(regulars.filter(m => m.gender === 'Male' && m.finalTags?.ageCategory === 'Elevate'));
+  const elevateFemales = sortByName(regulars.filter(m => m.gender === 'Female' && m.finalTags?.ageCategory === 'Elevate'));
+  const b1gMales = sortByName(regulars.filter(m => m.gender === 'Male' && m.finalTags?.ageCategory === 'B1G'));
+  const b1gFemales = sortByName(regulars.filter(m => m.gender === 'Female' && m.finalTags?.ageCategory === 'B1G'));
 
   const wb = XLSX.utils.book_new();
   const borderStyle = { top: { style: "thin" }, bottom: { style: "thin" }, left: { style: "thin" }, right: { style: "thin" } };
@@ -67,9 +78,9 @@ function exportToExcel() {
     const colCount = tableHeaders.length;
     const rows = [
       ["CHRIST COMMISSION FOUNDATION INC."], [""],
-      createMetadataRow(`Name of Event: ${props.eventName}`, `Speaker: ${props.eventSpeaker || 'N/A'}`, colCount),
-      createMetadataRow(`Venue: ${props.eventLocation || 'N/A'}`, `Series: ${props.eventSeries || 'N/A'}`, colCount),
-      createMetadataRow(`Ministry: Elevate Baguio x B1G Baguio`, `Date: ${props.eventDate}`, colCount),
+      createMetadataRow(`Name of Event: ${eventName.value}`, `Speaker: ${eventSpeaker.value || 'N/A'}`, colCount),
+      createMetadataRow(`Venue: ${eventLocation.value || 'N/A'}`, `Series: ${eventSeries.value || 'N/A'}`, colCount),
+      createMetadataRow(`Ministry: Elevate Baguio x B1G Baguio`, `Date: ${eventDate.value}`, colCount),
       createMetadataRow(`Ministry in-charge: Elevate Baguio`, "", colCount),
       [""], [sheetTitle], tableHeaders
     ];
@@ -105,13 +116,13 @@ function exportToExcel() {
   };
 
   createSheet("First Timers", "ATTENDANCE SHEET - FIRST TIMERS", ["Name", "Gender", "Age", "Contact Number", "Fb/Messenger", "Email", "School/Occupation"], firstTimers, (m) => [`${m.lastName}, ${m.firstName}`, m.gender, m.age, m.contactNumber || '', m.fbAccount || '', m.email, m.school || '']);
-  createSheet("Volunteers", "ATTENDANCE SHEET - VOLUNTEERS", ["Name", "Age", "Gender", "Ministry"], volunteers, (m) => [`${m.lastName}, ${m.firstName}`, m.age, m.gender, m.finalTags.volunteerMinistry.join(', ')]);
-  createSheet("DLeaders", "ATTENDANCE SHEET - DLEADERS", ["Name", "Age", "Gender", "Volunteer Ministry"], leaders, (m) => [`${m.lastName}, ${m.firstName}`, m.age, m.gender, m.finalTags.volunteerMinistry.join(', ') || 'N/A']);
+  createSheet("Volunteers", "ATTENDANCE SHEET - VOLUNTEERS", ["Name", "Age", "Gender", "Ministry"], volunteers, (m) => [`${m.lastName}, ${m.firstName}`, m.age, m.gender, (m.finalTags?.volunteerMinistry || []).join(', ')]);
+  createSheet("DLeaders", "ATTENDANCE SHEET - DLEADERS", ["Name", "Age", "Gender", "Volunteer Ministry"], leaders, (m) => [`${m.lastName}, ${m.firstName}`, m.age, m.gender, (m.finalTags?.volunteerMinistry || []).join(', ') || 'N/A']);
   createSheet("Elevate F", "ATTENDANCE SHEET - DGROUP MEMBERS (ELEVATE FEMALES)", ["Name", "Age", "DLeader Name"], elevateFemales, (m) => [`${m.lastName}, ${m.firstName}`, m.age, m.dgroupLeader || 'Unassigned']);
   createSheet("Elevate M", "ATTENDANCE SHEET - DGROUP MEMBERS (ELEVATE MALES)", ["Name", "Age", "DLeader Name"], elevateMales, (m) => [`${m.lastName}, ${m.firstName}`, m.age, m.dgroupLeader || 'Unassigned']);
   createSheet("B1G F", "ATTENDANCE SHEET - DGROUP MEMBERS (B1G FEMALES)", ["Name", "Age", "DLeader Name"], b1gFemales, (m) => [`${m.lastName}, ${m.firstName}`, m.age, m.dgroupLeader || 'Unassigned']);
   createSheet("B1G M", "ATTENDANCE SHEET - DGROUP MEMBERS (B1G MALES)", ["Name", "Age", "DLeader Name"], b1gMales, (m) => [`${m.lastName}, ${m.firstName}`, m.age, m.dgroupLeader || 'Unassigned']);
-  XLSX.writeFile(wb, `${props.eventName} - Attendance Report.xlsx`);
+  XLSX.writeFile(wb, `${eventName.value || 'Attendance'} - Attendance Report.xlsx`);
 }
 
 // =========================================================================
@@ -121,7 +132,7 @@ function exportToPDF() {
   const doc = new jsPDF();
   
   // Calculate Stats
-  const totalAttended = props.attendees.length;
+  const totalAttended = attendees.value.length;
   const totalRegistered = members.value ? members.value.length : 0;
   const rate = totalRegistered > 0 ? Math.round((totalAttended / totalRegistered) * 100) : 0;
 
@@ -133,10 +144,10 @@ function exportToPDF() {
 
   // --- Event Details ---
   doc.setFontSize(10).setTextColor(0);
-  doc.text(`Event: ${props.eventName}`, 15, 45);
-  doc.text(`Date: ${props.eventDate}`, 15, 50);
-  doc.text(`Speaker: ${props.eventSpeaker || 'N/A'}`, 120, 45);
-  doc.text(`Venue: ${props.eventLocation || 'N/A'}`, 120, 50);
+  doc.text(`Event: ${eventName.value}`, 15, 45);
+  doc.text(`Date: ${eventDate.value}`, 15, 50);
+  doc.text(`Speaker: ${eventSpeaker.value || 'N/A'}`, 120, 45);
+  doc.text(`Venue: ${eventLocation.value || 'N/A'}`, 120, 50);
 
   // --- Summary Stats (Matched Font Size) ---
   // Font size 10, normal weight to match headers above
@@ -144,7 +155,7 @@ function exportToPDF() {
   doc.text(`Attendance Rate: ${rate}%`, 120, 60);
 
   // --- Filter Data for Tables ---
-  const data = props.attendees;
+  const data = attendees.value;
   
   const firstTimers = sortByName(data.filter(m => m.finalTags?.isFirstTimer));
   const leaders = sortByName(data.filter(m => !m.finalTags?.isFirstTimer && m.finalTags?.isDgroupLeader));
@@ -214,7 +225,7 @@ function exportToPDF() {
   createTable("ELEVATE Male Members", elevateMale, regColumns, regMap);
   createTable("ELEVATE Female Members", elevateFemale, regColumns, regMap);
 
-  doc.save(`${props.eventName}_Attendance_Report.pdf`);
+  doc.save(`${eventName.value || 'Attendance'}_Attendance_Report.pdf`);
 }
 </script>
 
@@ -278,9 +289,9 @@ function exportToPDF() {
             <td>{{ member.gender }}</td>
             <td>{{ member.dgroupLeader || 'N/A' }}</td>
             <td>
-                <span v-if="member.finalTags.isFirstTimer" class="tag ft">First Timer</span>
-                <span v-else-if="member.finalTags.isDgroupLeader" class="tag dl">Leader</span>
-                <span v-else-if="member.finalTags.isVolunteer" class="tag vol">Volunteer</span>
+                <span v-if="member.finalTags?.isFirstTimer" class="tag ft">First Timer</span>
+                <span v-else-if="member.finalTags?.isDgroupLeader" class="tag dl">Leader</span>
+                <span v-else-if="member.finalTags?.isVolunteer" class="tag vol">Volunteer</span>
                 <span v-else class="tag reg">Regular</span>
             </td>
           </tr>

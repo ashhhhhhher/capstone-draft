@@ -194,9 +194,6 @@ const getMinistryColor = (name) => {
     }
 }
 
-<<<<<<< Updated upstream
-
-=======
 // --- Date range picker state (new) ---
 const todayStr = new Date().toISOString().split('T')[0]
 const defaultFrom = (() => {
@@ -209,7 +206,6 @@ const toDate = ref(todayStr)
 
 // --- Chart Data Computations ---
 // replace historicalAttendanceData logic so it respects fromDate/toDate
->>>>>>> Stashed changes
 const historicalAttendanceData = computed(() => {
   // Validate range
   if (!fromDate.value || !toDate.value) return { labels: [], datasets: [{ label: 'Total Attendance', backgroundColor: '#1E88E5', data: [] }] }
@@ -241,145 +237,11 @@ const historicalAttendanceData = computed(() => {
   }
 })
 
-<<<<<<< Updated upstream
-const monitoringList = computed(() => {
-  const today = new Date().toISOString().split('T')[0];
-  const pastServices = allEvents.value
-    .filter(e => e.eventType === 'service' && e.date <= today)
-    .sort((a, b) => new Date(b.date) - new Date(a.date));
-
-  if (pastServices.length === 0) return [];
-
-  const results = [];
-  const listToCheck = activeMembers.value;
-
-  listToCheck.forEach(member => {
-    let consecutiveAbsences = 0;
-    
-    // Calculate streak
-    for (const event of pastServices) {
-      const attended = allAttendance.value.some(
-        att => att.eventId === event.id && att.memberId === member.id
-      );
-      if (!attended) consecutiveAbsences++;
-      else break; 
-    }
-
-    // Assign Status & Flags
-    if (consecutiveAbsences >= 3) {
-      let statusLabel = 'At Risk';
-      let statusClass = 'status-yellow';
-      let showNotifyLeader = false;
-      let showArchive = false;
-
-      if (consecutiveAbsences === 4) {
-        statusLabel = 'Needs Follow-Up';
-        statusClass = 'status-orange';
-        showNotifyLeader = true;
-      } else if (consecutiveAbsences >= 5) {
-        statusLabel = 'Inactive';
-        statusClass = 'status-red';
-        showArchive = true;
-      }
-      
-      const type = member.finalTags.isDgroupLeader ? 'Leader' : 
-                   member.finalTags.isRegular ? 'Regular' : 'Member';
-
-      const msgSent = !!member.monitoringState?.msgSentDate;
-      const leaderNotified = !!member.monitoringState?.leaderNotifiedDate;
-
-      results.push({
-        ...member,
-        typeString: type,
-        consecutiveAbsences,
-        statusLabel,
-        statusClass,
-        showNotifyLeader,
-        showArchive,
-        msgSent,
-        leaderNotified
-      });
-    }
-  });
-
-  return results.sort((a, b) => b.consecutiveAbsences - a.consecutiveAbsences);
-});
-
-// --- Testing helper: clear msgSent/leaderNotified for "Inactive" members on each reload ---
-onMounted(() => {
-  try {
-    const today = new Date().toISOString().split('T')[0];
-    const pastServices = allEvents.value
-      .filter(e => e.eventType === 'service' && e.date <= today)
-      .sort((a, b) => new Date(b.date) - new Date(a.date));
-
-    if (!pastServices.length) return;
-
-    // For each active member compute consecutiveAbsences and reset monitoring flags if Inactive (>=5)
-    activeMembers.value.forEach(member => {
-      let consecutiveAbsences = 0;
-      for (const event of pastServices) {
-        const attended = allAttendance.value.some(
-          att => att.eventId === event.id && att.memberId === member.id
-        );
-        if (!attended) consecutiveAbsences++;
-        else break;
-      }
-
-      if (consecutiveAbsences >= 5) {
-        // ensure object exists and clear stored flags so testing can re-send messages
-        if (!member.monitoringState || typeof member.monitoringState !== 'object') {
-          member.monitoringState = {};
-        }
-        // clear saved sent/leader-notified dates (allow UI buttons to appear again)
-        member.monitoringState.msgSentDate = null;
-        member.monitoringState.leaderNotifiedDate = null;
-      }
-    });
-  } catch (err) {
-    // fail silently for safety during testing
-    // console.warn('Failed to reset monitoring flags for testing', err)
-  }
-});
-
-// --- Actions ---
-
-async function handleMessageMember(member) {
-  if (member.email) {
-    window.location.href = `mailto:${member.email}?subject=Checking in&body=Hi ${member.firstName}...`;
-  } else {
-    alert(`No email for ${member.firstName}.`);
-  }
-  
-  await notificationsStore.sendNotification(
-    member.id, 
-    "We missed you!", 
-    "Hope to see you soon!"
-  );
-
-  await membersStore.logMonitoringAction(member.id, 'message');
-}
-
-async function handleNotifyLeader(member) {
-  if (member.dgroupLeader) {
-    alert(`Notification sent to leader (${member.dgroupLeader}).`);
-    await membersStore.logMonitoringAction(member.id, 'notifyLeader');
-  } else {
-    alert("No Dgroup Leader assigned.");
-  }
-}
-
-function handleArchiveMember(member) {
-  if (confirm(`Archive ${member.firstName}?`)) {
-    membersStore.archiveMember(member.id);
-  }
-=======
 // --- KPI UI state ---
 const monitoringOpen = ref(true)
 
 function toggleMonitoring() {
   monitoringOpen.value = !monitoringOpen.value
->>>>>>> Stashed changes
 }
 </script>
 
@@ -457,88 +319,7 @@ function toggleMonitoring() {
       </div>
     </div>
 
-<<<<<<< Updated upstream
-    <!-- Absence Monitoring & Engagement -->
-    <div class="list-card">
-      <div class="monitoring-header">
-        <h3>Absence Monitoring & Engagement</h3>
-        <div class="legend-badges">
-          <span class="badge status-yellow">At Risk (3)</span>
-          <span class="badge status-orange">Follow-Up (4)</span>
-          <span class="badge status-red">Inactive (5+)</span>
-        </div>
-      </div>
-      <p class="list-subtitle">Members requiring attention due to consecutive absences.</p>
-      
-      <div v-if="monitoringList.length > 0" class="monitoring-table-wrapper">
-        <table class="monitoring-table">
-          <thead>
-            <tr>
-              <th>Member</th>
-              <th>Type</th>
-              <th>Status | Absences</th>
-              <th>Dgroup Leader</th>
-              <th>Action</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="member in monitoringList" :key="member.id">
-              <td>
-                <div class="member-name">{{ member.firstName }} {{ member.lastName }}</div>
-                <div class="member-email">{{ member.email }}</div>
-              </td>
-              <td>{{ member.typeString }}</td>
-              <td>
-                <div class="status-cell">
-                  <span class="status-pill" :class="member.statusClass">
-                    {{ member.statusLabel }}
-                  </span>
-                  <span class="abs-count">{{ member.consecutiveAbsences }} missed</span>
-                </div>
-              </td>
-              <td>
-                <div class="leader-cell">
-                  <span>{{ member.dgroupLeader || 'None' }}</span>
-                  <span v-if="member.leaderNotified" class="notified-badge">
-                    <CheckCircle :size="12" /> Notified
-                  </span>
-                </div>
-              </td>
-              <td>
-                <div class="action-row">
-                  <!-- Message Button / Sent Badge -->
-                  <span v-if="member.msgSent" class="action-done-badge" :class="member.statusClass">
-                    Message Sent
-                  </span>
-                  <button v-else class="action-btn message" @click="handleMessageMember(member)" title="Send Check-in Message">
-                    <Mail :size="16" /> Send Message
-                  </button>
-
-                  <!-- Notify Leader (Only for 4+) -->
-                  <button v-if="member.showNotifyLeader && !member.leaderNotified" class="action-btn notify" @click="handleNotifyLeader(member)" title="Notify Leader">
-                    <Bell :size="16" /> Notify Leader
-                  </button>
-
-                  <!-- Archive (Only for 5+) -->
-                  <button v-if="member.showArchive" class="action-btn archive" @click="handleArchiveMember(member)" title="Archive Member">
-                    <Archive :size="16" /> Archive
-                  </button>
-                </div>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-      <div v-else class="empty-state">
-        <div class="empty-icon">✨</div>
-        <p>Great news! No members are currently at risk.</p>
-      </div>
-    </div>
-
-    <!-- 3. Charts Grid  -->
-=======
     <!-- 2. Charts Grid -->
->>>>>>> Stashed changes
     <div class="charts-grid">
       <div class="chart-card">
         <h3>Member Category Distribution</h3>
@@ -565,38 +346,6 @@ function toggleMonitoring() {
       </div>
     </div>
     
-<<<<<<< Updated upstream
-    <!-- 4. Volunteer Breakdown Section -->
-    <div class="chart-card-full">
-        <h3>Volunteer Ministry Breakdown (Total: {{ volunteerBreakdown.total }})</h3>
-        <div v-if="volunteerBreakdown.total > 0" class="volunteer-progress-list">
-            <div 
-                v-for="item in volunteerBreakdown.data" 
-                :key="item.name" 
-                class="ministry-item"
-            >
-                <div class="ministry-label">
-                    <strong>{{ item.name }}</strong>
-                    <span>{{ item.count }} Members ({{ item.percent }}%)</span>
-                </div>
-                <div class="progress-bar-wrapper">
-                    <div 
-                        class="ministry-progress-bar"
-                        :style="{ width: item.percent + '%', backgroundColor: getMinistryColor(item.name) }"
-                    ></div>
-                </div>
-            </div>
-        </div>
-        <p v-else class="no-data-text">No volunteers currently tagged.</p>
-    </div>
-
-    <!-- 5. Historical Attendance Chart -->
-    <div class="chart-card-full">
-      <div class="section-title-with-button">
-        <h3>Historical Events Attendance</h3>
-        <ExportButton exportType="events" />
-      </div>
-=======
     <!-- 3. Volunteer Breakdown Section -->
     <div class="chart-card-full">
       <h3>Volunteer Ministry Breakdown (Total: {{ volunteerBreakdown.total }})</h3>
@@ -634,19 +383,12 @@ function toggleMonitoring() {
         </div>
       </div>
 
->>>>>>> Stashed changes
       <div class="chart-wrapper" style="height: 350px;">
         <BarChart 
           v-if="historicalAttendanceData.labels.length > 0"
           :chartData="historicalAttendanceData" 
           :chartOptions="historicalChartOptions" 
         />
-<<<<<<< Updated upstream
-        <p v-else class="no-data-text">No event data yet. Create an event and record attendance to see a trend.</p>
-      </div>
-    </div>
-
-=======
         <p v-else class="no-data-text">No event data in the selected date range. Adjust the range to view attendance.</p>
       </div>
     </div>
@@ -655,7 +397,6 @@ function toggleMonitoring() {
     <Modal v-if="showDgroupModal" @close="showDgroupModal = false" size="xl">
       <DgroupMatchingModal @close="showDgroupModal = false" />
     </Modal>
->>>>>>> Stashed changes
   </div>
 </template>
 
@@ -904,270 +645,26 @@ function toggleMonitoring() {
   transition: width 0.5s ease;
 }
 
-<<<<<<< Updated upstream
-/* --- List Card & Monitoring Table --- */
-.list-card {
-  background: #fff;
-  border-radius: 12px;
-  padding: 24px;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.05);
-  margin-bottom: 20px;
-}
-
-.monitoring-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 10px;
-  flex-wrap: wrap;
-  gap: 10px;
-}
-
-.monitoring-header h3 {
-  margin: 0;
-  font-size: 18px;
-  font-weight: 600;
-}
-
-.legend-badges {
-  display: flex;
-=======
 /* simple inline controls for the date range */
 .section-title-with-button .controls-inline {
   display: inline-flex;
->>>>>>> Stashed changes
   gap: 8px;
   align-items: center;
 }
-<<<<<<< Updated upstream
-
-.badge {
-  font-size: 11px;
-  font-weight: 700;
-  padding: 4px 8px;
-  border-radius: 4px;
-  text-transform: uppercase;
-}
-
-.status-yellow {
-  background: #FFF59D;
-  color: #F57F17;
-  border: 1px solid #FBC02D;
-}
-
-.status-orange {
-  background: #FFCC80;
-  color: #E65100;
-  border: 1px solid #FB8C00;
-}
-
-.status-red {
-  background: #EF9A9A;
-  color: #B71C1C;
-  border: 1px solid #E53935;
-}
-
-.list-subtitle {
-  font-size: 14px;
-=======
 .date-label {
   display: inline-flex;
   flex-direction: column;
   font-size: 12px;
->>>>>>> Stashed changes
   color: #546E7A;
 }
-<<<<<<< Updated upstream
-
-.monitoring-table-wrapper {
-  overflow-x: auto;
-}
-
-.monitoring-table {
-  width: 100%;
-  border-collapse: collapse;
-  min-width: 700px;
-}
-
-.monitoring-table th {
-  text-align: left;
-  font-size: 12px;
-  color: #90A4AE;
-  text-transform: uppercase;
-  padding: 12px;
-  border-bottom: 1px solid #eee;
-}
-
-.monitoring-table td {
-  padding: 12px;
-  border-bottom: 1px solid #f5f5f5;
-  vertical-align: middle;
-}
-
-.monitoring-table tr:last-child td {
-  border-bottom: none;
-}
-
-.member-name {
-  font-weight: 600;
-  color: #333;
-  font-size: 14px;
-}
-
-.member-email {
-  font-size: 12px;
-  color: #78909C;
-}
-
-.text-center {
-  text-align: center;
-}
-
-.font-bold {
-  font-weight: 700;
-  color: #37474F;
-}
-
-.status-pill {
-  font-size: 11px;
-  font-weight: 700;
-  padding: 4px 10px;
-  border-radius: 12px;
-  text-transform: uppercase;
-  width: fit-content;
-  display: inline-block;
-}
-
-.status-pill.status-yellow {
-  background: #FFF59D;
-  color: #F57F17;
-  border: 1px solid #FBC02D;
-}
-
-.status-pill.status-orange {
-  background: #FFCC80;
-  color: #E65100;
-  border: 1px solid #FB8C00;
-}
-
-.status-pill.status-red {
-  background: #EF9A9A;
-  color: #B71C1C;
-  border: 1px solid #E53935;
-}
-
-.leader-cell {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.notified-badge {
-  font-size: 11px;
-  color: #2E7D32;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  font-weight: 600;
-}
-
-.action-row {
-  display: flex;
-  gap: 8px;
-  justify-content: flex-start;
-  align-items: center;
-}
-
-.action-btn {
-  border: none;
-  border-radius: 6px;
-  height: 32px;
-  padding: 0 12px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: all 0.2s;
-  gap: 6px;
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.action-btn.message {
-  background: #E3F2FD;
-  color: #1976D2;
-}
-
-.action-btn.message:hover {
-  background: #1976D2;
-  color: white;
-}
-
-.action-btn.notify {
-  background: #FFF3E0;
-  color: #F57C00;
-}
-
-.action-btn.notify:hover {
-  background: #F57C00;
-  color: white;
-}
-
-.action-btn.archive {
-  background: #FFEBEE;
-  color: #D32F2F;
-}
-
-.action-btn.archive:hover {
-  background: #D32F2F;
-  color: white;
-}
-
-.action-done-badge {
-  padding: 6px 10px;
-  border-radius: 6px;
-  font-size: 12px;
-  font-weight: 700;
-  display: inline-block;
-}
-
-.action-done-badge.status-yellow {
-  background: #FFF59D;
-  color: #F57F17;
-  border: 1px solid #FBC02D;
-}
-
-.action-done-badge.status-orange {
-  background: #FFCC80;
-  color: #E65100;
-  border: 1px solid #FB8C00;
-}
-
-.empty-state {
-  text-align: center;
-  padding: 40px;
-  background: #FAFAFA;
-=======
 .date-label input[type="date"] {
   margin-top: 4px;
   padding: 6px 8px;
->>>>>>> Stashed changes
   border-radius: 8px;
   border: 1px solid #E0E0E0;
   background: white;
 }
 
-<<<<<<< Updated upstream
-.empty-icon {
-  font-size: 32px;
-  margin-bottom: 10px;
-}
-
-.no-data-text {
-  text-align: center;
-  padding: 40px;
-  color: #78909C;
-=======
 /* responsive adjustments */
 @media (max-width: 600px) {
   .section-title-with-button .controls-inline {
@@ -1176,6 +673,5 @@ function toggleMonitoring() {
     align-items: flex-start;
     gap: 6px;
   }
->>>>>>> Stashed changes
 }
 </style>
