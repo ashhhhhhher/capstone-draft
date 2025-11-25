@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { db } from '../firebase'
 import { collection, addDoc } from "firebase/firestore";
 import { useAuthStore } from './auth';
+import { ref, computed } from 'vue';
 
 export const useNotificationsStore = defineStore('notifications', () => {
   
@@ -32,5 +33,18 @@ export const useNotificationsStore = defineStore('notifications', () => {
     }
   }
 
-  return { sendNotification }
+  // ---- Local in-app notification list (for UI) ----
+  const localNotifications = ref([]) // { id, header, body, count, focus }
+  const unreadCount = computed(() => localNotifications.value.length)
+
+  function setLocalNotifications(items = []) {
+    // replace with new items (caller can dedupe if desired)
+    localNotifications.value = items.slice()
+  }
+
+  function clearLocalNotifications() {
+    localNotifications.value = []
+  }
+
+  return { sendNotification, localNotifications, setLocalNotifications, clearLocalNotifications, unreadCount }
 })

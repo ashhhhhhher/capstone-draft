@@ -8,6 +8,7 @@ import MemberCard from '../components/MemberCard.vue'
 import MemberDetailsModal from '../components/MemberDetailsModal.vue'
 import Modal from '../components/Modal.vue'
 import FilterModal from '../components/FilterModal.vue'
+import AbsenceMonitoring from '../components/AbsenceMonitoring.vue'  // added
 
 // --- Store Setup ---
 const membersStore = useMembersStore()
@@ -23,6 +24,7 @@ const selectedMember = ref(null)
 const expandedDgroups = ref([])
 const searchQuery = ref('') 
 const showFilterModal = ref(false)
+const showAbsenceMonitoringModal = ref(false) // new: modal state
 
 const filters = ref({
   attendance: [],
@@ -189,6 +191,10 @@ function getDgroupAttendance(leaderMembers) {
   return `${presentCount}/${totalCount} Present`
 }
 
+function openAbsenceMonitoring() {
+  showAbsenceMonitoringModal.value = true
+}
+
 </script>
 
 <template>
@@ -196,11 +202,24 @@ function getDgroupAttendance(leaderMembers) {
     <div class="members-header">
       <h1>{{ showArchived ? 'Archived Members' : 'Members Directory' }}</h1>
       
-      <!-- Archive Toggle -->
-      <button class="archive-toggle-btn" @click="showArchived = !showArchived">
-        <Archive :size="18" />
-        <span>{{ showArchived ? 'View Active' : 'View Archived' }}</span>
-      </button>
+      <!-- Archive Toggle + Absence Monitoring Button -->
+      <div class="header-actions">
+        <button class="archive-toggle-btn" @click="showArchived = !showArchived">
+          <Archive :size="18" />
+          <span>{{ showArchived ? 'View Active' : 'View Archived' }}</span>
+        </button>
+
+        <!-- new Absence Monitoring button placed beside Archive toggle -->
+        <button class="absence-btn" @click="openAbsenceMonitoring" title="Open Absence Monitoring">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M12 2v6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M5 10h14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M7 14h10" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M9 18h6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          <span>Absence Monitoring</span>
+        </button>
+      </div>
     </div>
 
     <div class="controls-wrapper">
@@ -314,6 +333,18 @@ function getDgroupAttendance(leaderMembers) {
     />
   </Modal>
 
+  <!-- Absence Monitoring Modal -->
+  <Modal v-if="showAbsenceMonitoringModal" @close="showAbsenceMonitoringModal = false" size="xl">
+    <div class="absence-modal-wrapper">
+      <header class="absence-modal-header">
+        <h3>Consecutive Absences</h3>
+        <p class="absence-subtext">Monitor members with 3, 4 and 5+ consecutive missed gatherings.</p>
+      </header>
+      <div class="absence-modal-body">
+        <AbsenceMonitoring />
+      </div>
+    </div>
+  </Modal>
 </template>
 
 <style scoped>
@@ -347,6 +378,33 @@ function getDgroupAttendance(leaderMembers) {
 }
 .archive-toggle-btn:hover {
   background-color: #ECEFF1;
+}
+
+/* container for header buttons */
+.header-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+/* Absence Monitoring button styles (subtle, sits beside archive) */
+.absence-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(21, 101, 192, 0.08);
+  background: #fff;
+  color: #0D47A1;
+  font-weight: 700;
+  cursor: pointer;
+  transition: box-shadow 0.12s ease, transform 0.12s ease;
+}
+.absence-btn svg { color: #D32F2F; }
+.absence-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.06);
 }
 
 .controls-wrapper {
@@ -497,4 +555,11 @@ function getDgroupAttendance(leaderMembers) {
   color: #78909C;
   text-align: center;
 }
+
+/* Modal header/body inside Members view */
+.absence-modal-wrapper { display:flex; flex-direction:column; gap:12px; height:100%; }
+.absence-modal-header { padding: 8px 4px; border-bottom: 1px solid #F1F3F5; }
+.absence-modal-header h3 { margin:0; color:#D32F2F; font-size:18px; }
+.absence-subtext { margin:6px 0 0 0; color:#546E7A; font-size:13px; }
+.absence-modal-body { padding-top:12px; overflow:auto; }
 </style>

@@ -9,7 +9,8 @@ import {
   orderBy,
   doc,
   updateDoc,
-  deleteDoc
+  deleteDoc,
+  serverTimestamp
 } from "firebase/firestore";
 import { useAuthStore } from './auth'; // Import Auth Store
 
@@ -59,7 +60,37 @@ export const useEventsStore = defineStore('events', {
         console.error("Error deleting event: ", error);
       }
     },
-    
+
+    // New: mark an event as ended instead of deleting it
+    async endEvent(eventId) {
+      try {
+        const authStore = useAuthStore();
+        if (!authStore.branchId) {
+          const err = new Error('Missing branchId in auth store — cannot update event document.');
+          console.error(err);
+          throw err;
+        }
+        if (!eventId) {
+          const err = new Error('No eventId provided to endEvent.');
+          console.error(err);
+          throw err;
+        }
+
+        const eventRef = doc(this.getEventCollection(), eventId);
+        await updateDoc(eventRef, {
+          ended: true,
+          endedAt: serverTimestamp(),
+          endedBy: authStore.user?.uid || null,
+          endedReason: 'manual'
+        });
+        console.log("Event ended: ", eventId);
+        return true;
+      } catch (error) {
+        console.error("Error ending event (rethrowing): ", error);
+        throw error; // rethrow so caller can handle/display it
+      }
+    },
+
     fetchEvents() {
       this.isLoading = true;
       const eventsQuery = query(
@@ -81,7 +112,8 @@ export const useEventsStore = defineStore('events', {
         const day = today.getDate().toString().padStart(2, '0');
         const todayStr = `${year}-${month}-${day}`;
         
-        const todayEvent = events.find(e => e.date === todayStr);
+        // Only consider non-ended events for currentEvent
+        const todayEvent = events.find(e => e.date === todayStr && !e.ended);
 
         if (todayEvent) {
           this.currentEvent = todayEvent;

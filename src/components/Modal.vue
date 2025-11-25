@@ -46,7 +46,7 @@ const modalSizeClass = computed(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 2000;
+  z-index: 4000; /* raised to ensure modal sits above other overlays */
   padding: 20px;
 }
 
@@ -64,12 +64,14 @@ const modalSizeClass = computed(() => {
   overflow: hidden; 
 }
 
-/* This targets the <slot> and makes its content (MemberDetailsModal) grow */
-.modal-content > :slotted(*) {
+/* Make the direct child of .modal-content fill available space and scroll if needed.
+   :slotted() does not work in this scoped CSS context — use a regular child selector. */
+.modal-content > * {
   display: flex;
   flex-direction: column;
   flex-grow: 1;
-  overflow: hidden; 
+  min-height: 0; /* allow child to shrink and enable internal scrolling */
+  overflow: auto; /* allow the slotted content to scroll */
 }
 
 .modal-content.modal-default {
@@ -78,9 +80,10 @@ const modalSizeClass = computed(() => {
 }
 .modal-content.modal-xl {
   width: 95%;
-  max-width: 900px;
+  max-width: 1100px; /* a bit wider for the absence modal */
 }
 
+/* Make sure close button is always above slotted content */
 .close-btn {
   position: absolute;
   top: 10px;
@@ -91,6 +94,15 @@ const modalSizeClass = computed(() => {
   color: #999;
   cursor: pointer;
   line-height: 1;
-  z-index: 10;
+  z-index: 20;
+}
+
+/* For very tall content, ensure modal is vertically centered but scrollable */
+@media (max-height: 600px) {
+  .modal-overlay {
+    align-items: flex-start;
+    padding-top: 28px;
+    padding-bottom: 28px;
+  }
 }
 </style>

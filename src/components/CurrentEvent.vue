@@ -3,7 +3,7 @@ import { computed } from 'vue'
 import { Calendar } from 'lucide-vue-next'
 import { useEventsStore } from '../stores/events'
 
-const emit = defineEmits(['open-calendar']) 
+const emit = defineEmits(['open-calendar','open-details']) 
 
 const eventsStore = useEventsStore()
 const currentEvent = computed(() => eventsStore.currentEvent)
@@ -46,8 +46,13 @@ const eventTypeDisplay = computed(() => {
   return null
 })
 
-function openCalendar() {
+function openCalendar(event) {
+  event?.stopPropagation?.()
   emit('open-calendar')
+}
+
+function openDetails() {
+  emit('open-details')
 }
 </script>
 
@@ -55,6 +60,7 @@ function openCalendar() {
   <div class="card event-snapshot" 
     :class="{ 'has-photo': hasPhoto, 'blue-bg': !hasPhoto }" 
     :style="backgroundStyle"
+    @click="openDetails"
   >
     <div class="overlay" v-if="hasPhoto"></div>
     
@@ -71,7 +77,7 @@ function openCalendar() {
     
     <!-- calendar button -->
     <div class="button-wrapper">
-      <button class="manage-btn" @click="openCalendar">
+      <button class="manage-btn" @click.stop="openCalendar">
         <Calendar :size="20" />
       </button>
     </div>

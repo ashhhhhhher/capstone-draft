@@ -1,11 +1,9 @@
 <script setup>
-import { computed, ref, onMounted } from 'vue'
+import { computed, ref } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useMembersStore } from '../stores/members'
 import { useEventsStore } from '../stores/events'
 import { useAttendanceStore } from '../stores/attendance'
-import { useNotificationsStore } from '../stores/notifications'
-import { Archive, Mail, Bell, CheckCircle } from 'lucide-vue-next'
 import BarChart from '../components/charts/BarChart.vue'
 import DoughnutChart from '../components/charts/DoughnutChart.vue'
 import Modal from '../components/Modal.vue'
@@ -17,7 +15,6 @@ const membersStore = useMembersStore()
 const { members, activeMembers, leaders, seekers } = storeToRefs(membersStore)
 const { allEvents } = storeToRefs(useEventsStore())
 const { allAttendance } = storeToRefs(useAttendanceStore())
-const notificationsStore = useNotificationsStore()
 
 // --- Modal State ---
 const showDgroupModal = ref(false)
@@ -197,23 +194,54 @@ const getMinistryColor = (name) => {
     }
 }
 
+<<<<<<< Updated upstream
 
+=======
+// --- Date range picker state (new) ---
+const todayStr = new Date().toISOString().split('T')[0]
+const defaultFrom = (() => {
+  const d = new Date()
+  d.setDate(d.getDate() - 30)
+  return d.toISOString().split('T')[0]
+})()
+const fromDate = ref(defaultFrom)
+const toDate = ref(todayStr)
+
+// --- Chart Data Computations ---
+// replace historicalAttendanceData logic so it respects fromDate/toDate
+>>>>>>> Stashed changes
 const historicalAttendanceData = computed(() => {
-  const recentEvents = allEvents.value.filter(e => e.eventType === 'service').slice(0, 10).reverse()
-  const labels = recentEvents.map(event => event.name)
-  const data = recentEvents.map(event => {
-    return allAttendance.value.filter(att => att.eventId === event.id).length
-  })
+  // Validate range
+  if (!fromDate.value || !toDate.value) return { labels: [], datasets: [{ label: 'Total Attendance', backgroundColor: '#1E88E5', data: [] }] }
+
+  // Ensure from <= to
+  if (new Date(fromDate.value) > new Date(toDate.value)) {
+    return { labels: [], datasets: [{ label: 'Total Attendance', backgroundColor: '#1E88E5', data: [] }] }
+  }
+
+  // Filter service events inside the inclusive date range, sort ascending
+  const eventsInRange = allEvents.value
+    .filter(e => e.eventType === 'service' && e.date >= fromDate.value && e.date <= toDate.value)
+    .sort((a, b) => new Date(a.date) - new Date(b.date))
+
+  if (!eventsInRange.length) {
+    return { labels: [], datasets: [{ label: 'Total Attendance', backgroundColor: '#1E88E5', data: [] }] }
+  }
+
+  const labels = eventsInRange.map(ev => `${ev.name} (${ev.date})`)
+  const data = eventsInRange.map(ev => allAttendance.value.filter(att => att.eventId === ev.id).length)
+
   return {
-    labels: labels,
+    labels,
     datasets: [{
       label: 'Total Attendance',
       backgroundColor: '#1E88E5',
-      data: data
+      data
     }]
   }
 })
 
+<<<<<<< Updated upstream
 const monitoringList = computed(() => {
   const today = new Date().toISOString().split('T')[0];
   const pastServices = allEvents.value
@@ -345,6 +373,13 @@ function handleArchiveMember(member) {
   if (confirm(`Archive ${member.firstName}?`)) {
     membersStore.archiveMember(member.id);
   }
+=======
+// --- KPI UI state ---
+const monitoringOpen = ref(true)
+
+function toggleMonitoring() {
+  monitoringOpen.value = !monitoringOpen.value
+>>>>>>> Stashed changes
 }
 </script>
 
@@ -422,6 +457,7 @@ function handleArchiveMember(member) {
       </div>
     </div>
 
+<<<<<<< Updated upstream
     <!-- Absence Monitoring & Engagement -->
     <div class="list-card">
       <div class="monitoring-header">
@@ -500,6 +536,9 @@ function handleArchiveMember(member) {
     </div>
 
     <!-- 3. Charts Grid  -->
+=======
+    <!-- 2. Charts Grid -->
+>>>>>>> Stashed changes
     <div class="charts-grid">
       <div class="chart-card">
         <h3>Member Category Distribution</h3>
@@ -526,6 +565,7 @@ function handleArchiveMember(member) {
       </div>
     </div>
     
+<<<<<<< Updated upstream
     <!-- 4. Volunteer Breakdown Section -->
     <div class="chart-card-full">
         <h3>Volunteer Ministry Breakdown (Total: {{ volunteerBreakdown.total }})</h3>
@@ -556,21 +596,67 @@ function handleArchiveMember(member) {
         <h3>Historical Events Attendance</h3>
         <ExportButton exportType="events" />
       </div>
+=======
+    <!-- 3. Volunteer Breakdown Section -->
+    <div class="chart-card-full">
+      <h3>Volunteer Ministry Breakdown (Total: {{ volunteerBreakdown.total }})</h3>
+      <div v-if="volunteerBreakdown.total > 0" class="volunteer-progress-list">
+        <div v-for="item in volunteerBreakdown.data" :key="item.name" class="ministry-item">
+          <div class="ministry-label">
+            <strong>{{ item.name }}</strong>
+            <span>{{ item.count }} Members ({{ item.percent }}%)</span>
+          </div>
+          <div class="progress-bar-wrapper">
+            <div 
+              class="ministry-progress-bar" 
+              :style="{ width: item.percent + '%', backgroundColor: getMinistryColor(item.name) }"
+            ></div>
+          </div>
+        </div>
+      </div>
+      <p v-else class="no-data-text">No volunteers currently tagged to a specific ministry.</p>
+    </div>
+
+    <!-- 4. Historical Attendance Chart -->
+    <div class="chart-card-full">
+      <div class="section-title-with-button">
+        <h3>Historical Events Attendance</h3>
+
+        <!-- Date range picker + Export button -->
+        <div class="controls-inline">
+          <label class="date-label">From
+            <input type="date" v-model="fromDate" />
+          </label>
+          <label class="date-label">To
+            <input type="date" v-model="toDate" :max="(new Date()).toISOString().split('T')[0]" />
+          </label>
+          <ExportButton exportType="events" />
+        </div>
+      </div>
+
+>>>>>>> Stashed changes
       <div class="chart-wrapper" style="height: 350px;">
         <BarChart 
           v-if="historicalAttendanceData.labels.length > 0"
           :chartData="historicalAttendanceData" 
           :chartOptions="historicalChartOptions" 
         />
+<<<<<<< Updated upstream
         <p v-else class="no-data-text">No event data yet. Create an event and record attendance to see a trend.</p>
       </div>
     </div>
 
+=======
+        <p v-else class="no-data-text">No event data in the selected date range. Adjust the range to view attendance.</p>
+      </div>
+    </div>
+
+    <!-- 6. Dgroup Matching Modal -->
+    <Modal v-if="showDgroupModal" @close="showDgroupModal = false" size="xl">
+      <DgroupMatchingModal @close="showDgroupModal = false" />
+    </Modal>
+>>>>>>> Stashed changes
   </div>
-  
-  <Modal v-if="showDgroupModal" @close="showDgroupModal = false" size="xl">
-    <DgroupMatchingModal @close="showDgroupModal = false" />
-  </Modal>
 </template>
 
 <style scoped>
@@ -818,6 +904,7 @@ function handleArchiveMember(member) {
   transition: width 0.5s ease;
 }
 
+<<<<<<< Updated upstream
 /* --- List Card & Monitoring Table --- */
 .list-card {
   background: #fff;
@@ -844,8 +931,15 @@ function handleArchiveMember(member) {
 
 .legend-badges {
   display: flex;
+=======
+/* simple inline controls for the date range */
+.section-title-with-button .controls-inline {
+  display: inline-flex;
+>>>>>>> Stashed changes
   gap: 8px;
+  align-items: center;
 }
+<<<<<<< Updated upstream
 
 .badge {
   font-size: 11px;
@@ -875,10 +969,15 @@ function handleArchiveMember(member) {
 
 .list-subtitle {
   font-size: 14px;
+=======
+.date-label {
+  display: inline-flex;
+  flex-direction: column;
+  font-size: 12px;
+>>>>>>> Stashed changes
   color: #546E7A;
-  margin-top: 0;
-  margin-bottom: 20px;
 }
+<<<<<<< Updated upstream
 
 .monitoring-table-wrapper {
   overflow-x: auto;
@@ -1048,10 +1147,17 @@ function handleArchiveMember(member) {
   text-align: center;
   padding: 40px;
   background: #FAFAFA;
+=======
+.date-label input[type="date"] {
+  margin-top: 4px;
+  padding: 6px 8px;
+>>>>>>> Stashed changes
   border-radius: 8px;
-  border: 1px dashed #E0E0E0;
+  border: 1px solid #E0E0E0;
+  background: white;
 }
 
+<<<<<<< Updated upstream
 .empty-icon {
   font-size: 32px;
   margin-bottom: 10px;
@@ -1061,5 +1167,15 @@ function handleArchiveMember(member) {
   text-align: center;
   padding: 40px;
   color: #78909C;
+=======
+/* responsive adjustments */
+@media (max-width: 600px) {
+  .section-title-with-button .controls-inline {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+  }
+>>>>>>> Stashed changes
 }
 </style>
