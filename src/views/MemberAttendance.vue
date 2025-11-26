@@ -20,18 +20,26 @@ onMounted(async () => {
 
 const myAttendanceRecords = computed(() => {
   if (!myId.value) return []
-  return attendanceStore.allAttendance.filter(rec => rec.memberId === myId.value)
+  // Only include attendance records that reference an existing event
+  return attendanceStore.allAttendance.filter(rec => {
+    if (rec.memberId !== myId.value) return false
+    const ev = eventsStore.allEvents.find(e => e.id === rec.eventId)
+    return !!ev
+  })
 })
 
 const enrichedRecords = computed(() => {
   return myAttendanceRecords.value.map(record => {
     const event = eventsStore.allEvents.find(e => e.id === record.eventId)
+    const dateVal = event && event.date ? event.date : null
     return {
       ...record,
       eventName: event ? event.name : 'Unknown Event',
-      date: event ? event.date : 'Unknown Date',
+      date: dateVal,
     }
-  }).sort((a, b) => new Date(b.date) - new Date(a.date))
+  })
+  .filter(r => r.date) // remove any remaining records without a valid date
+  .sort((a, b) => new Date(b.date) - new Date(a.date))
 })
 
 const totalCount = computed(() => enrichedRecords.value.length)
@@ -41,7 +49,9 @@ const monthlyStats = computed(() => {
   const stats = {}
   enrichedRecords.value.forEach(rec => {
     if(!rec.date) return
-    const month = new Date(rec.date).toLocaleString('default', { month: 'short' })
+    const d = new Date(rec.date)
+    if (isNaN(d)) return
+    const month = d.toLocaleString('default', { month: 'short' })
     stats[month] = (stats[month] || 0) + 1
   })
   return Object.entries(stats).slice(0, 4) 

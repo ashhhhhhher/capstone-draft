@@ -59,14 +59,7 @@ function attendeesForEvent(event) {
   return records.map(r => ({ record: r, member: allMembers.find(m => m.id === r.memberId) || null }))
 }
 
-function countFirstTimers(attendees) {
-  if (!Array.isArray(attendees)) return 0
-  return attendees.filter(a => a.member && a.member.finalTags?.isFirstTimer).length
-}
-function countReturning(attendees) {
-  if (!Array.isArray(attendees)) return 0
-  return attendees.filter(a => a.member && !a.member.finalTags?.isFirstTimer).length
-}
+// First-timer / returning counters removed per request
 
 function attendanceRate(attendees) {
   const denom = Array.isArray(membersStore.activeMembers) ? membersStore.activeMembers.length : (membersStore.members ? membersStore.members.length : 1)
@@ -89,17 +82,12 @@ function aggregateEvents(eventsArr) {
   const n = (eventsArr || []).length
   if (!n) return {
     totalAttendance: 0, avgAttendance: 0, avgParticipation: 0,
-    avgFirstTimers: 0, avgReturning: 0,
-    avgVolunteers: 0,
     demographics: { males: 0, females: 0, ageElevate: 0, ageB1G: 0 },
     ids: []
   }
 
   let totalAttendance = 0
   let totalParticipation = 0
-  let totalFirstTimers = 0
-  let totalReturning = 0
-  let totalVolunteers = 0
   const demographicsSum = { males: 0, females: 0, ageElevate: 0, ageB1G: 0 }
 
   eventsArr.forEach(ev => {
@@ -107,11 +95,7 @@ function aggregateEvents(eventsArr) {
     const tn = attendees.length
     totalAttendance += tn
     totalParticipation += attendanceRate(attendees)
-    const ft = countFirstTimers(attendees)
-    const ret = countReturning(attendees)
-    totalFirstTimers += ft
-    totalReturning += ret
-    totalVolunteers += attendees.filter(a => a.member && a.member.finalTags?.isVolunteer).length
+    // keep attendance and participation aggregates; dropped first-timer/returning/volunteer aggregates
 
     const d = demographicsForEvent(ev)
     demographicsSum.males += d.males
@@ -124,9 +108,7 @@ function aggregateEvents(eventsArr) {
     totalAttendance,
     avgAttendance: Math.round(totalAttendance / n),
     avgParticipation: Math.round(totalParticipation / n),
-    avgFirstTimers: Math.round(totalFirstTimers / n),
-    avgReturning: Math.round(totalReturning / n),
-    avgVolunteers: Math.round(totalVolunteers / n),
+    // removed avgFirstTimers/avgReturning/avgVolunteers - per request
     demographics: {
       males: Math.round(demographicsSum.males / n),
       females: Math.round(demographicsSum.females / n),
@@ -595,29 +577,10 @@ const demographicsInterpretation = computed(() => {
 // computed percent-change deltas for averages (Group A relative to Group B)
 const baseAvgAttendanceDelta = computed(() => pctChange(baseSummary.value.avgAttendance || 0, compareSummary.value.avgAttendance || 0))
 const baseAvgParticipationDelta = computed(() => pctChange(baseSummary.value.avgParticipation || 0, compareSummary.value.avgParticipation || 0))
-const baseAvgFirstTimersDelta = computed(() => pctChange(baseSummary.value.avgFirstTimers || 0, compareSummary.value.avgFirstTimers || 0))
-const baseAvgReturningDelta = computed(() => pctChange(baseSummary.value.avgReturning || 0, compareSummary.value.avgReturning || 0))
-const baseAvgVolunteersDelta = computed(() => pctChange(baseSummary.value.avgVolunteers || 0, compareSummary.value.avgVolunteers || 0))
+// Note: first-timers/returning/volunteer average deltas and interpretations removed per request
 
 // absolute differences for averages (A - B)
 const baseAvgAttendanceAbs = computed(() => (baseSummary.value.avgAttendance || 0) - (compareSummary.value.avgAttendance || 0))
-const baseAvgFirstTimersAbs = computed(() => (baseSummary.value.avgFirstTimers || 0) - (compareSummary.value.avgFirstTimers || 0))
-const baseAvgReturningAbs = computed(() => (baseSummary.value.avgReturning || 0) - (compareSummary.value.avgReturning || 0))
-const baseAvgVolunteersAbs = computed(() => (baseSummary.value.avgVolunteers || 0) - (compareSummary.value.avgVolunteers || 0))
-
-const firstTimerInterpretation = computed(() => {
-  const a = baseSummary.value.avgFirstTimers || 0
-  const c = compareSummary.value.avgFirstTimers || 0
-  const rel = pctDiff(a, c)
-  return `${eventALabelInterp.value} average first-timers: ${a}; ${eventBLabelInterp.value} average first-timers: ${c}. ${eventALabelInterp.value} is ${rel} compared with ${eventBLabelInterp.value}.`
-})
-
-const returningInterpretation = computed(() => {
-  const a = baseSummary.value.avgReturning || 0
-  const c = compareSummary.value.avgReturning || 0
-  const rel = pctDiff(a, c)
-  return `${eventALabelInterp.value} average returning attendees: ${a}; ${eventBLabelInterp.value} average returning attendees: ${c}. ${eventALabelInterp.value} is ${rel} compared with ${eventBLabelInterp.value}.`
-})
 
 // structured export payload for the ExportButton to use (includes chart raw numbers)
 const exportPageData = computed(() => {
@@ -691,35 +654,7 @@ const exportPageData = computed(() => {
     interpretation: demographicsInterpretation.value
   })
 
-  // Absence monitoring
-  cards.push({
-    title: 'Absence monitoring',
-    desc: 'Shows how many active members did not attend the selected groups (unique absentees) and percent of total members.',
-    tableHeaders: ['Metric', eventALabelShort.value + ' (raw)', eventALabelShort.value + ' (%)', (defaultActive.value ? 'Previous 3 events' : eventBLabelShort.value) + ' (raw)', (defaultActive.value ? 'Previous 3 events' : eventBLabelShort.value) + ' (%)'],
-    tableRows: [
-      ['Present (unique)', String(basePresent.value.count), String(basePresent.value.pct), String(comparePresent.value.count), String(comparePresent.value.pct)],
-      ['Absent (unique)', String(baseAbsent.value.count), String(baseAbsent.value.pct), String(compareAbsent.value.count), String(compareAbsent.value.pct)]
-    ],
-    interpretation: absenceInterpretation.value
-  })
-
-  // Per-event table
-  if (showAverages.value) {
-    cards.push({ title: 'Per-event table (averages)', desc: '', tableHeaders: ['Group', 'Total', 'Rate'], tableRows: [[eventAStatLabel.value, String(baseSummary.value.avgAttendance), String(baseSummary.value.avgParticipation + '%')], [(defaultActive.value ? 'Previous 3 events' : eventBStatLabel.value), String(compareSummary.value.avgAttendance), String(compareSummary.value.avgParticipation + '%')]], interpretation: attendanceInterpretation.value })
-  } else {
-    const rows = comparisonList.value.map(ev => [ `${ev.name} (${ev.date})`, String(attendeesForEvent(ev).length), String(attendanceRate(attendeesForEvent(ev)) + '%') ])
-    cards.push({ title: 'Per-event table (detailed)', desc: '', tableHeaders: ['Event', 'Total', 'Rate'], tableRows: rows, interpretation: attendanceInterpretation.value })
-  }
-
-  // First timers / Returning
-  if (showAverages.value) {
-    cards.push({ title: 'First timers and Returning (averages)', desc: '', tableHeaders: ['Group', 'First timers', 'Returning', 'Volunteers'], tableRows: [[eventALabelShort.value, String(baseSummary.value.avgFirstTimers), String(baseSummary.value.avgReturning), String(baseSummary.value.avgVolunteers)], [(defaultActive.value ? 'Previous 3 events' : eventBLabelShort.value), String(compareSummary.value.avgFirstTimers), String(compareSummary.value.avgReturning), String(compareSummary.value.avgVolunteers)]], interpretation: firstTimerInterpretation.value + ' ' + returningInterpretation.value })
-  } else {
-    const rows = []
-    baseEventsSelected.value.forEach(ev => rows.push([`${ev.name} (${ev.date})`, String(countFirstTimers(attendeesForEvent(ev))), String(countReturning(attendeesForEvent(ev))), String(attendeesForEvent(ev).filter(a=>a.member && a.member.finalTags?.isVolunteer).length)]))
-    compareEventsSelected.value.forEach(ev => rows.push([`${ev.name} (${ev.date})`, String(countFirstTimers(attendeesForEvent(ev))), String(countReturning(attendeesForEvent(ev))), String(attendeesForEvent(ev).filter(a=>a.member && a.member.finalTags?.isVolunteer).length)]))
-    cards.push({ title: 'First timers and Returning (detailed)', desc: '', tableHeaders: ['Event', 'First timers', 'Returning', 'Volunteers'], tableRows: rows })
-  }
+  // Per-event, first-timer/returning and absence monitoring cards removed per request
 
   return { cards }
 })
@@ -744,18 +679,7 @@ const memberDistributionInterpretation = computed(() => {
   return `${eventALabelInterp.value} has ${regulars.aCount} Regulars (${regulars.aPct}%), while ${eventBLabelInterp.value} has ${regulars.bCount} (${regulars.bPct}%). Use this to compare core attendee composition.`
 })
 
-const absenceInterpretation = computed(() => {
-  const total = totalMembersCount.value || 0
-  if (!total) return 'No member totals available to compute absences.'
-  const aP = basePresent.value
-  const bP = comparePresent.value
-  const aAbs = baseAbsent.value
-  const bAbs = compareAbsent.value
-  const rel = baseAbsentAbs.value
-  const relPct = baseAbsentPctDelta.value
-  const relText = rel === 0 ? 'About the same number of absentees between the groups.' : `${Math.abs(rel)} ${Math.abs(rel) === 1 ? 'person' : 'people'} ${rel > 0 ? 'more' : 'fewer'} absentees in ${eventALabelInterp.value} compared with ${eventBLabelInterp.value}.`
-  return `${eventALabelInterp.value}: ${aP.count} present (${aP.pct}%). ${eventBLabelInterp.value}: ${bP.count} present (${bP.pct}%). ${relText}${relPct !== null ? ` (${relPct > 0 ? '+' : ''}${relPct}%)` : ''}`
-})
+// absenceInterpretation removed per request
 
 
 // (removed sticky label; view toggle buttons are rendered under the selection summary)
@@ -810,56 +734,7 @@ const compareSummaryText = computed(() => {
   return `Group(s) B: ${formatSelectionList(evs)}`
 })
 
-// total members (active if available)
-const totalMembersCount = computed(() => Array.isArray(membersStore.activeMembers) ? membersStore.activeMembers.length : (membersStore.members ? membersStore.members.length : 0))
-
-// unique attendee count for a set of events
-function uniqueAttendeeCountForEvents(eventsArr) {
-  const seen = new Set()
-  ;(eventsArr || []).forEach(ev => {
-    attendeesForEvent(ev).forEach(a => {
-      if (a && a.member && a.member.id) seen.add(a.member.id)
-    })
-  })
-  return seen.size
-}
-
-// Present / Absent calculations for base and compare
-const basePresent = computed(() => {
-  const count = uniqueAttendeeCountForEvents(baseEventsSelected.value)
-  const total = totalMembersCount.value || 0
-  const pct = total ? Math.round((count / total) * 100) : 0
-  return { count, pct, total }
-})
-
-const comparePresent = computed(() => {
-  const count = uniqueAttendeeCountForEvents(compareEventsSelected.value)
-  const total = totalMembersCount.value || 0
-  const pct = total ? Math.round((count / total) * 100) : 0
-  return { count, pct, total }
-})
-
-const baseAbsent = computed(() => {
-  const total = totalMembersCount.value || 0
-  const present = basePresent.value.count || 0
-  const absent = Math.max(0, total - present)
-  const pct = total ? Math.round((absent / total) * 100) : 0
-  return { count: absent, pct }
-})
-
-const compareAbsent = computed(() => {
-  const total = totalMembersCount.value || 0
-  const present = comparePresent.value.count || 0
-  const absent = Math.max(0, total - present)
-  const pct = total ? Math.round((absent / total) * 100) : 0
-  return { count: absent, pct }
-})
-
-// deltas for presence/absence (base relative to compare)
-const basePresentAbs = computed(() => (basePresent.value.count || 0) - (comparePresent.value.count || 0))
-const basePresentPctDelta = computed(() => pctChange(basePresent.value.pct || 0, comparePresent.value.pct || 0))
-const baseAbsentAbs = computed(() => (baseAbsent.value.count || 0) - (compareAbsent.value.count || 0))
-const baseAbsentPctDelta = computed(() => pctChange(baseAbsent.value.pct || 0, compareAbsent.value.pct || 0))
+// Absence/presence related helpers removed per request
 
 </script>
 
@@ -1074,178 +949,16 @@ const baseAbsentPctDelta = computed(() => pctChange(baseAbsent.value.pct || 0, c
             <div class="interpretation" aria-live="polite">{{ demographicsInterpretation }}</div>
           </div>
 
-          <!-- Absence monitoring card (moved to left column) -->
-          <div class="card">
-            <h3>Absence monitoring</h3>
-            <p class="card-desc">Shows how many active members did not attend the selected groups (unique absentees) and percent of total members.</p>
-            <div class="table-wrapper small">
-              <table class="stats-table">
-                <thead>
-                  <tr>
-                    <th>Metric</th>
-                    <th>{{ eventALabelShort }} (raw)</th>
-                    <th>{{ eventALabelShort }} (%)</th>
-                    <th>{{ eventBDisplayShort }} (raw)</th>
-                    <th>{{ eventBDisplayShort }} (%)</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr>
-                    <td class="evt">Present (unique)</td>
-                    <td>
-                      {{ basePresent.count }}
-                      <template v-if="basePresentAbs !== 0">
-                        <span :class="['delta', basePresentAbs > 0 ? 'up' : 'down']" :aria-label="`Present absolute change: ${basePresentAbs > 0 ? '+'+basePresentAbs : basePresentAbs} attendees`">{{ basePresentAbs > 0 ? '+'+basePresentAbs : basePresentAbs }}</span>
-                      </template>
-                    </td>
-                    <td>
-                      {{ basePresent.pct }}%
-                      <template v-if="basePresentPctDelta !== null">
-                        <span :class="['delta', basePresentPctDelta > 0 ? 'up' : (basePresentPctDelta < 0 ? 'down' : 'neutral')]" :aria-label="`Present percent change: ${basePresentPctDelta > 0 ? '+'+basePresentPctDelta+'%' : basePresentPctDelta+'%'}`">{{ basePresentPctDelta > 0 ? '+'+basePresentPctDelta+'%' : basePresentPctDelta+'%' }}</span>
-                      </template>
-                    </td>
-                    <td>{{ comparePresent.count }}</td>
-                    <td>{{ comparePresent.pct }}%</td>
-                  </tr>
-                  <tr>
-                    <td class="evt">Absent (unique)</td>
-                    <td>
-                      {{ baseAbsent.count }}
-                      <template v-if="baseAbsentAbs !== 0">
-                        <span :class="['delta', baseAbsentAbs > 0 ? 'up' : 'down']" :aria-label="`Absent absolute change: ${baseAbsentAbs > 0 ? '+'+baseAbsentAbs : baseAbsentAbs} attendees`">{{ baseAbsentAbs > 0 ? '+'+baseAbsentAbs : baseAbsentAbs }}</span>
-                      </template>
-                    </td>
-                    <td>
-                      {{ baseAbsent.pct }}%
-                      <template v-if="baseAbsentPctDelta !== null">
-                        <span :class="['delta', baseAbsentPctDelta > 0 ? 'up' : (baseAbsentPctDelta < 0 ? 'down' : 'neutral')]" :aria-label="`Absent percent change: ${baseAbsentPctDelta > 0 ? '+'+baseAbsentPctDelta+'%' : baseAbsentPctDelta+'%'}`">{{ baseAbsentPctDelta > 0 ? '+'+baseAbsentPctDelta+'%' : baseAbsentPctDelta+'%' }}</span>
-                      </template>
-                    </td>
-                    <td>{{ compareAbsent.count }}</td>
-                    <td>{{ compareAbsent.pct }}%</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-            <div class="interpretation" aria-live="polite">{{ absenceInterpretation }}</div>
-          </div>
+          <!-- Absence monitoring card removed -->
 
       </div>
 
       <!-- Right column: comparison tables + demographic donut -->
       <div class="right">
-        <div class="card">
-          <h3>Per-event table</h3>
-          <p class="card-desc">Tabular summary of attendance, participation rate, first-timers and returning attendees. Shows averages when many events are selected.</p>
-          
-          <div class="table-wrapper">
-            <table class="stats-table">
-              <thead>
-                <tr>
-                  <th>Group</th>
-                  <th>Total</th>
-                  <th>Rate</th>
-                </tr>
-              </thead>
-              <tbody>
-                <template v-if="showAverages">
-                  <tr>
-                    <td class="evt">{{ eventAStatLabel }}</td>
-                    <td>
-                      {{ baseSummary.avgAttendance }}
-                      <template v-if="baseAvgAttendanceAbs !== 0">
-                        <span :class="['delta', baseAvgAttendanceAbs > 0 ? 'up' : (baseAvgAttendanceAbs < 0 ? 'down' : 'neutral')]" :aria-label="`Average attendance absolute change: ${baseAvgAttendanceAbs > 0 ? '+'+baseAvgAttendanceAbs : baseAvgAttendanceAbs} attendees`">{{ baseAvgAttendanceAbs > 0 ? '+'+baseAvgAttendanceAbs : baseAvgAttendanceAbs }}</span>
-                      </template>
-                    </td>
-                    <td>
-                      {{ baseSummary.avgParticipation }}%
-                      <template v-if="baseAvgParticipationDelta !== null">
-                        <span :class="['delta', baseAvgParticipationDelta > 0 ? 'up' : (baseAvgParticipationDelta < 0 ? 'down' : 'neutral')]" :aria-label="`Participation change: ${baseAvgParticipationDelta > 0 ? '+'+baseAvgParticipationDelta+'%' : baseAvgParticipationDelta+'%'}`">{{ baseAvgParticipationDelta > 0 ? '+' + baseAvgParticipationDelta + '%' : baseAvgParticipationDelta + '%' }}</span>
-                      </template>
-                    </td>
-                  </tr>
-                  <tr>
-                    <td class="evt">{{ defaultActive ? 'Previous 3 events' : eventBStatLabel }}</td>
-                    <td>{{ compareSummary.avgAttendance }}</td>
-                    <td>{{ compareSummary.avgParticipation }}%</td>
-                  </tr>
-                </template>
-                <template v-else>
-                  <tr v-for="ev in comparisonList" :key="ev.id">
-                    <td class="evt">{{ ev.name }} <span class="date">({{ ev.date }})</span></td>
-                    <td>{{ attendeesForEvent(ev).length }}</td>
-                    <td>{{ attendanceRate(attendeesForEvent(ev)) }}%</td>
-                  </tr>
-                </template>
-              </tbody>
-            </table>
-          </div>
-          <div class="interpretation" aria-live="polite">{{ attendanceInterpretation }}</div>
-        </div>
+        <!-- Per-event table removed -->
 
         <!-- First timers / Returning Members: show averages or detailed per-event breakdown -->
-        <div class="card">
-          <h3>First timers and Returning Members</h3>
-          <p class="card-desc">Detailed and average counts of first-time attendees, returning attendees, and volunteers.</p>
-          <div class="table-wrapper small">
-            <table class="stats-table">
-              <thead>
-                <tr>
-                  <th>Group / Event</th>
-                  <th>First timers</th>
-                  <th>Returning</th>
-                  <th>Volunteers</th>
-                </tr>
-              </thead>
-              <tbody>
-                <template v-if="showAverages">
-                  <tr>
-                      <td>{{ eventALabelShort }}</td>
-                      <td>
-                        {{ baseSummary.avgFirstTimers }}
-                          <template v-if="baseAvgFirstTimersAbs !== 0">
-                            <span :class="['delta', baseAvgFirstTimersAbs > 0 ? 'up' : 'down']" :aria-label="`First-timers absolute change: ${baseAvgFirstTimersAbs > 0 ? '+'+baseAvgFirstTimersAbs : baseAvgFirstTimersAbs} attendees`">{{ baseAvgFirstTimersAbs > 0 ? '+' + baseAvgFirstTimersAbs : baseAvgFirstTimersAbs }}</span>
-                          </template>
-                      </td>
-                      <td>
-                        {{ baseSummary.avgReturning }}
-                          <template v-if="baseAvgReturningAbs !== 0">
-                            <span :class="['delta', baseAvgReturningAbs > 0 ? 'up' : 'down']" :aria-label="`Returning absolute change: ${baseAvgReturningAbs > 0 ? '+'+baseAvgReturningAbs : baseAvgReturningAbs} attendees`">{{ baseAvgReturningAbs > 0 ? '+' + baseAvgReturningAbs : baseAvgReturningAbs }}</span>
-                          </template>
-                      </td>
-                      <td>
-                        {{ baseSummary.avgVolunteers }}
-                          <template v-if="baseAvgVolunteersAbs !== 0">
-                            <span :class="['delta', baseAvgVolunteersAbs > 0 ? 'up' : 'down']" :aria-label="`Volunteers absolute change: ${baseAvgVolunteersAbs > 0 ? '+'+baseAvgVolunteersAbs : baseAvgVolunteersAbs} attendees`">{{ baseAvgVolunteersAbs > 0 ? '+' + baseAvgVolunteersAbs : baseAvgVolunteersAbs }}</span>
-                          </template>
-                      </td>
-                    </tr>
-                    <tr>
-                      <td>{{ defaultActive ? 'Previous 3 events' : eventBStatLabel }}</td>
-                      <td>{{ compareSummary.avgFirstTimers }}</td>
-                      <td>{{ compareSummary.avgReturning }}</td>
-                      <td>{{ compareSummary.avgVolunteers }}</td>
-                    </tr>
-                </template>
-                <template v-else>
-                  <tr v-for="ev in baseEventsSelected" :key="'ft-base-'+ev.id">
-                    <td class="evt">{{ ev.name }} <span class="date">({{ ev.date }})</span></td>
-                    <td>{{ countFirstTimers(attendeesForEvent(ev)) }}</td>
-                    <td>{{ countReturning(attendeesForEvent(ev)) }}</td>
-                    <td>{{ attendeesForEvent(ev).filter(a => a.member && a.member.finalTags?.isVolunteer).length }}</td>
-                  </tr>
-                  <tr v-for="ev in compareEventsSelected" :key="'ft-compare-'+ev.id">
-                    <td class="evt">{{ ev.name }} <span class="date">({{ ev.date }})</span></td>
-                    <td>{{ countFirstTimers(attendeesForEvent(ev)) }}</td>
-                    <td>{{ countReturning(attendeesForEvent(ev)) }}</td>
-                    <td>{{ attendeesForEvent(ev).filter(a => a.member && a.member.finalTags?.isVolunteer).length }}</td>
-                  </tr>
-                </template>
-              </tbody>
-            </table>
-          </div>
-          <div class="interpretation" aria-live="polite">{{ firstTimerInterpretation }} {{ returningInterpretation }}</div>
-        </div>
+        <!-- First timers / Returning Members card removed -->
 
       </div> <!-- end right -->
     </section>
