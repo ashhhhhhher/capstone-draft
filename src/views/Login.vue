@@ -18,7 +18,7 @@ async function handleLogin() {
     if (authStore.userRole === 'admin') {
       router.push('/')
     } else {
-      router.push('/member-dashboard') 
+      router.push('/member/home') 
     }
 
   } catch (error) {

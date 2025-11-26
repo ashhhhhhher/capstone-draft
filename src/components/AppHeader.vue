@@ -274,15 +274,25 @@ function openNotificationFocus(focusKey) {
 }
 
 .notification-btn {
-  width: 48px;
-  height: 48px;
+  width: 40px;
+  height: 40px;
   border-radius: 50%;
-  background: #1976D2;
+  background: #FFFFFF; /* white inside */
   display: flex;
   justify-content: center;
   align-items: center;
-  color: white;
-  border: none;
+  color: #1976D2; /* blue icon */
+  border: 2px solid #1976D2; /* blue outline */
+  box-shadow: none;
+}
+
+.notification-btn:hover {
+  background: #E3F2FD; /* subtle blue tint on hover */
+}
+
+.notification-btn:focus {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(25,118,210,0.12);
 }
 
 .notif-dot {
@@ -294,6 +304,17 @@ function openNotificationFocus(focusKey) {
   background: #D32F2F;
   border: 2px solid white;
   border-radius: 50%;
+}
+
+/* Force the inline SVG bell to use the blue color (avoid inheriting black) */
+.notification-btn svg {
+  color: #1976D2;
+}
+.notification-btn svg path,
+.notification-btn svg circle,
+.notification-btn svg rect {
+  stroke: #1976D2 !important;
+  fill: none !important;
 }
 
 /* notification slide panel */
@@ -370,5 +391,34 @@ function openNotificationFocus(focusKey) {
   border-top: 1px solid #eee;
   display: flex;
   justify-content: flex-end;
+}
+
+/* Clear button in panel footer - white with blue outline */
+.clear-btn {
+  background: #FFFFFF;
+  border: 2px solid #1976D2;
+  color: #1976D2;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.clear-btn:hover {
+  background: #E3F2FD;
+}
+
+/* Close (X) button in panel header */
+.notification-panel .close-btn {
+  background: #FFFFFF;
+  border: 2px solid #1976D2;
+  color: #1976D2;
+  padding: 4px 8px;
+  border-radius: 8px;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+.notification-panel .close-btn:hover {
+  background: #E3F2FD;
 }
 </style>

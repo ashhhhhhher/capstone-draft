@@ -1,7 +1,6 @@
 <script setup>
 import BarChart from './charts/BarChart.vue'
 import DoughnutChart from './charts/DoughnutChart.vue'
-import ExportButton from './ExportButton.vue'
 import { ref, computed, onMounted } from 'vue'
 import { useEventsStore } from '../stores/events'
 
@@ -868,7 +867,6 @@ const baseAbsentPctDelta = computed(() => pctChange(baseAbsent.value.pct || 0, c
   <div class="event-comparison-improved">
     <div class="quick-actions">
         <button :class="['btn ghost', defaultActive ? 'active' : '']" @click="selectRecentForQuickStart()">Default: Compare most recent event to the previous 3 events.</button>
-        <ExportButton exportType="page" :pageExportData="exportPageData" />
       </div>
     
     <div class="selectors compact-selectors">

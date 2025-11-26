@@ -83,6 +83,195 @@ function exportToExcel() {
     return row;
   };
 
+  // Create an Event Comparison sheet using the same styling approach as `createSheet`
+  const createComparisonSheet = (payload) => {
+    try {
+      const cards = (payload && payload.cards) ? payload.cards : [];
+      const compCurrent = payload?.current || {};
+      const compPrevious = payload?.previous || [];
+
+      const compRows = [];
+      compRows.push(["CHRIST COMMISSION FOUNDATION INC."]);
+      compRows.push(['']);
+      compRows.push(['Event Comparison (Current vs Previous 3)']);
+      compRows.push(['']);
+
+      // Event Details block
+      const totalAttended = source.length;
+      const totalRegistered = (members && members.value) ? members.value.length : 0;
+      const attRate = totalRegistered > 0 ? Math.round((totalAttended / totalRegistered) * 100) : 0;
+      compRows.push(['Event Details']);
+      compRows.push(['Name of Event', eventName.value || 'N/A']);
+      compRows.push(['Date', eventDate.value || 'N/A']);
+      compRows.push(['Speaker', eventSpeaker.value || 'N/A']);
+      compRows.push(['Venue', eventLocation.value || 'N/A']);
+      compRows.push(['Series', eventSeries.value || 'N/A']);
+      compRows.push(['Total Attendees', String(totalAttended)]);
+      compRows.push(['Attendance Rate', `${attRate}%`]);
+      compRows.push(['']);
+
+      // Summary (dynamic values)
+      const prevTotals = (compPrevious || []).map(p => ({ name: p.name || 'Unknown', total: p.total || 0 }));
+      const prevSum = prevTotals.reduce((s, p) => s + (p.total || 0), 0);
+      const prevAvg = prevTotals.length ? Math.round(prevSum / prevTotals.length) : 0;
+      const prevListText = prevTotals.length ? prevTotals.map(p => `${p.name} (${p.total})`).join(', ') : 'none';
+      const prevCombined = { elevate: (compPrevious || []).reduce((s,p) => s + (p.elevate||0), 0), b1g: (compPrevious || []).reduce((s,p) => s + (p.b1g||0), 0), firstTimers: (compPrevious || []).reduce((s,p) => s + (p.firstTimers||0), 0) };
+      compRows.push(['Summary']);
+      compRows.push([`Event: ${compCurrent.name || 'N/A'}`]);
+      compRows.push([`Current attendees: ${compCurrent.total || 0}`]);
+      compRows.push([`Previous events: ${prevListText}`]);
+      compRows.push([`Previous average: ${prevAvg}`]);
+      compRows.push([`Elevate — Current: ${compCurrent.elevate || 0}; Previous combined: ${prevCombined.elevate}`]);
+      compRows.push([`B1G — Current: ${compCurrent.b1g || 0}; Previous combined: ${prevCombined.b1g}`]);
+      compRows.push([`First Timers — Current: ${compCurrent.firstTimers || 0}; Previous combined: ${prevCombined.firstTimers}`]);
+      compRows.push([`Attendance rate: ${attRate}%`]);
+      compRows.push(['']);
+
+      // Event Comparison Overview table
+      compRows.push(['Type','Event Name','Date','Total','Elevate','B1G','First Timers','Volunteers']);
+      if (compCurrent && compCurrent.name) {
+        compRows.push(['Current', compCurrent.name, compCurrent.date || '', String(compCurrent.total || 0), String(compCurrent.elevate || 0), String(compCurrent.b1g || 0), String(compCurrent.firstTimers || 0), String(compCurrent.volunteers || 0)]);
+      }
+      (compPrevious || []).forEach(p => {
+        compRows.push(['Previous', p.name || '', p.date || '', String(p.total || 0), String(p.elevate || 0), String(p.b1g || 0), String(p.firstTimers || 0), String(p.volunteers || 0)]);
+      });
+      compRows.push(['']);
+
+      // Absence Monitoring (current vs previous avg)
+      const prevCount = compPrevious.length || 0;
+      const prevTotalSum = compPrevious.reduce((s,p) => s + (p.total || 0), 0);
+      const prevAvgTotal = prevCount ? Math.round(prevTotalSum / prevCount) : 0;
+      const currentPresent = compCurrent.total || 0;
+      const activeCount = (activeMembers && activeMembers.value) ? activeMembers.value.length : (members && members.value ? members.value.length : 0);
+      const currentAbsent = Math.max(0, activeCount - currentPresent);
+      compRows.push(['Absence Monitoring']);
+      compRows.push(['Metric','Current','Previous (avg)']);
+      compRows.push(['Present (avg)', String(currentPresent), String(prevAvgTotal)]);
+      compRows.push(['Absent (avg)', String(currentAbsent), String(Math.max(0, activeCount - prevAvgTotal))]);
+      compRows.push(['']);
+
+      // Demographics averaged (current vs previous avg)
+      const demographicsForEventId = (eventId) => {
+        const recs = (allAttendance.value || []).filter(a => a.eventId === eventId);
+        const memberList = (members.value || []).filter(m => recs.some(r => r.memberId === m.id));
+        const males = memberList.filter(m => m.gender === 'Male').length;
+        const females = memberList.filter(m => m.gender === 'Female').length;
+        const elevate = memberList.filter(m => m.finalTags?.ageCategory === 'Elevate').length;
+        const b1g = memberList.filter(m => m.finalTags?.ageCategory === 'B1G').length;
+        return { males, females, elevate, b1g };
+      };
+
+      const currentDemo = compCurrent.id ? demographicsForEventId(compCurrent.id) : { males:0, females:0, elevate:0, b1g:0 };
+      const prevDemos = (compPrevious || []).map(p => p.id ? demographicsForEventId(p.id) : { males:0, females:0, elevate:0, b1g:0 });
+      const avgPrevDemo = prevDemos.length ? prevDemos.reduce((acc, d) => ({ males: acc.males + d.males, females: acc.females + d.females, elevate: acc.elevate + d.elevate, b1g: acc.b1g + d.b1g }), { males:0, females:0, elevate:0, b1g:0 }) : { males:0, females:0, elevate:0, b1g:0 };
+      const avgPrevDemoFinal = prevDemos.length ? { males: Math.round(avgPrevDemo.males / prevDemos.length), females: Math.round(avgPrevDemo.females / prevDemos.length), elevate: Math.round(avgPrevDemo.elevate / prevDemos.length), b1g: Math.round(avgPrevDemo.b1g / prevDemos.length) } : { males:0, females:0, elevate:0, b1g:0 };
+      compRows.push(['Demographics (Current vs Previous avg)']);
+      compRows.push(['Metric','Current','Previous (avg)']);
+      compRows.push(['Males', String(currentDemo.males), String(avgPrevDemoFinal.males)]);
+      compRows.push(['Females', String(currentDemo.females), String(avgPrevDemoFinal.females)]);
+      compRows.push(['Elevate', String(currentDemo.elevate), String(avgPrevDemoFinal.elevate)]);
+      compRows.push(['B1G', String(currentDemo.b1g), String(avgPrevDemoFinal.b1g)]);
+      compRows.push(['']);
+
+      // Append any remaining cards (charts/interpretation)
+      cards.forEach(card => {
+        compRows.push([card.title || 'Card']);
+        compRows.push(['']);
+        if (card.tableHeaders && Array.isArray(card.tableRows)) {
+          compRows.push(card.tableHeaders.slice());
+          (card.tableRows || []).forEach(r => compRows.push(r.slice()));
+          compRows.push(['']);
+        }
+        if (card.charts && Array.isArray(card.charts)) {
+          card.charts.forEach(chart => {
+            compRows.push([chart.title || 'Chart']);
+            const labels = chart.labels || [];
+            const datasets = chart.datasets || [];
+            const header = ['Label'].concat(datasets.map(d => d.label || 'series'));
+            compRows.push(header);
+            labels.forEach((lbl, idx) => {
+              const row = [lbl].concat(datasets.map(d => (Array.isArray(d.raw) && d.raw[idx] !== undefined) ? d.raw[idx] : (Array.isArray(d.data) && d.data[idx] !== undefined ? d.data[idx] : '')));
+              compRows.push(row);
+            });
+            compRows.push(['']);
+          });
+        }
+        if (card.interpretation) {
+          compRows.push(['Interpretation:']);
+          compRows.push([card.interpretation]);
+          compRows.push(['']);
+        }
+        compRows.push(['']);
+      });
+
+      // Create sheet from compRows and apply styles similar to createSheet
+      if (!Array.isArray(compRows)) throw new Error('Comparison rows not an array');
+      const ws = XLSX.utils.aoa_to_sheet(compRows);
+      if (ws['!ref']) {
+        const range = XLSX.utils.decode_range(ws['!ref']);
+        const colWidths = [];
+        for (let r = range.s.r; r <= range.e.r; ++r) {
+          const row = compRows[r] || [];
+          row.forEach((cell, cIdx) => {
+            const len = cell ? String(cell).length : 0;
+            colWidths[cIdx] = Math.max(colWidths[cIdx] || 12, Math.min(len + 6, 60));
+          });
+        }
+
+        for (let R = range.s.r; R <= range.e.r; ++R) {
+          for (let C = range.s.c; C <= range.e.c; ++C) {
+            const cellAddr = XLSX.utils.encode_cell({ r: R, c: C });
+            if (!ws[cellAddr]) continue;
+            const row0 = compRows[R] && compRows[R][0] ? String(compRows[R][0]) : '';
+
+            if (R === 0) {
+              ws[cellAddr].s = Object.assign({}, ws[cellAddr].s || {}, mainTitleStyle);
+              continue;
+            }
+
+            if (['Event Comparison (Current vs Previous 3)', 'Event Details', 'Summary', 'Absence Monitoring', 'Demographics (Current vs Previous avg)'].includes(row0) || (row0 && row0.endsWith('Card'))) {
+              ws[cellAddr].s = Object.assign({}, ws[cellAddr].s || {}, tableTitleStyle);
+              continue;
+            }
+
+            if (Array.isArray(compRows[R]) && (compRows[R][0] === 'Type' || compRows[R][0] === 'Metric' || (compRows[R].length > 1 && String(compRows[R][0]).toLowerCase().includes('type')) || (compRows[R].some(v => String(v).toLowerCase && String(v).toLowerCase().includes('label'))))) {
+              ws[cellAddr].s = Object.assign({}, ws[cellAddr].s || {}, tableHeaderStyle);
+              continue;
+            }
+
+            if (row0 === 'Interpretation:' || (row0 && row0.startsWith('Interpretation:'))) {
+              ws[cellAddr].s = Object.assign({}, ws[cellAddr].s || {}, { font: { italic: true }, alignment: { wrapText: true, horizontal: 'left' } });
+              continue;
+            }
+
+            if (compRows[R] && compRows[R][0] === 'Current') {
+              ws[cellAddr].s = Object.assign({}, ws[cellAddr].s || {}, { fill: { fgColor: { rgb: 'FFF3CD' } }, font: Object.assign({}, (ws[cellAddr].s && ws[cellAddr].s.font) || {}, { bold: true }), alignment: Object.assign({}, (ws[cellAddr].s && ws[cellAddr].s.alignment) || {}, { wrapText: true }) });
+              continue;
+            }
+
+            ws[cellAddr].s = Object.assign({}, ws[cellAddr].s || {}, cellStyle);
+          }
+        }
+
+        const merges = ws['!merges'] || [];
+        for (let R = range.s.r; R <= range.e.r; ++R) {
+          const row0 = compRows[R] && compRows[R][0] ? String(compRows[R][0]) : '';
+          if (row0 === 'Interpretation:' || row0 === 'Summary' || row0 === 'Event Details' || row0 === 'Demographics (Current vs Previous avg)' || row0 === 'Absence Monitoring' || row0 === 'Event Comparison (Current vs Previous 3)' ) {
+            const next = R + 1;
+            if (next <= range.e.r) merges.push({ s: { r: R, c: 0 }, e: { r: next, c: range.e.c } });
+          }
+        }
+        ws['!merges'] = merges;
+
+        ws['!cols'] = colWidths.map(w => ({ wch: w }));
+      }
+
+      XLSX.utils.book_append_sheet(wb, ws, 'Event Comparison');
+    } catch (e) {
+      console.warn('Comparison sheet build failed', e);
+    }
+  };
+
   const createSheet = (sheetTabName, sheetTitle, tableHeaders, memberList, mapFunction) => {
     const colCount = tableHeaders.length;
     const rows = [
@@ -149,96 +338,11 @@ function exportToExcel() {
 
 
   createSheet("First Timers", "ATTENDANCE SHEET - FIRST TIMERS", ["Name", "Gender", "Age", "Contact Number", "Fb/Messenger", "Email", "School/Occupation"], firstTimers, (m) => [`${m.lastName}, ${m.firstName}`, m.gender, m.age, m.contactNumber || '', m.fbAccount || '', m.email, m.school || '']);
-  // Prepend Event Comparison sheet (current vs previous 3) to workbook
+  // Prepend Event Comparison sheet (current vs previous 3) to workbook using helper
   try {
     const payload = buildComparisonPayload({ allEvents: allEvents.value || [], allAttendance: allAttendance.value || [], members: members.value || [], activeMembers: (activeMembers && activeMembers.value) ? activeMembers.value : (members && members.value) ? members.value : [] })
     console.log('[AttendanceListModal] comparison payload for xlsx', payload && payload.cards ? payload.cards.map(c=>c.title) : 'no-cards')
-
-    // Build a single "Event Comparison" sheet that contains the cards
-    const compRows = []
-    compRows[compRows.length] = ["CHRIST COMMISSION FOUNDATION INC."]
-    compRows[compRows.length] = ['']
-    compRows[compRows.length] = ['Event Comparison (Current vs Previous 3)']
-    compRows[compRows.length] = ['']
-
-    const cards = (payload && payload.cards) ? payload.cards : []
-    cards.forEach(card => {
-      // Card title
-      compRows[compRows.length] = [card.title || 'Card']
-      compRows[compRows.length] = ['']
-
-      // If the card has a table, render headers then rows
-      if (card.tableHeaders && Array.isArray(card.tableRows)) {
-        compRows[compRows.length] = card.tableHeaders.slice()
-        (card.tableRows || []).forEach(r => compRows[compRows.length] = r.slice())
-        compRows[compRows.length] = ['']
-      }
-
-      // If the card has charts, render each chart as a mini-table (labels + datasets.raw)
-      if (card.charts && Array.isArray(card.charts)) {
-        card.charts.forEach(chart => {
-          compRows[compRows.length] = [chart.title || 'Chart']
-          const labels = chart.labels || []
-          const datasets = chart.datasets || []
-          // header: Label + dataset labels
-          const header = ['Label'].concat(datasets.map(d => d.label || 'series'))
-          compRows[compRows.length] = header
-          // rows: each label row contains raw values if present, else data
-          labels.forEach((lbl, idx) => {
-            const row = [lbl].concat(datasets.map(d => (Array.isArray(d.raw) && d.raw[idx] !== undefined) ? d.raw[idx] : (Array.isArray(d.data) && d.data[idx] !== undefined ? d.data[idx] : '')))
-            compRows[compRows.length] = row
-          })
-          compRows[compRows.length] = ['']
-        })
-      }
-
-      // Interpretation text
-      if (card.interpretation) {
-        compRows[compRows.length] = ['Interpretation:']
-        compRows[compRows.length] = [card.interpretation]
-        compRows[compRows.length] = ['']
-      }
-      // spacer between cards
-      compRows[compRows.length] = ['']
-    })
-
-    // only convert to sheet if compRows is a proper array
-    if (!Array.isArray(compRows)) throw new Error('Comparison rows not an array')
-    const ws = XLSX.utils.aoa_to_sheet(compRows)
-    // basic style: make the title row bold
-    if (ws['!ref']) {
-      const range = XLSX.utils.decode_range(ws['!ref'])
-      for (let R = range.s.r; R <= range.e.r; ++R) {
-        for (let C = range.s.c; C <= range.e.c; ++C) {
-          const cell = XLSX.utils.encode_cell({ r: R, c: C })
-          if (!ws[cell]) continue
-          if (R === 2) ws[cell].s = { font: { bold: true, sz: 12 } }
-          // style interpretation rows (detect first cell)
-          if (compRows[R] && compRows[R][0] === 'Interpretation:') {
-            ws[cell].s = { font: { italic: true }, alignment: { wrapText: true, horizontal: 'left' } }
-          }
-          if (compRows[R] && typeof compRows[R][0] === 'string' && compRows[R][0].startsWith('Interpretation:') && compRows[R].length === 1) {
-            ws[cell].s = { font: { italic: true }, alignment: { wrapText: true, horizontal: 'left' } }
-          }
-          // highlight the current event overview row if present (first column 'Current')
-          if (compRows[R] && compRows[R][0] === 'Current') {
-            const existing = ws[cell] && ws[cell].s ? ws[cell].s : {};
-            ws[cell].s = Object.assign({}, existing, { fill: { fgColor: { rgb: 'FFF3CD' } }, font: Object.assign({}, existing.font || {}, { bold: true }), alignment: Object.assign({}, existing.alignment || {}, { wrapText: true }) });
-          }
-        }
-      }
-
-      // merge interpretation rows so they span the full width
-      const merges = ws['!merges'] || [];
-      for (let R = range.s.r; R <= range.e.r; ++R) {
-        if (compRows[R] && compRows[R][0] === 'Interpretation:') {
-          const next = R + 1;
-          if (next <= range.e.r) merges.push({ s: { r: R, c: 0 }, e: { r: next, c: range.e.c } })
-        }
-      }
-      ws['!merges'] = merges;
-    }
-    XLSX.utils.book_append_sheet(wb, ws, 'Event Comparison')
+    createComparisonSheet(payload)
   } catch (e) { console.warn('Comparison sheet build failed', e) }
   createSheet("Volunteers", "ATTENDANCE SHEET - VOLUNTEERS", ["Name", "Age", "Gender", "Ministry"], volunteers, (m) => [`${m.lastName}, ${m.firstName}`, m.age, m.gender, (m.finalTags?.volunteerMinistry || []).join(', ')]);
   createSheet("DLeaders", "ATTENDANCE SHEET - DLEADERS", ["Name", "Age", "Gender", "Volunteer Ministry"], leaders, (m) => [`${m.lastName}, ${m.firstName}`, m.age, m.gender, (m.finalTags?.volunteerMinistry || []).join(', ') || 'N/A']);
