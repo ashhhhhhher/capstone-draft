@@ -5,6 +5,9 @@ import * as XLSX from 'xlsx-js-style'
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
 import { useMembersStore } from '../stores/members'
+import buildComparisonPayload from '../utils/eventComparisonExport'
+import { useEventsStore } from '../stores/events'
+import { useAttendanceStore } from '../stores/attendance'
 import { storeToRefs } from 'pinia'
 
 const props = defineProps({
@@ -30,7 +33,11 @@ const emit = defineEmits(['close'])
 
 // --- Store Access for Attendance Rate ---
 const membersStore = useMembersStore()
-const { members } = storeToRefs(membersStore)
+const { members, activeMembers } = storeToRefs(membersStore)
+const eventsStore = useEventsStore()
+const attendanceStore = useAttendanceStore()
+const { allEvents } = storeToRefs(eventsStore)
+const { allAttendance } = storeToRefs(attendanceStore)
 
 // --- SORTING LOGIC ---
 const sortedAttendees = computed(() => {
@@ -45,10 +52,12 @@ function sortByName(list) {
   return list.slice().sort((a, b) => a.lastName.localeCompare(b.lastName) || a.firstName.localeCompare(b.firstName));
 }
 
+
 // =========================================================================
 //  1. EXCEL EXPORT (Preserved Existing Logic)
 // =========================================================================
 function exportToExcel() {
+  console.log('[AttendanceListModal] exportToExcel called', { eventName: eventName.value, attendees: (attendees && attendees.value) ? attendees.value.length : 0 })
   const source = attendees.value;
   const firstTimers = sortByName(source.filter(m => m.finalTags?.isFirstTimer));
   const leaders = sortByName(source.filter(m => !m.finalTags?.isFirstTimer && m.finalTags?.isDgroupLeader));
@@ -88,6 +97,17 @@ function exportToExcel() {
     if (memberList.length > 0) { memberList.forEach(m => rows.push(mapFunction(m))); } 
     else { rows.push(["No attendees in this category."]); }
 
+      // Add interpretation lines for this sheet
+    const total = memberList.length || 0;
+    const elevate = memberList.filter(m => m.finalTags?.ageCategory === 'Elevate').length;
+    const b1g = memberList.filter(m => m.finalTags?.ageCategory === 'B1G').length;
+    const male = memberList.filter(m => m.gender === 'Male').length;
+    const female = memberList.filter(m => m.gender === 'Female').length;
+    const pct = (n) => total > 0 ? `${Math.round((n / total) * 100)}%` : '0%';
+    rows.push([]);
+    rows.push(['Interpretation:']);
+    rows.push([`Total: ${total} — Elevate ${elevate} (${pct(elevate)}), B1G ${b1g} (${pct(b1g)}). Gender: M ${male}, F ${female}.`]);
+
     const ws = XLSX.utils.aoa_to_sheet(rows);
     const range = XLSX.utils.decode_range(ws['!ref']);
     for (let R = range.s.r; R <= range.e.r; ++R) {
@@ -98,10 +118,22 @@ function exportToExcel() {
         else if (R >= 2 && R <= 5) ws[cellAddress].s = { alignment: { wrapText: false } };
         else if (R === 7) ws[cellAddress].s = tableTitleStyle;
         else if (R === 8) ws[cellAddress].s = tableHeaderStyle;
-        else if (R > 8) ws[cellAddress].s = cellStyle;
+        else if (R > 8 && R <= range.e.r - 3) ws[cellAddress].s = cellStyle;
+        else {
+          // Style interpretation rows slightly differently (italic, smaller)
+          ws[cellAddress].s = { font: { italic: true }, alignment: { wrapText: true, horizontal: 'left' } };
+        }
       }
     }
-    ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: colCount - 1 } }, { s: { r: 7, c: 0 }, e: { r: 7, c: colCount - 1 } }];
+    // merge title and sheet title rows + interpretation rows so text spans full width
+    const merges = [{ s: { r: 0, c: 0 }, e: { r: 0, c: colCount - 1 } }, { s: { r: 7, c: 0 }, e: { r: 7, c: colCount - 1 } }];
+    // interpretation rows are expected to be the last 3 pushed: empty, 'Interpretation:', <text>
+    const interpRowIndex = rows.length - 2; // index of 'Interpretation:'
+    if (interpRowIndex >= 0) {
+      merges.push({ s: { r: interpRowIndex, c: 0 }, e: { r: interpRowIndex, c: colCount - 1 } });
+      merges.push({ s: { r: interpRowIndex + 1, c: 0 }, e: { r: interpRowIndex + 1, c: colCount - 1 } });
+    }
+    ws['!merges'] = merges;
     const colWidths = [];
     rows.forEach((row, rIdx) => {
       if (rIdx === 0 || rIdx === 7) return; 
@@ -115,118 +147,566 @@ function exportToExcel() {
     XLSX.utils.book_append_sheet(wb, ws, sheetTabName);
   };
 
+
   createSheet("First Timers", "ATTENDANCE SHEET - FIRST TIMERS", ["Name", "Gender", "Age", "Contact Number", "Fb/Messenger", "Email", "School/Occupation"], firstTimers, (m) => [`${m.lastName}, ${m.firstName}`, m.gender, m.age, m.contactNumber || '', m.fbAccount || '', m.email, m.school || '']);
+  // Prepend Event Comparison sheet (current vs previous 3) to workbook
+  try {
+    const payload = buildComparisonPayload({ allEvents: allEvents.value || [], allAttendance: allAttendance.value || [], members: members.value || [], activeMembers: (activeMembers && activeMembers.value) ? activeMembers.value : (members && members.value) ? members.value : [] })
+    console.log('[AttendanceListModal] comparison payload for xlsx', payload && payload.cards ? payload.cards.map(c=>c.title) : 'no-cards')
+
+    // Build a single "Event Comparison" sheet that contains the cards
+    const compRows = []
+    compRows[compRows.length] = ["CHRIST COMMISSION FOUNDATION INC."]
+    compRows[compRows.length] = ['']
+    compRows[compRows.length] = ['Event Comparison (Current vs Previous 3)']
+    compRows[compRows.length] = ['']
+
+    const cards = (payload && payload.cards) ? payload.cards : []
+    cards.forEach(card => {
+      // Card title
+      compRows[compRows.length] = [card.title || 'Card']
+      compRows[compRows.length] = ['']
+
+      // If the card has a table, render headers then rows
+      if (card.tableHeaders && Array.isArray(card.tableRows)) {
+        compRows[compRows.length] = card.tableHeaders.slice()
+        (card.tableRows || []).forEach(r => compRows[compRows.length] = r.slice())
+        compRows[compRows.length] = ['']
+      }
+
+      // If the card has charts, render each chart as a mini-table (labels + datasets.raw)
+      if (card.charts && Array.isArray(card.charts)) {
+        card.charts.forEach(chart => {
+          compRows[compRows.length] = [chart.title || 'Chart']
+          const labels = chart.labels || []
+          const datasets = chart.datasets || []
+          // header: Label + dataset labels
+          const header = ['Label'].concat(datasets.map(d => d.label || 'series'))
+          compRows[compRows.length] = header
+          // rows: each label row contains raw values if present, else data
+          labels.forEach((lbl, idx) => {
+            const row = [lbl].concat(datasets.map(d => (Array.isArray(d.raw) && d.raw[idx] !== undefined) ? d.raw[idx] : (Array.isArray(d.data) && d.data[idx] !== undefined ? d.data[idx] : '')))
+            compRows[compRows.length] = row
+          })
+          compRows[compRows.length] = ['']
+        })
+      }
+
+      // Interpretation text
+      if (card.interpretation) {
+        compRows[compRows.length] = ['Interpretation:']
+        compRows[compRows.length] = [card.interpretation]
+        compRows[compRows.length] = ['']
+      }
+      // spacer between cards
+      compRows[compRows.length] = ['']
+    })
+
+    // only convert to sheet if compRows is a proper array
+    if (!Array.isArray(compRows)) throw new Error('Comparison rows not an array')
+    const ws = XLSX.utils.aoa_to_sheet(compRows)
+    // basic style: make the title row bold
+    if (ws['!ref']) {
+      const range = XLSX.utils.decode_range(ws['!ref'])
+      for (let R = range.s.r; R <= range.e.r; ++R) {
+        for (let C = range.s.c; C <= range.e.c; ++C) {
+          const cell = XLSX.utils.encode_cell({ r: R, c: C })
+          if (!ws[cell]) continue
+          if (R === 2) ws[cell].s = { font: { bold: true, sz: 12 } }
+          // style interpretation rows (detect first cell)
+          if (compRows[R] && compRows[R][0] === 'Interpretation:') {
+            ws[cell].s = { font: { italic: true }, alignment: { wrapText: true, horizontal: 'left' } }
+          }
+          if (compRows[R] && typeof compRows[R][0] === 'string' && compRows[R][0].startsWith('Interpretation:') && compRows[R].length === 1) {
+            ws[cell].s = { font: { italic: true }, alignment: { wrapText: true, horizontal: 'left' } }
+          }
+          // highlight the current event overview row if present (first column 'Current')
+          if (compRows[R] && compRows[R][0] === 'Current') {
+            const existing = ws[cell] && ws[cell].s ? ws[cell].s : {};
+            ws[cell].s = Object.assign({}, existing, { fill: { fgColor: { rgb: 'FFF3CD' } }, font: Object.assign({}, existing.font || {}, { bold: true }), alignment: Object.assign({}, existing.alignment || {}, { wrapText: true }) });
+          }
+        }
+      }
+
+      // merge interpretation rows so they span the full width
+      const merges = ws['!merges'] || [];
+      for (let R = range.s.r; R <= range.e.r; ++R) {
+        if (compRows[R] && compRows[R][0] === 'Interpretation:') {
+          const next = R + 1;
+          if (next <= range.e.r) merges.push({ s: { r: R, c: 0 }, e: { r: next, c: range.e.c } })
+        }
+      }
+      ws['!merges'] = merges;
+    }
+    XLSX.utils.book_append_sheet(wb, ws, 'Event Comparison')
+  } catch (e) { console.warn('Comparison sheet build failed', e) }
   createSheet("Volunteers", "ATTENDANCE SHEET - VOLUNTEERS", ["Name", "Age", "Gender", "Ministry"], volunteers, (m) => [`${m.lastName}, ${m.firstName}`, m.age, m.gender, (m.finalTags?.volunteerMinistry || []).join(', ')]);
   createSheet("DLeaders", "ATTENDANCE SHEET - DLEADERS", ["Name", "Age", "Gender", "Volunteer Ministry"], leaders, (m) => [`${m.lastName}, ${m.firstName}`, m.age, m.gender, (m.finalTags?.volunteerMinistry || []).join(', ') || 'N/A']);
   createSheet("Elevate F", "ATTENDANCE SHEET - DGROUP MEMBERS (ELEVATE FEMALES)", ["Name", "Age", "DLeader Name"], elevateFemales, (m) => [`${m.lastName}, ${m.firstName}`, m.age, m.dgroupLeader || 'Unassigned']);
   createSheet("Elevate M", "ATTENDANCE SHEET - DGROUP MEMBERS (ELEVATE MALES)", ["Name", "Age", "DLeader Name"], elevateMales, (m) => [`${m.lastName}, ${m.firstName}`, m.age, m.dgroupLeader || 'Unassigned']);
   createSheet("B1G F", "ATTENDANCE SHEET - DGROUP MEMBERS (B1G FEMALES)", ["Name", "Age", "DLeader Name"], b1gFemales, (m) => [`${m.lastName}, ${m.firstName}`, m.age, m.dgroupLeader || 'Unassigned']);
   createSheet("B1G M", "ATTENDANCE SHEET - DGROUP MEMBERS (B1G MALES)", ["Name", "Age", "DLeader Name"], b1gMales, (m) => [`${m.lastName}, ${m.firstName}`, m.age, m.dgroupLeader || 'Unassigned']);
+  console.log('[AttendanceListModal] workbook sheets before write', wb && wb.SheetNames ? wb.SheetNames.slice() : [])
   XLSX.writeFile(wb, `${eventName.value || 'Attendance'} - Attendance Report.xlsx`);
 }
 
 // =========================================================================
-//  2. PDF EXPORT (Updated)
+//  2. PDF EXPORT (Enhanced Report Layout)
 // =========================================================================
 function exportToPDF() {
+  console.log('[AttendanceListModal] exportToPDF called', {
+    eventName: eventName.value,
+    attendees: attendees?.value?.length || 0
+  });
+
   const doc = new jsPDF();
-  
-  // Calculate Stats
+  let y = 15;
+
+  // Utility for section headers
+const writeSectionHeader = (title) => {
+  y += 6;
+  if (y > 260) { doc.addPage(); y = 20; }
+
+  doc.setFontSize(12.5)
+     .setFont("helvetica", "bold")
+     .setTextColor(13, 71, 161);
+
+  doc.text(title, 15, y);
+  y += 4;
+  doc.setDrawColor(200).line(15, y, 195, y);
+  y += 10;
+};
+
+  // Utility for paragraph writing
+const writeParagraph = (text) => {
+  // Adjust after autotable
+  try {
+    if (doc.lastAutoTable && doc.lastAutoTable.finalY) {
+      const tableBottom = doc.lastAutoTable.finalY;
+      if (y <= tableBottom + 4) y = tableBottom + 6;
+    }
+  } catch (e) {}
+
+  // Use 95% of content width
+  const wrapped = doc.splitTextToSize(text, 250);
+
+  // Text bigger by 0.5 & left-aligned & justified width
+  doc.setFontSize(9.5)
+     .setFont("helvetica", "normal")
+     .setTextColor(70);
+
+  // Render each line, coloring numeric values blue while leaving other text default
+  const valueRegex = /(\+?-?\d{1,3}(?:[.,]\d{3})*(?:\.\d+)?%?|\(\d{1,3}(?:[.,]\d{3})*\))/g;
+  wrapped.forEach(line => {
+    if (y > 270) {
+      doc.addPage();
+      y = 20;
+    }
+
+    let x = 15;
+    let lastIndex = 0;
+    let m;
+    while ((m = valueRegex.exec(line)) !== null) {
+      // text before match
+      if (m.index > lastIndex) {
+        const before = line.substring(lastIndex, m.index);
+        doc.setTextColor(70);
+        doc.text(before, x, y, { align: 'left' });
+        x += doc.getTextWidth(before);
+      }
+
+      // matched value - decide whether to style or render normally
+      const val = m[0];
+      const prevChar = m.index > 0 ? line[m.index - 1] : '';
+      const nextChar = (m.index + val.length) < line.length ? line[m.index + val.length] : '';
+      const adjacentIsLetter = /[A-Za-z]/.test(prevChar) || /[A-Za-z]/.test(nextChar);
+
+      if (adjacentIsLetter) {
+        // part of a word (e.g., 'B1G' or 'Event 1') — render as normal text
+        doc.setFont("helvetica", "normal");
+        doc.setTextColor(70);
+        doc.text(val, x, y, { align: 'left' });
+        x += doc.getTextWidth(val);
+      } else {
+        // standalone numeric/value -> blue + bold
+        doc.setFont("helvetica", "bold");
+        doc.setTextColor(13, 71, 161);
+        doc.text(val, x, y, { align: 'left' });
+        x += doc.getTextWidth(val);
+        doc.setFont("helvetica", "normal");
+        doc.setTextColor(70);
+      }
+
+      lastIndex = m.index + val.length;
+    }
+
+    // remaining text after last match
+    if (lastIndex < line.length) {
+      const rest = line.substring(lastIndex);
+      doc.setTextColor(70);
+      doc.text(rest, x, y, { align: 'left' });
+    }
+
+    // reset color to default for subsequent content
+    doc.setTextColor(70);
+    y += 5.2;
+  });
+
+  y += 3;
+};
+
+
+  // =========================================================================
+  // HEADER
+  // =========================================================================
+  try { doc.addImage('/ccf logo.png', 'PNG', 15, y, 20, 20); } catch (e) {}
+  doc.setFontSize(14).setFont("helvetica", "bold").setTextColor(13, 71, 161);
+  doc.text("CHRIST'S COMMISSION FELLOWSHIP", 40, y + 10);
+
+  doc.setFontSize(10).setFont("helvetica", "normal").setTextColor(100);
+  doc.text("Event Attendance Report", 40, y + 16);
+
+  y += 28;
+  doc.line(15, y, 195, y);
+  y += 10;
+
+  // =========================================================================
+  // EVENT DETAILS
+  // =========================================================================
+  writeSectionHeader("Event Details");
+
+  doc.setFontSize(10).setTextColor(0);
+  doc.text(`Event: ${eventName.value}`, 15, y); y += 5;
+  doc.text(`Date: ${eventDate.value}`, 15, y); y += 5;
+  doc.text(`Speaker: ${eventSpeaker.value || 'N/A'}`, 120, y - 10);
+  doc.text(`Venue: ${eventLocation.value || 'N/A'}`, 120, y - 5);
+
+  y += 8;
+  // Move concise summary metrics into Event Details (no separate Summary header)
   const totalAttended = attendees.value.length;
   const totalRegistered = members.value ? members.value.length : 0;
   const rate = totalRegistered > 0 ? Math.round((totalAttended / totalRegistered) * 100) : 0;
 
-  // --- Header ---
-  try { doc.addImage('/ccf logo.png', 'PNG', 15, 10, 20, 20); } catch (e) { console.warn("Logo not found"); }
-  doc.setFontSize(14).setFont("helvetica", "bold").setTextColor(13, 71, 161).text("CHRIST'S COMMISSION FELLOWSHIP", 40, 20);
-  doc.setFontSize(10).setFont("helvetica", "normal").setTextColor(100).text("Event Attendance Report", 40, 26);
-  doc.line(15, 35, 195, 35);
+  doc.text(`Total Attendees: ${totalAttended}`, 15, y); y += 5;
+  doc.text(`Attendance Rate: ${rate}%`, 15, y); y += 10;
 
-  // --- Event Details ---
-  doc.setFontSize(10).setTextColor(0);
-  doc.text(`Event: ${eventName.value}`, 15, 45);
-  doc.text(`Date: ${eventDate.value}`, 15, 50);
-  doc.text(`Speaker: ${eventSpeaker.value || 'N/A'}`, 120, 45);
-  doc.text(`Venue: ${eventLocation.value || 'N/A'}`, 120, 50);
+    // =========================================================================
+  // SAVE
+  // =========================================================================
+  // Add a concise 100-word summary paragraph on the final page
+try {
+  // Recompute comparison payload to ensure we have latest values
+  const payloadFinal = buildComparisonPayload({ 
+    allEvents: allEvents.value || [], 
+    allAttendance: allAttendance.value || [], 
+    members: members.value || [], 
+    activeMembers: activeMembers?.value || members?.value || [] 
+  });
 
-  // --- Summary Stats (Matched Font Size) ---
-  // Font size 10, normal weight to match headers above
-  doc.text(`Total Attendees: ${totalAttended}`, 15, 60);
-  doc.text(`Attendance Rate: ${rate}%`, 120, 60);
+  const compFinal = { current: payloadFinal.current, previous: payloadFinal.previous };
+  const prevTotalsFinal = (compFinal.previous || []).map(p => ({ name: p.name || 'Unknown', total: p.total || 0 }));
+  const prevSumFinal = prevTotalsFinal.reduce((s, p) => s + (p.total || 0), 0);
+  const prevAvgFinal = (prevTotalsFinal.length) ? Math.round(prevSumFinal / prevTotalsFinal.length) : 0;
+  const prevListTextFinal = prevTotalsFinal.length ? prevTotalsFinal.map(p => `${p.name} (${p.total})`).join(', ') : 'none';
+  const prevCombinedFinal = { 
+    elevate: (compFinal.previous || []).reduce((s,p) => s + (p.elevate||0), 0), 
+    b1g: (compFinal.previous || []).reduce((s,p) => s + (p.b1g||0), 0), 
+    firstTimers: (compFinal.previous || []).reduce((s,p) => s + (p.firstTimers||0), 0) 
+  };
+  const currentTotalFinal = compFinal.current?.total || 0;
 
-  // --- Filter Data for Tables ---
+  writeSectionHeader('Summary');
+
+  // Human-readable summary paragraph
+  writeParagraph(
+    `    This report provides an overview of attendance for the event "${compFinal.current?.name || 'N/A'}" compared to the previous three events. A total of ${currentTotalFinal} attendees participated in the current event, while previous events — ${prevListTextFinal} — averaged ${prevAvgFinal} participants. 
+
+    Looking at specific groups, the Elevate category had ${compFinal.current?.elevate || 0} attendees (previous average: ${prevAvgFinal.elevate}), the B1G group had ${compFinal.current?.b1g || 0} attendees (previous average: ${prevAvgFinal.b1g}), and First Timers totaled ${compFinal.current?.firstTimers || 0} (previous average: ${prevAvgFinal.firstTimers}). 
+
+    Overall, the attendance rate was ${rate}%. Key insights, including absence monitoring and demographics, are summarized in the following sections, along with member breakdowns for First Timers, Leaders, Volunteers, and B1G/Elevate cohorts. This summary is intended to provide a concise yet comprehensive snapshot of event participation and engagement trends.`
+  );
+
+} catch (e) { 
+  console.warn('Failed writing summary paragraph', e); 
+}
+
+  // =========================================================================
+  // EVENT COMPARISON
+  // =========================================================================
+  try {
+    writeSectionHeader("Event Comparison Overview (Current vs Previous 3)");
+
+    const payload = buildComparisonPayload({
+      allEvents: allEvents.value || [],
+      allAttendance: allAttendance.value || [],
+      members: members.value || [],
+      activeMembers: activeMembers?.value || members?.value || []
+    });
+
+    const comp = { current: payload.current, previous: payload.previous };
+    const compBody = [];
+
+    if (comp.current?.name) {
+      compBody.push([
+        'Current',
+        comp.current.name,
+        comp.current.date,
+        comp.current.total,
+        comp.current.elevate,
+        comp.current.b1g,
+        comp.current.firstTimers,
+        comp.current.volunteers
+      ]);
+    }
+
+    (comp.previous || []).forEach(p => {
+      compBody.push([
+        'Previous',
+        p.name,
+        p.date,
+        p.total,
+        p.elevate,
+        p.b1g,
+        p.firstTimers,
+        p.volunteers
+      ]);
+    });
+
+    if (compBody.length > 0) {
+      autoTable(doc, {
+        startY: y,
+        head: [['Type','Event Name','Date','Total','Elevate','B1G','First Timers','Volunteers']],
+        body: compBody,
+        headStyles: { fillColor: [33,150,243], textColor: [255,255,255], fontStyle: 'bold' },
+        styles: { fontSize: 9 },
+        margin: { left: 15, right: 15 },
+        didParseCell: function (data) {
+          // highlight the 'Current' row (first body row) for clarity
+          if (data.row && data.row.section === 'body' && data.row.index === 0) {
+            data.cell.styles.fillColor = [255, 243, 205]; // light yellow
+            data.cell.styles.textColor = [0, 0, 0];
+            data.cell.styles.fontStyle = 'bold';
+          }
+        }
+      });
+
+      y = doc.lastAutoTable.finalY + 8;
+
+      // Comparison paragraph - clearer numeric summary and direction
+      const prevTotals = (comp.previous || []).map(p => ({ name: p.name || 'Unknown', total: p.total || 0 }));
+      const prevSum = prevTotals.reduce((s, p) => s + (p.total || 0), 0);
+      const prevAvg = (prevTotals.length) ? Math.round(prevSum / prevTotals.length) : 0;
+      const currentTotal = comp.current?.total || 0;
+      const delta = currentTotal - prevAvg;
+      const direction = delta > 0 ? 'increased' : (delta < 0 ? 'decreased' : 'no change');
+      const pctChange = (prevAvg && prevAvg !== 0) ? Math.round((delta / prevAvg) * 100) : null;
+
+      // Build a concise attendance totals summary listing previous events and their totals
+      const prevListText = prevTotals.length ? prevTotals.map(p => `${p.name} (${p.total})`).join(', ') : 'none';
+
+      let summaryText = `The current event: ${comp.current?.name || 'N/A'} had a total of (${currentTotal}) attendees. Previous events: ${prevListText} had ${prevAvg} participants on average.`;
+      if (pctChange !== null) {
+        const sign = pctChange > 0 ? '+' : '';
+        summaryText += ` This ${direction} by ${Math.abs(delta)} (${sign}${pctChange}%) compared with the previous average.`;
+      } else if (direction !== 'had no change') {
+        summaryText += ` This ${direction} by ${Math.abs(delta)} (unable to compute percent change because previous average is 0).`;
+      } else {
+        summaryText += ` There was no change compared with the previous average.`;
+      }
+
+      // Add a short sentence about Elevate/B1G/FirstTimers comparisons using combined previous counts
+      const prevCombined = { elevate: (comp.previous || []).reduce((s,p) => s + (p.elevate||0), 0), b1g: (comp.previous || []).reduce((s,p) => s + (p.b1g||0), 0), firstTimers: (comp.previous || []).reduce((s,p) => s + (p.firstTimers||0), 0) };
+      const elevText = `Elevate had ${comp.current?.elevate || 0} attendees compared to previous event averagee of ${prevAvg.elevate}.`;
+      const b1gText = `B1g had ${comp.current?.b1g || 0} attendees compared to previous event average of ${prevAvg.b1g}.`;
+      const ftText = `Lasty, there were  ${comp.current?.firstTimers || 0} first-time attendees in the current event.`;
+
+      writeParagraph(`${summaryText} ${elevText} ${b1gText} ${ftText}`);
+
+      // Render only the Absence Monitoring card (keep Overview table above)
+      try {
+        const cards = (payload && payload.cards) ? payload.cards : []
+        const absenceCard = cards.find(c => (c.title || '').toLowerCase().includes('absence'))
+        console.log('[AttendanceListModal] PDF rendering comparison - found absence card?', !!absenceCard)
+        if (absenceCard) {
+          writeSectionHeader(absenceCard.title || 'Absence monitoring')
+
+          // Compute previous average totals (previous array from payload)
+          const prevSummaries = payload.previous || []
+          const prevCount = prevSummaries.length || 0
+          const prevTotalSum = prevSummaries.reduce((s,p) => s + (p.total || 0), 0)
+          const prevAvgTotal = prevCount ? Math.round(prevTotalSum / prevCount) : 0
+
+          // Current present/absent (using comp.current.total as present unique approximation)
+          const currentPresent = comp.current?.total || 0
+          const currentAbsent = (Array.isArray(activeMembers?.value) ? activeMembers.value.length : (members?.value ? members.value.length : 0)) - currentPresent
+
+          // Build absence table showing averages instead of combined previous
+          const absenceHead = ['Metric', 'Current', 'Previous (avg)']
+          const absenceBody = [
+            ['Present (avg)', String(currentPresent), String(prevAvgTotal)],
+            ['Absent (avg)', String(currentAbsent >= 0 ? currentAbsent : 0), String(Math.max(0, (Array.isArray(activeMembers?.value) ? activeMembers.value.length : (members?.value ? members.value.length : 0)) - prevAvgTotal))]
+          ]
+
+          autoTable(doc, {
+            startY: y,
+            head: [absenceHead],
+            body: absenceBody,
+            headStyles: { fillColor: [33,150,243], textColor: [255,255,255], fontStyle: 'bold' },
+            styles: { fontSize: 9 },
+            margin: { left: 15, right: 15 }
+          })
+          y = doc.lastAutoTable ? doc.lastAutoTable.finalY + 8 : y + 8
+
+          // If absenceCard has interpretation, keep it but adapt to averages
+          if (absenceCard.interpretation) {
+            // adapt interpretation to show averages
+            const interp = `Interpretation (avg): ${absenceCard.interpretation}`
+            writeParagraph(interp)
+          }
+
+          // Add demographics averaged table (per-event averages for previous)
+          // Helper to compute demographics for a given event id
+          const demographicsForEventId = (eventId) => {
+            const recs = (allAttendance.value || []).filter(a => a.eventId === eventId)
+            const memberList = (members.value || []).filter(m => recs.some(r => r.memberId === m.id))
+            const males = memberList.filter(m => m.gender === 'Male').length
+            const females = memberList.filter(m => m.gender === 'Female').length
+            const elevate = memberList.filter(m => m.finalTags?.ageCategory === 'Elevate').length
+            const b1g = memberList.filter(m => m.finalTags?.ageCategory === 'B1G').length
+            return { males, females, elevate, b1g }
+          }
+
+          // Current demographics (from comp.current.id if present)
+          const currentDemo = comp.current && comp.current.id ? demographicsForEventId(comp.current.id) : { males: 0, females: 0, elevate: 0, b1g: 0 }
+
+          // Previous per-event demographics averaged
+          const prevDemos = prevSummaries.map(p => p.id ? demographicsForEventId(p.id) : { males: 0, females: 0, elevate: 0, b1g: 0 })
+          const avgPrevDemo = prevDemos.length ? prevDemos.reduce((acc, d) => ({ males: acc.males + d.males, females: acc.females + d.females, elevate: acc.elevate + d.elevate, b1g: acc.b1g + d.b1g }), { males:0, females:0, elevate:0, b1g:0 }) : { males:0, females:0, elevate:0, b1g:0 }
+          const avgPrevDemoFinal = prevDemos.length ? { males: Math.round(avgPrevDemo.males / prevDemos.length), females: Math.round(avgPrevDemo.females / prevDemos.length), elevate: Math.round(avgPrevDemo.elevate / prevDemos.length), b1g: Math.round(avgPrevDemo.b1g / prevDemos.length) } : { males:0, females:0, elevate:0, b1g:0 }
+
+          // Render demographics avg table
+          const demoHead = ['Metric', 'Current', 'Previous (avg)']
+          const demoBody = [
+            ['Males', String(currentDemo.males), String(avgPrevDemoFinal.males)],
+            ['Females', String(currentDemo.females), String(avgPrevDemoFinal.females)],
+            ['Elevate', String(currentDemo.elevate), String(avgPrevDemoFinal.elevate)],
+            ['B1G', String(currentDemo.b1g), String(avgPrevDemoFinal.b1g)]
+          ]
+
+          writeSectionHeader('Demographics')
+          autoTable(doc, {
+            startY: y,
+            head: [demoHead],
+            body: demoBody,
+            headStyles: { fillColor: [33,150,243], textColor: [255,255,255], fontStyle: 'bold' },
+            styles: { fontSize: 9 },
+            margin: { left: 15, right: 15 }
+          })
+          y = doc.lastAutoTable ? doc.lastAutoTable.finalY + 8 : y + 8
+
+        } else {
+          console.log('[AttendanceListModal] No absence card found in comparison payload')
+        }
+      } catch (errCards) {
+        console.warn('Failed rendering comparison cards into PDF', errCards)
+      }
+    }
+  } catch (e) {
+    console.warn("Comparison PDF build failed", e);
+  }
+
+  // =========================================================================
+  // CATEGORY TABLE GENERATOR
+  // =========================================================================
   const data = attendees.value;
-  
+
   const firstTimers = sortByName(data.filter(m => m.finalTags?.isFirstTimer));
   const leaders = sortByName(data.filter(m => !m.finalTags?.isFirstTimer && m.finalTags?.isDgroupLeader));
-  const volunteers = sortByName(data.filter(m => !m.finalTags?.isFirstTimer && !m.finalTags?.isDgroupLeader && m.finalTags?.isVolunteer));
-  
-  // Regulars Split Logic
-  const regulars = data.filter(m => !m.finalTags?.isFirstTimer && !m.finalTags?.isDgroupLeader && !m.finalTags?.isVolunteer);
+  const volunteers = sortByName(data.filter(m => !m.finalTags?.isFirstTimer && m.finalTags?.isVolunteer));
+
+  const regulars = data.filter(m =>
+    !m.finalTags?.isFirstTimer &&
+    !m.finalTags?.isDgroupLeader &&
+    !m.finalTags?.isVolunteer
+  );
+
   const b1gMale = sortByName(regulars.filter(m => m.finalTags?.ageCategory === 'B1G' && m.gender === 'Male'));
   const b1gFemale = sortByName(regulars.filter(m => m.finalTags?.ageCategory === 'B1G' && m.gender === 'Female'));
   const elevateMale = sortByName(regulars.filter(m => m.finalTags?.ageCategory === 'Elevate' && m.gender === 'Male'));
   const elevateFemale = sortByName(regulars.filter(m => m.finalTags?.ageCategory === 'Elevate' && m.gender === 'Female'));
 
-  let y = 70;
-
   const createTable = (title, list, columns, mapFn) => {
     if (list.length === 0) return;
-    
-    if (y > 250) { doc.addPage(); y = 20; }
 
-    doc.setFontSize(11).setTextColor(13, 71, 161).setFont("helvetica", "bold");
-    doc.text(`${title} (${list.length})`, 15, y);
-    y += 5;
+    writeSectionHeader(title);
 
     autoTable(doc, {
       startY: y,
       head: [columns],
       body: list.map(mapFn),
-      // Blue Header [33, 150, 243]
-      headStyles: { fillColor: [33, 150, 243], textColor: [255, 255, 255], fontStyle: 'bold' },
+      headStyles: { fillColor: [33,150,243], textColor: [255,255,255], fontStyle: 'bold' },
       styles: { fontSize: 9 },
       margin: { left: 15, right: 15 }
     });
 
-    y = doc.lastAutoTable.finalY + 15;
+    y = doc.lastAutoTable.finalY + 8;
+
+    const total = list.length;
+    const elevate = list.filter(m => m.finalTags?.ageCategory === 'Elevate').length;
+    const b1g = list.filter(m => m.finalTags?.ageCategory === 'B1G').length;
+    const male = list.filter(m => m.gender === 'Male').length;
+    const female = list.filter(m => m.gender === 'Female').length;
+
+    const pct = (n) => total > 0 ? `${Math.round((n / total) * 100)}%` : '0%';
+
+    writeParagraph(
+      `${total} attendees are listed in this group. 
+      - Age groups include Elevate (${elevate}, ${pct(elevate)}) and B1G (${b1g}, ${pct(b1g)}). 
+      - Gender distribution shows ${male} male and ${female} female participants.`
+    );
   };
 
-  // 1. First Timers
+  // =========================================================================
+  // TABLE SECTIONS
+  // =========================================================================
+  // Section wrapper for member breakdowns
+  writeSectionHeader('Current Event Member Breakdown');
+      writeParagraph(
+      `The following sections provide a breakdown of attendees by their roles and demographics within the event.`
+    );
+
   createTable(
-    "First Timers", 
-    firstTimers, 
-    ['Name', 'Age', 'Age Group', 'Gender', 'Contact'], 
+    "First Timers",
+    firstTimers,
+    ['Name', 'Age', 'Age Group', 'Gender', 'Contact'],
     m => [`${m.lastName}, ${m.firstName}`, m.age, m.finalTags?.ageCategory || '-', m.gender, m.contactNumber || '-']
   );
 
-  // 2. Dgroup Leaders
   createTable(
-    "Dgroup Leaders", 
-    leaders, 
-    ['Name', 'Age', 'Age Group', 'Gender', 'Volunteer'], 
+    "Dgroup Leaders",
+    leaders,
+    ['Name', 'Age', 'Age Group', 'Gender', 'Volunteer'],
     m => [`${m.lastName}, ${m.firstName}`, m.age, m.finalTags?.ageCategory || '-', m.gender, m.finalTags?.volunteerMinistry?.join(', ') || 'N/A']
   );
 
-  // 3. Volunteers
   createTable(
-    "Volunteers", 
-    volunteers, 
-    ['Name', 'Age', 'Age Group', 'Gender', 'Ministry'], 
+    "Volunteers",
+    volunteers,
+    ['Name', 'Age', 'Age Group', 'Gender', 'Ministry'],
     m => [`${m.lastName}, ${m.firstName}`, m.age, m.finalTags?.ageCategory || '-', m.gender, m.finalTags?.volunteerMinistry?.join(', ') || '-']
   );
 
-  // 4. Regulars Split
   const regColumns = ['Name', 'Age', 'Gender', 'Dgroup Leader'];
   const regMap = m => [`${m.lastName}, ${m.firstName}`, m.age, m.gender, m.dgroupLeader || 'Unassigned'];
 
   createTable("B1G Male Members", b1gMale, regColumns, regMap);
   createTable("B1G Female Members", b1gFemale, regColumns, regMap);
-  createTable("ELEVATE Male Members", elevateMale, regColumns, regMap);
-  createTable("ELEVATE Female Members", elevateFemale, regColumns, regMap);
+  createTable("Elevate Male Members", elevateMale, regColumns, regMap);
+  createTable("Elevate Female Members", elevateFemale, regColumns, regMap);
 
-  doc.save(`${eventName.value || 'Attendance'}_Attendance_Report.pdf`);
+doc.save(`${eventName.value || 'Attendance'}_Attendance_Report.pdf`);
 }
+
 </script>
 
 <template>

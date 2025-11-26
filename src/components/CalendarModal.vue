@@ -1,10 +1,11 @@
 <script setup>
 import { ref, computed } from 'vue'
+import ExportButton from './ExportButton.vue'
 import { ChevronLeft, ChevronRight, Plus, Edit2, Trash2, MapPin } from 'lucide-vue-next'
 import { storeToRefs } from 'pinia'
 import { useEventsStore } from '../stores/events'
 
-const emit = defineEmits(['close', 'createEvent', 'editEvent'])
+const emit = defineEmits(['close', 'createEvent', 'editEvent', 'exportEvent'])
 // accept isMember from parent; when true, hide create/edit/delete UI for members
 const props = defineProps({
   isMember: { type: Boolean, default: false }
@@ -78,6 +79,10 @@ function handleDayClick(cell) {
 
 function handleEdit(event) {
     emit('editEvent', event)
+}
+
+function handleExport(event) {
+    emit('exportEvent', event)
 }
 
 function handleDelete(event) {
@@ -165,6 +170,7 @@ function handleDelete(event) {
                             <button class="btn-icon btn-delete" @click="handleDelete(event)">
                                 <Trash2 :size="16" />
                             </button>
+                            <ExportButton exportType="events" :singleEvent="event" />
                         </div>
                     </div>
                     

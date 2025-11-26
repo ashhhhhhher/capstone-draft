@@ -9,6 +9,7 @@ import DoughnutChart from '../components/charts/DoughnutChart.vue'
 import Modal from '../components/Modal.vue'
 import DgroupMatchingModal from '../components/DgroupMatchingModal.vue'
 import ExportButton from '../components/ExportButton.vue'
+import EventComparison from '../components/EventComparison.vue'
 
 // --- Store Setup ---
 const membersStore = useMembersStore()
@@ -243,6 +244,13 @@ const monitoringOpen = ref(true)
 function toggleMonitoring() {
   monitoringOpen.value = !monitoringOpen.value
 }
+
+// Tab state for Overall / Event Comparison
+const selectedTab = ref('Overall')
+
+function selectTab(name) {
+  selectedTab.value = name
+}
 </script>
 
 <template>
@@ -252,8 +260,17 @@ function toggleMonitoring() {
       <p>Analyze historical trends and member engagement.</p>
     </div>
 
-    <!-- 1. Key Metrics Row -->
-    <div class="kpi-grid">
+    <div class="insights-tabs-row">
+      <div class="insights-tabs">
+        <button :class="['tab-button', { active: selectedTab === 'Overall' }]" @click="selectTab('Overall')">Overall</button>
+        <button :class="['tab-button', { active: selectedTab === 'Event Comparison' }]" @click="selectTab('Event Comparison')">Event Comparison</button>
+      </div>
+    </div>
+
+    <!-- Overall tab content -->
+    <div v-if="selectedTab === 'Overall'">
+      <!-- 1. Key Metrics Row -->
+      <div class="kpi-grid">
       <!-- Total Members -->
       <div class="kpi-card">
         <div class="kpi-card-header">
@@ -317,10 +334,10 @@ function toggleMonitoring() {
         <div class="kpi-detail">Open Dgroup slots</div>
         <span class="click-hint">Click to view details</span>
       </div>
-    </div>
+      </div>
 
-    <!-- 2. Charts Grid -->
-    <div class="charts-grid">
+      <!-- 2. Charts Grid -->
+      <div class="charts-grid">
       <div class="chart-card">
         <h3>Member Category Distribution</h3>
         <div class="chart-wrapper" style="height: 350px;">
@@ -344,10 +361,10 @@ function toggleMonitoring() {
           <p v-else class="no-data-text">No members registered yet.</p>
         </div>
       </div>
-    </div>
-    
-    <!-- 3. Volunteer Breakdown Section -->
-    <div class="chart-card-full">
+      </div>
+      
+      <!-- 3. Volunteer Breakdown Section -->
+      <div class="chart-card-full">
       <h3>Volunteer Ministry Breakdown (Total: {{ volunteerBreakdown.total }})</h3>
       <div v-if="volunteerBreakdown.total > 0" class="volunteer-progress-list">
         <div v-for="item in volunteerBreakdown.data" :key="item.name" class="ministry-item">
@@ -364,10 +381,10 @@ function toggleMonitoring() {
         </div>
       </div>
       <p v-else class="no-data-text">No volunteers currently tagged to a specific ministry.</p>
-    </div>
+      </div>
 
-    <!-- 4. Historical Attendance Chart -->
-    <div class="chart-card-full">
+      <!-- 4. Historical Attendance Chart -->
+      <div class="chart-card-full">
       <div class="section-title-with-button">
         <h3>Historical Events Attendance</h3>
 
@@ -391,9 +408,15 @@ function toggleMonitoring() {
         />
         <p v-else class="no-data-text">No event data in the selected date range. Adjust the range to view attendance.</p>
       </div>
+      </div>
     </div>
 
-    <!-- 6. Dgroup Matching Modal -->
+    <!-- Event Comparison tab content -->
+    <div v-else class="event-comparison-panel">
+      <EventComparison />
+    </div>
+
+    <!-- 6. Dgroup Matching Modal (available regardless of tab) -->
     <Modal v-if="showDgroupModal" @close="showDgroupModal = false" size="xl">
       <DgroupMatchingModal @close="showDgroupModal = false" />
     </Modal>
@@ -406,7 +429,9 @@ function toggleMonitoring() {
 }
 
 .insights-header {
-  margin-bottom: 24px;
+  margin-bottom: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #ECEFF1;
 }
 
 .insights-header h1 {
@@ -420,6 +445,12 @@ function toggleMonitoring() {
   color: #546E7A;
   margin-top: 4px;
 }
+
+/* improved header card */
+
+.insights-tabs-row { border-bottom: 1px solid #ECEFF1;}
+.insights-tabs { margin: 0 }
+.tab-button { padding: 8px 12px }
 
 /* --- KPI Cards --- */
 .kpi-grid {
@@ -673,5 +704,38 @@ function toggleMonitoring() {
     align-items: flex-start;
     gap: 6px;
   }
+}
+
+/* --- Tabs --- */
+.insights-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 18px;
+  align-items: center;
+}
+.tab-button {
+  padding: 8px 12px;
+  border-radius: 0;
+  border: none;
+  background: transparent;
+  color: #37474F;
+  cursor: pointer;
+  font-weight: 600;
+  position: relative;
+}
+.tab-button:hover { color: #1E6FB8; }
+.tab-button.active { color: #1976D2; }
+.tab-button.active::after {
+  content: '';
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: -12px;
+  height: 3px;
+  background: #1976D2;
+  border-radius: 2px;
+}
+.event-comparison-panel {
+  margin-top: 8px;
 }
 </style>
