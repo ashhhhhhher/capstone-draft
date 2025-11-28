@@ -406,19 +406,41 @@ function openNotificationFocus(focusKey) {
 .clear-btn:hover {
   background: #E3F2FD;
 }
-
-/* Close (X) button in panel header */
+/* Close (X) button in panel header - Improved Design */
 .notification-panel .close-btn {
-  background: #FFFFFF;
-  border: 2px solid #1976D2;
-  color: #1976D2;
-  padding: 4px 8px;
-  border-radius: 8px;
-  font-size: 16px;
-  line-height: 1;
+  /* Layout & Reset */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px; /* Standard icon size */
+  height: 28px;
+  background: transparent; /* Start transparent */
+  border: none;
   cursor: pointer;
+  padding: 0;
+  
+  /* Visual Style */
+  color: #6B7280; /* Subtle dark gray color for the 'X' */
+  font-size: 18px; /* Slightly larger 'X' */
+  border-radius: 50%; /* Make it round for a standard icon look */
+  line-height: 1; 
+  
+  /* Transition for smooth effects */
+  transition: background-color 0.15s ease, color 0.15s ease;
 }
+
+/* Hover and Focus States for interactivity */
 .notification-panel .close-btn:hover {
-  background: #E3F2FD;
+  background-color: #F3F4F6; /* Light gray background on hover */
+  color: #374151; /* Slightly darker 'X' on hover */
+}
+
+.notification-panel .close-btn:active {
+  background-color: #E5E7EB; /* Darker background when pressed */
+}
+
+.notification-panel .close-btn:focus {
+  outline: 2px solid #1976D2; /* Focus ring for accessibility */
+  outline-offset: 2px;
 }
 </style>
