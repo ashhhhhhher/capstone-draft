@@ -8,6 +8,7 @@ import BarChart from '../components/charts/BarChart.vue'
 import DoughnutChart from '../components/charts/DoughnutChart.vue'
 import Modal from '../components/Modal.vue'
 import DgroupMatchingModal from '../components/DgroupMatchingModal.vue'
+import AttendanceOverviewModal from '../components/AttendanceOverviewModal.vue'
 import ExportButton from '../components/ExportButton.vue'
 
 // --- Store Setup ---
@@ -19,6 +20,7 @@ const { allAttendance } = storeToRefs(useAttendanceStore())
 // --- Modal State ---
 const showDgroupModal = ref(false)
 const showHistoryModal = ref(false)
+const showAttendanceOverview = ref(false)
 
 
 // --- Chart Options ---
@@ -380,6 +382,9 @@ function selectTab(name) {
 
         <!-- Date range picker + Export button -->
         <div class="controls-inline">
+          <button class="view-overview-btn" @click="showAttendanceOverview = true">
+            View History
+          </button>
           <label class="date-label">From
             <input type="date" v-model="fromDate" />
           </label>
@@ -403,6 +408,16 @@ function selectTab(name) {
     <!-- 6. Dgroup Matching Modal (available regardless of tab) -->
     <Modal v-if="showDgroupModal" @close="showDgroupModal = false" size="xl">
       <DgroupMatchingModal @close="showDgroupModal = false" />
+    </Modal>
+
+    <!-- Attendance Overview Modal -->
+    <Modal v-if="showAttendanceOverview" @close="showAttendanceOverview = false" size="xl">
+      <AttendanceOverviewModal 
+        :events="allEvents"
+        :attendance="allAttendance"
+        :members="members"
+        @close="showAttendanceOverview = false" 
+      />
     </Modal>
   </div>
 </template>
@@ -660,6 +675,26 @@ function selectTab(name) {
   gap: 8px;
   align-items: center;
 }
+
+.view-overview-btn {
+  padding: 8px 16px;
+  background: #1976D2;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.view-overview-btn:hover {
+  background: #1565C0;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(25, 118, 210, 0.3);
+}
+
 .date-label {
   display: inline-flex;
   flex-direction: column;
