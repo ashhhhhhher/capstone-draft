@@ -9,7 +9,6 @@ import DoughnutChart from '../components/charts/DoughnutChart.vue'
 import Modal from '../components/Modal.vue'
 import DgroupMatchingModal from '../components/DgroupMatchingModal.vue'
 import ExportButton from '../components/ExportButton.vue'
-import EventComparison from '../components/EventComparison.vue'
 
 // --- Store Setup ---
 const membersStore = useMembersStore()
@@ -260,15 +259,6 @@ function selectTab(name) {
       <p>Analyze historical trends and member engagement.</p>
     </div>
 
-    <div class="insights-tabs-row">
-      <div class="insights-tabs">
-        <button :class="['tab-button', { active: selectedTab === 'Overall' }]" @click="selectTab('Overall')">Overall</button>
-        <button :class="['tab-button', { active: selectedTab === 'Event Comparison' }]" @click="selectTab('Event Comparison')">Event Comparison</button>
-      </div>
-    </div>
-
-    <!-- Overall tab content -->
-    <div v-if="selectedTab === 'Overall'">
       <!-- 1. Key Metrics Row -->
       <div class="kpi-grid">
       <!-- Total Members -->
@@ -409,12 +399,6 @@ function selectTab(name) {
         <p v-else class="no-data-text">No event data in the selected date range. Adjust the range to view attendance.</p>
       </div>
       </div>
-    </div>
-
-    <!-- Event Comparison tab content -->
-    <div v-else class="event-comparison-panel">
-      <EventComparison />
-    </div>
 
     <!-- 6. Dgroup Matching Modal (available regardless of tab) -->
     <Modal v-if="showDgroupModal" @close="showDgroupModal = false" size="xl">
@@ -445,12 +429,6 @@ function selectTab(name) {
   color: #546E7A;
   margin-top: 4px;
 }
-
-/* improved header card */
-
-.insights-tabs-row { border-bottom: 1px solid #ECEFF1;}
-.insights-tabs { margin: 0 }
-.tab-button { padding: 8px 12px }
 
 /* --- KPI Cards --- */
 .kpi-grid {
