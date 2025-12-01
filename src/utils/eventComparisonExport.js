@@ -1,20 +1,10 @@
 // Lightweight helper to build a comparable payload similar to EventComparison.vue's exportPageData
-export default function buildComparisonPayload({ allEvents = [], allAttendance = [], members = [], activeMembers = [], currentEventId = null } = {}) {
-  // select the specified current event if provided, otherwise pick most recent service
+export default function buildComparisonPayload({ allEvents = [], allAttendance = [], members = [], activeMembers = [] } = {}) {
+  // select most recent service as current and previous up to 3 as previous
   const services = (allEvents || []).filter(e => e.eventType === 'service').slice().sort((a,b) => new Date(b.date) - new Date(a.date))
   if (!services.length) return { cards: [] }
-
-  let current = null
-  if (currentEventId) {
-    current = services.find(s => s.id === currentEventId) || null
-  }
-  if (!current) {
-    current = services[0]
-  }
-
-  // pick up to 3 previous services that are older than the current event
-  const currentIndex = services.indexOf(current)
-  const previous = services.slice(currentIndex + 1, currentIndex + 4)
+  const current = services[0]
+  const previous = services.slice(1,4)
 
   function attendeesForEvent(ev) {
     if (!ev) return []
@@ -70,7 +60,7 @@ export default function buildComparisonPayload({ allEvents = [], allAttendance =
   })
 
   // Participation
-  cards.push({ title: 'Participation % (per event)', charts: [{ title: 'Participation', labels, datasets: [{ label: 'Participation %', data: participationPercents, raw: rawCounts }] }] })
+  cards.push({ title: 'Participation % (per event)', charts: [{ title: 'Participation', labels, datasets: [{ label: 'Participation %', data: participationPercents, raw: rawCounts }] }], interpretation: 'Participation percentages with raw counts attached.' })
 
   // Member distribution: compute simple counts for groups
   function categoryCountsForEvents(list) {
@@ -101,7 +91,8 @@ export default function buildComparisonPayload({ allEvents = [], allAttendance =
         labels: ['Regulars','Dgroup Leaders','First Timers'],
         datasets: [{ label: 'Previous', data: [prevCounts.regulars, prevCounts.leaders, prevCounts.firstTimers], raw: [prevCounts.regulars, prevCounts.leaders, prevCounts.firstTimers] }]
       }
-    ]
+    ],
+    interpretation: 'Distribution of member categories.'
   })
 
   // Member Category Distribution table
@@ -122,7 +113,7 @@ export default function buildComparisonPayload({ allEvents = [], allAttendance =
   }
   const baseDemo = demographicsForList([current])
   const prevDemo = demographicsForList(previous)
-  cards.push({ title: 'Demographics comparison', charts: [{ title: 'Demographics', labels: ['Males','Females','Elevate','B1G'], datasets: [{ label: current.name, data: [baseDemo.males, baseDemo.females, baseDemo.ageElevate, baseDemo.ageB1G], raw: [baseDemo.males, baseDemo.females, baseDemo.ageElevate, baseDemo.ageB1G] }, { label: 'Previous (combined)', data: [prevDemo.males, prevDemo.females, prevDemo.ageElevate, prevDemo.ageB1G], raw: [prevDemo.males, prevDemo.females, prevDemo.ageElevate, prevDemo.ageB1G] }] }])
+  cards.push({ title: 'Demographics comparison', charts: [{ title: 'Demographics', labels: ['Males','Females','Elevate','B1G'], datasets: [{ label: current.name, data: [baseDemo.males, baseDemo.females, baseDemo.ageElevate, baseDemo.ageB1G], raw: [baseDemo.males, baseDemo.females, baseDemo.ageElevate, baseDemo.ageB1G] }, { label: 'Previous (combined)', data: [prevDemo.males, prevDemo.females, prevDemo.ageElevate, prevDemo.ageB1G], raw: [prevDemo.males, prevDemo.females, prevDemo.ageElevate, prevDemo.ageB1G] }] }], interpretation: 'Compare gender and age-group breakdowns.' })
 
   // Absence monitoring simple: present/absent counts
   const totalMembers = Array.isArray(activeMembers) ? activeMembers.length : (Array.isArray(members) ? members.length : 0)
@@ -132,7 +123,7 @@ export default function buildComparisonPayload({ allEvents = [], allAttendance =
   const presentPrevCount = presentPrev.size
   const absentCurr = Math.max(0, totalMembers - presentCurrCount)
   const absentPrev = Math.max(0, totalMembers - presentPrevCount)
-  cards.push({ title: 'Absence monitoring', tableHeaders: ['Metric', current.name || 'Current', 'Previous (combined)'], tableRows: [['Present (unique)', String(presentCurrCount), String(presentPrevCount)], ['Absent (unique)', String(absentCurr), String(absentPrev)]] })
+  cards.push({ title: 'Absence monitoring', tableHeaders: ['Metric', current.name || 'Current', 'Previous (combined)'], tableRows: [['Present (unique)', String(presentCurrCount), String(presentPrevCount)], ['Absent (unique)', String(absentCurr), String(absentPrev)]], interpretation: 'Unique present/absent counts for the current and previous combined events.' })
 
   return { cards, current: currentSum, previous: previousSums }
 }

@@ -39,13 +39,6 @@ const attendanceStore = useAttendanceStore()
 const { allEvents } = storeToRefs(eventsStore)
 const { allAttendance } = storeToRefs(attendanceStore)
 
-// Helper to find the current event id (match by name + date when possible)
-function findCurrentEventId() {
-  if (!allEvents.value || !eventName.value) return null
-  const match = (allEvents.value || []).find(e => (e.name === eventName.value || e.title === eventName.value) && e.date === eventDate.value)
-  return match ? match.id : null
-}
-
 // --- SORTING LOGIC ---
 const sortedAttendees = computed(() => {
   return [...attendees.value].sort((a, b) =>
@@ -293,7 +286,16 @@ function exportToExcel() {
     if (memberList.length > 0) { memberList.forEach(m => rows.push(mapFunction(m))); } 
     else { rows.push(["No attendees in this category."]); }
 
-      // (No per-sheet interpretation rows — interpretations are kept only for the Event Comparison sheet)
+      // Add interpretation lines for this sheet
+    const total = memberList.length || 0;
+    const elevate = memberList.filter(m => m.finalTags?.ageCategory === 'Elevate').length;
+    const b1g = memberList.filter(m => m.finalTags?.ageCategory === 'B1G').length;
+    const male = memberList.filter(m => m.gender === 'Male').length;
+    const female = memberList.filter(m => m.gender === 'Female').length;
+    const pct = (n) => total > 0 ? `${Math.round((n / total) * 100)}%` : '0%';
+    rows.push([]);
+    rows.push(['Interpretation:']);
+    rows.push([`Total: ${total} — Elevate ${elevate} (${pct(elevate)}), B1G ${b1g} (${pct(b1g)}). Gender: M ${male}, F ${female}.`]);
 
     const ws = XLSX.utils.aoa_to_sheet(rows);
     const range = XLSX.utils.decode_range(ws['!ref']);
@@ -305,12 +307,21 @@ function exportToExcel() {
         else if (R >= 2 && R <= 5) ws[cellAddress].s = { alignment: { wrapText: false } };
         else if (R === 7) ws[cellAddress].s = tableTitleStyle;
         else if (R === 8) ws[cellAddress].s = tableHeaderStyle;
-        else ws[cellAddress].s = cellStyle;
+        else if (R > 8 && R <= range.e.r - 3) ws[cellAddress].s = cellStyle;
+        else {
+          // Style interpretation rows slightly differently (italic, smaller)
+          ws[cellAddress].s = { font: { italic: true }, alignment: { wrapText: true, horizontal: 'left' } };
+        }
       }
     }
     // merge title and sheet title rows + interpretation rows so text spans full width
     const merges = [{ s: { r: 0, c: 0 }, e: { r: 0, c: colCount - 1 } }, { s: { r: 7, c: 0 }, e: { r: 7, c: colCount - 1 } }];
-    // (no interpretation rows to merge for regular sheets)
+    // interpretation rows are expected to be the last 3 pushed: empty, 'Interpretation:', <text>
+    const interpRowIndex = rows.length - 2; // index of 'Interpretation:'
+    if (interpRowIndex >= 0) {
+      merges.push({ s: { r: interpRowIndex, c: 0 }, e: { r: interpRowIndex, c: colCount - 1 } });
+      merges.push({ s: { r: interpRowIndex + 1, c: 0 }, e: { r: interpRowIndex + 1, c: colCount - 1 } });
+    }
     ws['!merges'] = merges;
     const colWidths = [];
     rows.forEach((row, rIdx) => {
@@ -329,7 +340,7 @@ function exportToExcel() {
   createSheet("First Timers", "ATTENDANCE SHEET - FIRST TIMERS", ["Name", "Gender", "Age", "Contact Number", "Fb/Messenger", "Email", "School/Occupation"], firstTimers, (m) => [`${m.lastName}, ${m.firstName}`, m.gender, m.age, m.contactNumber || '', m.fbAccount || '', m.email, m.school || '']);
   // Prepend Event Comparison sheet (current vs previous 3) to workbook using helper
   try {
-    const payload = buildComparisonPayload({ allEvents: allEvents.value || [], allAttendance: allAttendance.value || [], members: members.value || [], activeMembers: (activeMembers && activeMembers.value) ? activeMembers.value : (members && members.value) ? members.value : [], currentEventId: findCurrentEventId() })
+    const payload = buildComparisonPayload({ allEvents: allEvents.value || [], allAttendance: allAttendance.value || [], members: members.value || [], activeMembers: (activeMembers && activeMembers.value) ? activeMembers.value : (members && members.value) ? members.value : [] })
     console.log('[AttendanceListModal] comparison payload for xlsx', payload && payload.cards ? payload.cards.map(c=>c.title) : 'no-cards')
     createComparisonSheet(payload)
   } catch (e) { console.warn('Comparison sheet build failed', e) }
@@ -493,8 +504,7 @@ try {
     allEvents: allEvents.value || [], 
     allAttendance: allAttendance.value || [], 
     members: members.value || [], 
-    activeMembers: activeMembers?.value || members?.value || [],
-    currentEventId: findCurrentEventId()
+    activeMembers: activeMembers?.value || members?.value || [] 
   });
 
   const compFinal = { current: payloadFinal.current, previous: payloadFinal.previous };
@@ -534,8 +544,7 @@ try {
       allEvents: allEvents.value || [],
       allAttendance: allAttendance.value || [],
       members: members.value || [],
-      activeMembers: activeMembers?.value || members?.value || [],
-      currentEventId: findCurrentEventId()
+      activeMembers: activeMembers?.value || members?.value || []
     });
 
     const comp = { current: payload.current, previous: payload.previous };
@@ -754,7 +763,11 @@ try {
 
     const pct = (n) => total > 0 ? `${Math.round((n / total) * 100)}%` : '0%';
 
-    // (no per-table interpretation — kept out of PDF except within event comparison)
+    writeParagraph(
+      `${total} attendees are listed in this group. 
+      - Age groups include Elevate (${elevate}, ${pct(elevate)}) and B1G (${b1g}, ${pct(b1g)}). 
+      - Gender distribution shows ${male} male and ${female} female participants.`
+    );
   };
 
   // =========================================================================
@@ -762,7 +775,9 @@ try {
   // =========================================================================
   // Section wrapper for member breakdowns
   writeSectionHeader('Current Event Member Breakdown');
-      // (overview text removed — interpretations are only in the event comparison section)
+      writeParagraph(
+      `The following sections provide a breakdown of attendees by their roles and demographics within the event.`
+    );
 
   createTable(
     "First Timers",
