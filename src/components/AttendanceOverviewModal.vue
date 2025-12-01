@@ -18,31 +18,8 @@ const overviewStats = computed(() => {
 
   return {
     totalEvents,
-    totalAttendance,
-    avgAttendance,
-    uniqueAttendees: new Set(props.attendance.map(a => a.memberId)).size
+    avgAttendance
   }
-})
-
-// Age category breakdown (Elevate vs B1G)
-const ageCategoryBreakdown = computed(() => {
-  const categories = { Elevate: 0, B1G: 0, 'N/A': 0 }
-  
-  props.attendance.forEach(att => {
-    const member = props.members.find(m => m.id === att.memberId)
-    if (member?.finalTags?.ageCategory) {
-      const category = member.finalTags.ageCategory
-      if (categories.hasOwnProperty(category)) {
-        categories[category]++
-      } else {
-        categories['N/A']++
-      }
-    } else {
-      categories['N/A']++
-    }
-  })
-
-  return categories
 })
 
 // Event-by-event breakdown
@@ -75,7 +52,7 @@ const eventBreakdown = computed(() => {
 
 <template>
   <div class="overview-container">
-    <h2>📊 Historical Attendance Overview</h2>
+    <h2>Historical Attendance Overview</h2>
     
     <!-- Overall Summary -->
     <div class="summary-grid">
@@ -84,38 +61,8 @@ const eventBreakdown = computed(() => {
         <div class="summary-label">Total Events</div>
       </div>
       <div class="summary-card">
-        <div class="summary-value">{{ overviewStats.totalAttendance }}</div>
-        <div class="summary-label">Total Attendance Records</div>
-      </div>
-      <div class="summary-card">
         <div class="summary-value">{{ overviewStats.avgAttendance }}</div>
-        <div class="summary-label">Average per Event</div>
-      </div>
-      <div class="summary-card">
-        <div class="summary-value">{{ overviewStats.uniqueAttendees }}</div>
-        <div class="summary-label">Unique Attendees</div>
-      </div>
-    </div>
-
-    <!-- Age Category Breakdown -->
-    <div class="section">
-      <h3>Age Category Distribution</h3>
-      <div class="breakdown-grid">
-        <div class="breakdown-item">
-          <span class="breakdown-label">Elevate (12-21)</span>
-          <span class="breakdown-value">{{ ageCategoryBreakdown.Elevate }}</span>
-          <span class="breakdown-percent">{{ overviewStats.totalAttendance > 0 ? Math.round((ageCategoryBreakdown.Elevate / overviewStats.totalAttendance) * 100) : 0 }}%</span>
-        </div>
-        <div class="breakdown-item">
-          <span class="breakdown-label">B1G (22+)</span>
-          <span class="breakdown-value">{{ ageCategoryBreakdown.B1G }}</span>
-          <span class="breakdown-percent">{{ overviewStats.totalAttendance > 0 ? Math.round((ageCategoryBreakdown.B1G / overviewStats.totalAttendance) * 100) : 0 }}%</span>
-        </div>
-        <div class="breakdown-item">
-          <span class="breakdown-label">N/A</span>
-          <span class="breakdown-value">{{ ageCategoryBreakdown['N/A'] }}</span>
-          <span class="breakdown-percent">{{ overviewStats.totalAttendance > 0 ? Math.round((ageCategoryBreakdown['N/A'] / overviewStats.totalAttendance) * 100) : 0 }}%</span>
-        </div>
+        <div class="summary-label">Average Attendees per Event</div>
       </div>
     </div>
 
