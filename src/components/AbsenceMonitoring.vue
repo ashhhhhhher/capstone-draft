@@ -149,7 +149,7 @@ function handleArchive(member) {
       <div class="list-card list-3">
         <div class="card-title-row">
           <div class="title-left">
-            <h4>3 Consecutive Absences — Needs Attention</h4>
+            <h4>3 Absences — Needs Attention</h4>
             <div class="title-sub">Please Review Soon</div>
           </div>
           <div class="card-count">{{ monitoring3.length }}</div>

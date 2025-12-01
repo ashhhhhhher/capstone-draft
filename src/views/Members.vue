@@ -4,6 +4,7 @@ import { Search, List, LayoutGrid, SlidersHorizontal, Archive } from 'lucide-vue
 import { storeToRefs } from 'pinia'
 import { useMembersStore } from '../stores/members'
 import { useAttendanceStore } from '../stores/attendance'
+import { useEventsStore } from '../stores/events' // added to compute absence counts
 import MemberCard from '../components/MemberCard.vue'
 import MemberDetailsModal from '../components/MemberDetailsModal.vue'
 import Modal from '../components/Modal.vue'
@@ -13,8 +14,10 @@ import AbsenceMonitoring from '../components/AbsenceMonitoring.vue'  // added
 // --- Store Setup ---
 const membersStore = useMembersStore()
 const { activeMembers, archivedMembers, leaders } = storeToRefs(membersStore)
-const attendanceStore = useAttendanceStore() 
-const { currentEventAttendees } = storeToRefs(attendanceStore)
+const attendanceStore = useAttendanceStore()
+const { currentEventAttendees, allAttendance } = storeToRefs(attendanceStore)
+const eventsStore = useEventsStore()
+const { allEvents } = storeToRefs(eventsStore)
 
 // --- Page State ---
 const viewMode = ref('list')
@@ -195,6 +198,36 @@ function openAbsenceMonitoring() {
   showAbsenceMonitoringModal.value = true
 }
 
+// --- Absence monitoring count (shows red badge on button) ---
+const todayISO = () => new Date().toISOString().split('T')[0]
+
+function getPastServices() {
+  const today = todayISO()
+  return allEvents.value
+    .filter(e => e.eventType === 'service' && e.date <= today)
+    .sort((a, b) => new Date(b.date) - new Date(a.date))
+}
+
+function computeConsecutiveAbsences(member, past) {
+  let count = 0
+  for (const ev of past) {
+    const attended = allAttendance.value
+      ? allAttendance.value.some(a => a.eventId === ev.id && a.memberId === member.id)
+      : false
+    if (!attended) count++
+    else break
+  }
+  return count
+}
+
+const absenceCount = computed(() => {
+  const past = getPastServices()
+  if (!past || past.length === 0) return 0
+  return activeMembers.value
+    .map(m => computeConsecutiveAbsences(m, past))
+    .filter(c => c >= 3).length
+})
+
 </script>
 
 <template>
@@ -218,6 +251,7 @@ function openAbsenceMonitoring() {
             <path d="M9 18h6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
           <span>Absence Monitoring</span>
+          <span v-if="absenceCount > 0" class="absence-notif">{{ absenceCount }}</span>
         </button>
       </div>
     </div>
@@ -405,6 +439,25 @@ function openAbsenceMonitoring() {
 .absence-btn:hover {
   transform: translateY(-2px);
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.06);
+}
+
+/* notification badge */
+.absence-btn { position: relative; }
+.absence-notif {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  background: #D32F2F;
+  color: #fff;
+  font-size: 11px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.12);
 }
 
 .controls-wrapper {
