@@ -36,8 +36,84 @@ const membersStore = useMembersStore()
 const { members, activeMembers } = storeToRefs(membersStore)
 const eventsStore = useEventsStore()
 const attendanceStore = useAttendanceStore()
-const { allEvents } = storeToRefs(eventsStore)
+const { allEvents, currentEvent } = storeToRefs(eventsStore)
 const { allAttendance } = storeToRefs(attendanceStore)
+
+// Resolve the current event id from the modal props (tries name/title + date, then fallbacks).
+function findCurrentEventId() {
+  try {
+    // First try to match the modal's event props (so exported comparison matches the attendee tables)
+    const name = (eventName.value || '').toString().trim().toLowerCase();
+    const date = eventDate.value || '';
+    if (allEvents && Array.isArray(allEvents.value) && allEvents.value.length > 0) {
+      // Exact match by name/title and date
+      let match = (allEvents.value || []).find(e => {
+        const en = (e.name || e.title || '').toString().trim().toLowerCase();
+        return en === name && e.date === date;
+      });
+      if (match) return match.id;
+
+      // Partial name match + date
+      match = (allEvents.value || []).find(e => {
+        const en = (e.name || e.title || '').toString().trim().toLowerCase();
+        return name && en.includes(name) && e.date === date;
+      });
+      if (match) return match.id;
+
+      // Fallback: match by date only (prefer not-ended)
+      match = (allEvents.value || []).find(e => e.date === date && !e.ended);
+      if (match) return match.id;
+    }
+
+    // If no match from props, fall back to the events store's currentEvent (the live event)
+    if (currentEvent && currentEvent.value && currentEvent.value.id) {
+      return currentEvent.value.id;
+    }
+
+    return null;
+  } catch (err) {
+    return null;
+  }
+}
+
+// Helper: compute aggregates for a given event object (uses attendance + members)
+function aggregatesForEvent(event) {
+  if (!event || !event.id) return { id: event?.id || null, name: event?.name || event?.title || 'N/A', date: event?.date || '', total: 0, elevate: 0, b1g: 0, firstTimers: 0, volunteers: 0 };
+  try {
+    const recs = (allAttendance && allAttendance.value) ? (allAttendance.value.filter(a => a.eventId === event.id)) : [];
+    const memberList = (members && members.value) ? members.value.filter(m => recs.some(r => r.memberId === m.id)) : [];
+    const total = memberList.length;
+    const elevate = memberList.filter(m => m.finalTags?.ageCategory === 'Elevate').length;
+    const b1g = memberList.filter(m => m.finalTags?.ageCategory === 'B1G').length;
+    const firstTimers = memberList.filter(m => m.finalTags?.isFirstTimer).length;
+    const volunteers = memberList.filter(m => m.finalTags?.isVolunteer).length;
+    return { id: event.id, name: event.name || event.title || 'N/A', date: event.date || '', total, elevate, b1g, firstTimers, volunteers };
+  } catch (err) {
+    return { id: event.id || null, name: event.name || event.title || 'N/A', date: event.date || '', total: 0, elevate: 0, b1g: 0, firstTimers: 0, volunteers: 0 };
+  }
+}
+
+// Helper: get the N events immediately before the current event (ordered most-recent-first)
+function previousNEventsBefore(currentId, n = 3) {
+  if (!allEvents || !Array.isArray(allEvents.value) || allEvents.value.length === 0) return [];
+  // sort events by date descending (newest first)
+  const evts = (allEvents.value || []).slice().sort((a, b) => {
+    const da = new Date(a.date || '');
+    const db = new Date(b.date || '');
+    return db - da;
+  });
+  const idx = evts.findIndex(e => e.id === currentId || e.id === String(currentId));
+  if (idx === -1) {
+    // if no exact match, try matching by date using currentId as date string
+    return [];
+  }
+  // take the next n events after idx (which are earlier events)
+  const prev = [];
+  for (let i = idx + 1; i < evts.length && prev.length < n; i++) {
+    prev.push(evts[i]);
+  }
+  return prev;
+}
 
 // --- SORTING LOGIC ---
 const sortedAttendees = computed(() => {
@@ -340,8 +416,32 @@ function exportToExcel() {
   createSheet("First Timers", "ATTENDANCE SHEET - FIRST TIMERS", ["Name", "Gender", "Age", "Contact Number", "Fb/Messenger", "Email", "School/Occupation"], firstTimers, (m) => [`${m.lastName}, ${m.firstName}`, m.gender, m.age, m.contactNumber || '', m.fbAccount || '', m.email, m.school || '']);
   // Prepend Event Comparison sheet (current vs previous 3) to workbook using helper
   try {
-    const payload = buildComparisonPayload({ allEvents: allEvents.value || [], allAttendance: allAttendance.value || [], members: members.value || [], activeMembers: (activeMembers && activeMembers.value) ? activeMembers.value : (members && members.value) ? members.value : [] })
+    const payload = buildComparisonPayload({ allEvents: allEvents.value || [], allAttendance: allAttendance.value || [], members: members.value || [], activeMembers: (activeMembers && activeMembers.value) ? activeMembers.value : (members && members.value) ? members.value : [], currentEventId: findCurrentEventId() })
     console.log('[AttendanceListModal] comparison payload for xlsx', payload && payload.cards ? payload.cards.map(c=>c.title) : 'no-cards')
+    // Ensure the payload's `current` reflects the modal's attendee lists (make eventName the basis)
+    try {
+      const currentId = findCurrentEventId()
+      const currentAggregates = {
+        id: currentId || (payload && payload.current && payload.current.id) || null,
+        name: eventName.value || (payload && payload.current && payload.current.name) || 'N/A',
+        date: eventDate.value || (payload && payload.current && payload.current.date) || '',
+        total: source.length,
+        elevate: source.filter(m => m.finalTags?.ageCategory === 'Elevate').length,
+        b1g: source.filter(m => m.finalTags?.ageCategory === 'B1G').length,
+        firstTimers: source.filter(m => m.finalTags?.isFirstTimer).length,
+        volunteers: source.filter(m => m.finalTags?.isVolunteer).length
+      }
+      payload.current = Object.assign({}, payload.current || {}, currentAggregates)
+      // Replace previous with the three events immediately before current (exclude current)
+      try {
+        const prevEvts = previousNEventsBefore(payload.current.id, 3);
+        payload.previous = (prevEvts || []).map(e => aggregatesForEvent(e));
+      } catch (errPrev) {
+        console.warn('Failed building previous-3 from allEvents for xlsx', errPrev)
+      }
+    } catch (errCurr) {
+      console.warn('Failed overriding comparison payload current with modal attendees', errCurr)
+    }
     createComparisonSheet(payload)
   } catch (e) { console.warn('Comparison sheet build failed', e) }
   createSheet("Volunteers", "ATTENDANCE SHEET - VOLUNTEERS", ["Name", "Age", "Gender", "Ministry"], volunteers, (m) => [`${m.lastName}, ${m.firstName}`, m.age, m.gender, (m.finalTags?.volunteerMinistry || []).join(', ')]);
@@ -504,10 +604,37 @@ try {
     allEvents: allEvents.value || [], 
     allAttendance: allAttendance.value || [], 
     members: members.value || [], 
-    activeMembers: activeMembers?.value || members?.value || [] 
+    activeMembers: activeMembers?.value || members?.value || [],
+    currentEventId: findCurrentEventId()
   });
 
-  const compFinal = { current: payloadFinal.current, previous: payloadFinal.previous };
+  // Override payloadFinal.current with aggregates computed from modal attendees (use eventName as source)
+    try {
+      const currentId = findCurrentEventId()
+      const src = (attendees && attendees.value) ? attendees.value : []
+      const currentAggregates = {
+        id: currentId || (payloadFinal && payloadFinal.current && payloadFinal.current.id) || null,
+        name: eventName.value || (payloadFinal && payloadFinal.current && payloadFinal.current.name) || 'N/A',
+        date: eventDate.value || (payloadFinal && payloadFinal.current && payloadFinal.current.date) || '',
+        total: src.length,
+        elevate: src.filter(m => m.finalTags?.ageCategory === 'Elevate').length,
+        b1g: src.filter(m => m.finalTags?.ageCategory === 'B1G').length,
+        firstTimers: src.filter(m => m.finalTags?.isFirstTimer).length,
+        volunteers: src.filter(m => m.finalTags?.isVolunteer).length
+      }
+      payloadFinal.current = Object.assign({}, payloadFinal.current || {}, currentAggregates)
+      // Replace previous with the three events immediately before current (exclude current)
+      try {
+        const prevEvts = previousNEventsBefore(payloadFinal.current.id, 3);
+        payloadFinal.previous = (prevEvts || []).map(e => aggregatesForEvent(e));
+      } catch (errPrev) {
+        console.warn('Failed building previous-3 from allEvents for pdf summary', errPrev)
+      }
+    } catch (err) {
+      console.warn('Failed to override payloadFinal.current with modal attendees', err)
+    }
+
+    const compFinal = { current: payloadFinal.current, previous: payloadFinal.previous };
   const prevTotalsFinal = (compFinal.previous || []).map(p => ({ name: p.name || 'Unknown', total: p.total || 0 }));
   const prevSumFinal = prevTotalsFinal.reduce((s, p) => s + (p.total || 0), 0);
   const prevAvgFinal = (prevTotalsFinal.length) ? Math.round(prevSumFinal / prevTotalsFinal.length) : 0;
@@ -517,17 +644,24 @@ try {
     b1g: (compFinal.previous || []).reduce((s,p) => s + (p.b1g||0), 0), 
     firstTimers: (compFinal.previous || []).reduce((s,p) => s + (p.firstTimers||0), 0) 
   };
-  const currentTotalFinal = compFinal.current?.total || 0;
+
+  // Use the modal's attendee lists as the source of truth for current-event counts
+  const currentTotalFinal = (attendees && attendees.value) ? attendees.value.length : 0;
+  const currentElevateFinal = (attendees && attendees.value) ? (attendees.value.filter(m => m.finalTags?.ageCategory === 'Elevate').length) : 0;
+  const currentB1gFinal = (attendees && attendees.value) ? (attendees.value.filter(m => m.finalTags?.ageCategory === 'B1G').length) : 0;
+  const currentFirstTimersFinal = (attendees && attendees.value) ? (attendees.value.filter(m => m.finalTags?.isFirstTimer).length) : 0;
+  const currentVolunteersFinal = (attendees && attendees.value) ? (attendees.value.filter(m => m.finalTags?.isVolunteer).length) : 0;
+  const currentNameFinal = compFinal.current?.name || eventName.value || 'N/A';
 
   writeSectionHeader('Summary');
 
-  // Human-readable summary paragraph
+  // Human-readable summary paragraph (use the comparison payload's current event)
   writeParagraph(
-    `    This report provides an overview of attendance for the event "${compFinal.current?.name || 'N/A'}" compared to the previous three events. A total of ${currentTotalFinal} attendees participated in the current event, while previous events — ${prevListTextFinal} — averaged ${prevAvgFinal} participants. 
+    `    This report provides an overview of attendance for the event "${eventName.value || 'N/A'}" compared to the previous events. A total of ${compFinal.current?.total || totalAttended} attendees participated in the current event, while previous events — ${prevListTextFinal} — averaged ${prevAvgFinal} participants. 
 
-    Looking at specific groups, the Elevate category had ${compFinal.current?.elevate || 0} attendees (previous average: ${prevAvgFinal.elevate}), the B1G group had ${compFinal.current?.b1g || 0} attendees (previous average: ${prevAvgFinal.b1g}), and First Timers totaled ${compFinal.current?.firstTimers || 0} (previous average: ${prevAvgFinal.firstTimers}). 
+    Looking at specific groups, the Elevate category had ${compFinal.current?.elevate || 0} attendees (previous combined: ${prevCombinedFinal.elevate}), the B1G group had ${compFinal.current?.b1g || 0} attendees (previous combined: ${prevCombinedFinal.b1g}), and First Timers totaled ${compFinal.current?.firstTimers || 0} (previous combined: ${prevCombinedFinal.firstTimers}). 
 
-    Overall, the attendance rate was ${rate}%. Key insights, including absence monitoring and demographics, are summarized in the following sections, along with member breakdowns for First Timers, Leaders, Volunteers, and B1G/Elevate cohorts. This summary is intended to provide a concise yet comprehensive snapshot of event participation and engagement trends.`
+    Overall, the attendance rate was ${rate}%.`
   );
 
 } catch (e) { 
@@ -544,8 +678,35 @@ try {
       allEvents: allEvents.value || [],
       allAttendance: allAttendance.value || [],
       members: members.value || [],
-      activeMembers: activeMembers?.value || members?.value || []
+      activeMembers: activeMembers?.value || members?.value || [],
+      currentEventId: findCurrentEventId()
     });
+
+    // Ensure the comparison payload's current uses the modal's attendees as source of truth
+    try {
+      const currentId = findCurrentEventId()
+      const src = (attendees && attendees.value) ? attendees.value : []
+      const currentAggregates = {
+        id: currentId || (payload && payload.current && payload.current.id) || null,
+        name: eventName.value || (payload && payload.current && payload.current.name) || 'N/A',
+        date: eventDate.value || (payload && payload.current && payload.current.date) || '',
+        total: src.length,
+        elevate: src.filter(m => m.finalTags?.ageCategory === 'Elevate').length,
+        b1g: src.filter(m => m.finalTags?.ageCategory === 'B1G').length,
+        firstTimers: src.filter(m => m.finalTags?.isFirstTimer).length,
+        volunteers: src.filter(m => m.finalTags?.isVolunteer).length
+      }
+      payload.current = Object.assign({}, payload.current || {}, currentAggregates)
+      // Replace previous with the three events immediately before current (exclude current)
+      try {
+        const prevEvts = previousNEventsBefore(payload.current.id, 3);
+        payload.previous = (prevEvts || []).map(e => aggregatesForEvent(e));
+      } catch (errPrev) {
+        console.warn('Failed building previous-3 from allEvents for pdf comparison', errPrev)
+      }
+    } catch (errPayload) {
+      console.warn('Failed to enforce modal-attendee current on comparison payload', errPayload)
+    }
 
     const comp = { current: payload.current, previous: payload.previous };
     const compBody = [];

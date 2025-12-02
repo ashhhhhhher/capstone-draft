@@ -230,10 +230,10 @@ function formatShortDate(dateStr) {
   -webkit-overflow-scrolling: touch;
 }
 .upcoming-card-wrapper {
-  flex: 0 0 160px; /* Fixed width for cards */
+  flex: 0 0 100%; /* Fixed width for cards */
 }
 .upcoming-card {
-  height: 200px;
+  height: 120px;
   border-radius: 16px;
   background-color: #CFD8DC; /* Fallback color */
   background-size: cover;
