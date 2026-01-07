@@ -2,7 +2,7 @@
 import { ref, computed } from 'vue'
 import { storeToRefs } from 'pinia'
 import Modal from '../components/Modal.vue'
-import RegistrationSuccess from '../components/RegistrationSuccess.vue'
+import RegistrationSuccess from '../components/DGM Components/RegistrationSuccess.vue'
 import { useMembersStore } from '../stores/members'
 import { useAuthStore } from '../stores/auth'; 
 

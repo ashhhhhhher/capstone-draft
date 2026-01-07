@@ -1,6 +1,6 @@
 <script setup>
 import { RouterView, useRoute, useRouter } from 'vue-router'
-import AppHeader from '../components/AppHeader.vue'
+import AppHeader from '../components/DGM Components/AppHeader.vue'
 import { Home, Users, QrCode, CalendarCheck } from 'lucide-vue-next'
 
 const route = useRoute()

@@ -4,11 +4,11 @@ import { Search, List, LayoutGrid, SlidersHorizontal, Archive } from 'lucide-vue
 import { storeToRefs } from 'pinia'
 import { useMembersStore } from '../stores/members'
 import { useAttendanceStore } from '../stores/attendance'
-import MemberCard from '../components/MemberCard.vue'
-import MemberDetailsModal from '../components/MemberDetailsModal.vue'
-import Modal from '../components/Modal.vue'
-import FilterModal from '../components/FilterModal.vue'
-import AbsenceMonitoring from '../components/AbsenceMonitoring.vue'  // added
+import MemberCard from '../components/DGM Components/MemberCard.vue'
+import MemberDetailsModal from '../components/DGM Components/MemberDetailsModal.vue'
+import Modal from '../components/DGM Components/Modal.vue'
+import FilterModal from '../components/DGM Components/FilterModal.vue'
+import AbsenceMonitoring from '../components/AbsenceMonitoring.vue' 
 
 // --- Store Setup ---
 const membersStore = useMembersStore()

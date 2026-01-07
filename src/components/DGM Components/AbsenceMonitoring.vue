@@ -1,10 +1,10 @@
 <script setup>
 import { computed } from 'vue'
 import { storeToRefs } from 'pinia'
-import { useMembersStore } from '../stores/members'
-import { useEventsStore } from '../stores/events'
-import { useAttendanceStore } from '../stores/attendance'
-import { useNotificationsStore } from '../stores/notifications'
+import { useMembersStore } from '../../stores/members'
+import { useEventsStore } from '../../stores/events'
+import { useAttendanceStore } from '../../stores/attendance'
+import { useNotificationsStore } from '../../stores/notifications'
 
 // --- Stores ---
 const membersStore = useMembersStore()

@@ -2,7 +2,7 @@
 import { computed } from 'vue'
 import { Edit2, Trash2 } from 'lucide-vue-next'
 import { storeToRefs } from 'pinia'
-import { useEventsStore } from '../stores/events'
+import { useEventsStore } from '../../stores/events'
 
 const emit = defineEmits(['close', 'editEvent'])
 const eventsStore = useEventsStore()

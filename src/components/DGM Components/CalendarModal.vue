@@ -3,7 +3,7 @@ import { ref, computed } from 'vue'
 import ExportButton from './ExportButton.vue'
 import { ChevronLeft, ChevronRight, Plus, Edit2, Trash2, MapPin } from 'lucide-vue-next'
 import { storeToRefs } from 'pinia'
-import { useEventsStore } from '../stores/events'
+import { useEventsStore } from '../../stores/events'
 
 const emit = defineEmits(['close', 'createEvent', 'editEvent', 'exportEvent'])
 // accept isMember from parent; when true, hide create/edit/delete UI for members
