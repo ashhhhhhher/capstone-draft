@@ -1,7 +1,7 @@
 <script setup>
 import { computed, watch } from 'vue'
 import { RouterView, useRoute } from 'vue-router'
-import NavBar from './components/NavBar.vue'
+import NavBar from './components/dgmComponents/NavBar.vue'
 import { useAuthStore } from './stores/auth'
 import { useMembersStore } from './stores/members'
 import { useEventsStore } from './stores/events'

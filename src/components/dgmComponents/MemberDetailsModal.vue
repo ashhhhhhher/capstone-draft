@@ -1,8 +1,8 @@
 <script setup>
 import { ref, computed } from 'vue'
 import { storeToRefs } from 'pinia'
-import { useMembersStore } from '../stores/members'
-import { useAttendanceStore } from '../stores/attendance'
+import { useMembersStore } from '../../stores/members'
+import { useAttendanceStore } from '../../stores/attendance'
 import { Archive, RotateCcw } from 'lucide-vue-next' 
 
 const props = defineProps({

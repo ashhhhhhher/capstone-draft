@@ -1,7 +1,7 @@
 <script setup>
 import { computed } from 'vue'
 import { Calendar } from 'lucide-vue-next'
-import { useEventsStore } from '../stores/events'
+import { useEventsStore } from '../../stores/events'
 
 const emit = defineEmits(['open-calendar','open-details']) 
 

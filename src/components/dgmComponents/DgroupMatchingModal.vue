@@ -1,6 +1,6 @@
 <script setup>
 import { computed } from 'vue'
-import { useMembersStore } from '../stores/members'
+import { useMembersStore } from '../../stores/members'
 import { storeToRefs } from 'pinia'
 
 const emit = defineEmits(['close'])

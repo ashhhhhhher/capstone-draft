@@ -6,10 +6,10 @@ import { useEventsStore } from '../stores/events'
 import { useAttendanceStore } from '../stores/attendance'
 import BarChart from '../components/charts/BarChart.vue'
 import DoughnutChart from '../components/charts/DoughnutChart.vue'
-import Modal from '../components/DGM Components/Modal.vue'
-import DgroupMatchingModal from '../components/DGM Components/DgroupMatchingModal.vue'
-import AttendanceOverviewModal from '../components/DGM Components/AttendanceOverviewModal.vue'
-import ExportButton from '../components/DGM Components/ExportButton.vue'
+import Modal from '../components/dgmComponents/Modal.vue'
+import DgroupMatchingModal from '../components/dgmComponents/DgroupMatchingModal.vue'
+import AttendanceOverviewModal from '../components/dgmComponents/AttendanceOverviewModal.vue'
+import ExportButton from '../components/dgmComponents/ExportButton.vue'
 
 // --- Store Setup ---
 const membersStore = useMembersStore()

@@ -1,7 +1,7 @@
 <script setup>
 import { ref, watch } from 'vue'
-import { useEventsStore } from '../stores/events'
-import { storage } from '../firebase'
+import { useEventsStore } from '../../stores/events'
+import { storage } from '../../firebase'
 import { ref as storageRef, uploadBytesResumable, getDownloadURL } from "firebase/storage"
 import { v4 as uuidv4 } from 'uuid'
 

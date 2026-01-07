@@ -5,11 +5,11 @@ import { storeToRefs } from 'pinia'
 import { useMembersStore } from '../stores/members'
 import { useAttendanceStore } from '../stores/attendance'
 import { useEventsStore } from '../stores/events' // added to compute absence counts
-import MemberCard from '../components/MemberCard.vue'
-import MemberDetailsModal from '../components/MemberDetailsModal.vue'
-import Modal from '../components/Modal.vue'
-import FilterModal from '../components/FilterModal.vue'
-import AbsenceMonitoring from '../components/AbsenceMonitoring.vue'  // added
+import MemberCard from '../components/dgmComponents/MemberCard.vue'
+import MemberDetailsModal from '../components/dgmComponents/MemberDetailsModal.vue'
+import Modal from '../components/dgmComponents/Modal.vue'
+import FilterModal from '../components/dgmComponents/FilterModal.vue'
+import AbsenceMonitoring from '../components/dgmComponents/AbsenceMonitoring.vue'  // added
 
 // --- Store Setup ---
 const membersStore = useMembersStore()

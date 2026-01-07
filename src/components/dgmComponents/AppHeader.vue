@@ -2,8 +2,8 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import { User, ChevronDown, LogOut } from 'lucide-vue-next'
 import { useRouter } from 'vue-router'
-import { useAuthStore } from '../stores/auth'
-import { useNotificationsStore } from '../stores/notifications'
+import { useAuthStore } from '../../stores/auth'
+import { useNotificationsStore } from '../../stores/notifications'
 
 const authStore = useAuthStore()
 const notificationsStore = useNotificationsStore()
