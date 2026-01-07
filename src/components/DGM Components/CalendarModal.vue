@@ -170,7 +170,7 @@ function handleDelete(event) {
                             <button class="btn-icon btn-delete" @click="handleDelete(event)">
                                 <Trash2 :size="16" />
                             </button>
-                            <ExportButton exportType="events" :singleEvent="event" />
+                            
                         </div>
                     </div>
                     
