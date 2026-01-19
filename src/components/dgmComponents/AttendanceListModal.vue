@@ -1002,12 +1002,12 @@ doc.save(`${eventName.value || 'Attendance'}_Attendance_Report.pdf`);
       <div class="btn-group">
         <button class="export-btn pdf-btn" @click="exportToPDF">
           <FileText :size="16" />
-          Reports (.pdf)
+          Attendance (.pdf)
         </button>
 
         <button class="export-btn excel-btn" @click="exportToExcel">
           <Download :size="16" />
-          Data (.xlsx)
+          Attendance (.xlsx)
         </button>
       </div>
       
