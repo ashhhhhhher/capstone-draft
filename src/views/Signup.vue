@@ -1,16 +1,11 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { ref } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
-import { useMembersStore } from '../stores/members' 
-import { storeToRefs } from 'pinia'
 import emailjs from '@emailjs/browser'
 
 const authStore = useAuthStore()
-const membersStore = useMembersStore()
 const router = useRouter()
-
-const { leaders } = storeToRefs(membersStore)
 
 // --- YOUR EMAILJS CREDENTIALS ---
 const EMAILJS_SERVICE_ID = "service_wfpraos";   
@@ -24,23 +19,21 @@ const inputOTP = ref('')
 const errorMessage = ref('')
 const isResending = ref(false)
 const isSendingEmail = ref(false) 
+const showWelcome = ref(false) // For Blue Screen Transition
 
-// --- Form Data ---
+// --- Form Data (Simplified) ---
 const email = ref('')
 const password = ref('')
 const confirmPassword = ref('')
 const selectedBranch = ref('baguio') 
 
-// Personal Info
+// Reduced Personal Info
 const firstName = ref('')
 const lastName = ref('')
 const birthday = ref('')
 const gender = ref('')
-const fbAccount = ref('')
-const contactNumber = ref('')
 
 // --- Validation ---
-
 async function handleInitialSubmit() {
   errorMessage.value = ''
   
@@ -56,7 +49,6 @@ async function handleInitialSubmit() {
   await generateAndSendOTP();
 }
 
-// --- REAL EMAIL LOGIC ---
 async function generateAndSendOTP() {
   isSendingEmail.value = true;
   errorMessage.value = '';
@@ -64,13 +56,11 @@ async function generateAndSendOTP() {
   const code = Math.floor(100000 + Math.random() * 900000).toString();
   generatedOTP.value = code;
 
-  // --- CRITICAL FIX HERE ---
-  // These keys must match your Template variables AND your "To Email" setting
   const templateParams = {
-    name: firstName.value,             // Matches {{name}} in your template
-    time: new Date().toLocaleString(), // Matches {{time}} in your template
-    otp_code: code,                    // Matches {{otp_code}} in your template
-    to_email: email.value              // Matches the "To Email" field (See Step 2 below)
+    name: firstName.value,             
+    time: new Date().toLocaleString(), 
+    otp_code: code,                    
+    to_email: email.value              
   };
 
   try {
@@ -114,14 +104,20 @@ async function verifyAndSignup() {
         firstName: firstName.value,
         lastName: lastName.value,
         birthday: birthday.value,
-        gender: gender.value,
-        fbAccount: fbAccount.value.trim(),
-        contactNumber: contactNumber.value.trim(),
+        gender: gender.value
       }
     }
     
+    // Create account
     await authStore.signup(email.value, password.value, userData)
-    router.push({ name: 'memberHome' }) 
+    
+    // Show Welcome Screen
+    showWelcome.value = true;
+    
+    // Delay routing to let the animation play
+    setTimeout(() => {
+        router.push({ name: 'memberHome' }) 
+    }, 2500)
 
   } catch (error) {
     if (error.code === 'auth/email-already-in-use') {
@@ -139,6 +135,19 @@ async function verifyAndSignup() {
 
 <template>
   <div class="signup-container">
+    
+    <!-- Welcome Transition Overlay -->
+    <transition name="fade">
+      <div v-if="showWelcome" class="welcome-overlay">
+        <div class="welcome-content">
+          <img src="/ccf logo.png" alt="CCF Logo" class="welcome-logo" />
+          <h1>Welcome, {{ firstName }}!</h1>
+          <p>Getting your dashboard ready...</p>
+          <div class="spinner"></div>
+        </div>
+      </div>
+    </transition>
+
     <div class="signup-box">
       <h2>{{ step === 1 ? 'Member Sign Up' : 'Verify Email' }}</h2>
       <p v-if="step === 1">Join Elevate Baguio. Your profile will be created automatically.</p>
@@ -176,16 +185,6 @@ async function verifyAndSignup() {
                 <option value="Female">Female</option>
               </select>
             </div>
-          </div>
-          <div class="form-grid">
-            <div class="form-group">
-              <label for="contactNumber">Contact Number</label>
-              <input type="tel" id="contactNumber" v-model="contactNumber">
-            </div>
-          </div>
-          <div class="form-group">
-              <label for="fbAccount">Facebook Account</label>
-              <input type="text" id="fbAccount" v-model="fbAccount">
           </div>
         </div>
         <hr />
@@ -229,7 +228,7 @@ async function verifyAndSignup() {
 </template>
 
 <style scoped>
-.signup-container { display: flex; align-items: center; justify-content: center; padding: 60px 0; background-color: #f4f7f9; min-height: 100vh; }
+.signup-container { display: flex; align-items: center; justify-content: center; padding: 60px 0; background-color: #f4f7f9; min-height: 100vh; position: relative; }
 .signup-box { background: white; padding: 40px; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); width: 90%; max-width: 500px; text-align: center; }
 h2 { margin-top: 0; color: #0D47A1; }
 p { color: #546E7A; margin-bottom: 24px; }
@@ -237,7 +236,6 @@ p { color: #546E7A; margin-bottom: 24px; }
 .form-group { margin-bottom: 20px; }
 .form-group label { display: block; margin-bottom: 8px; font-weight: 500; color: #333; }
 .form-group input, .form-group select { width: 100%; padding: 12px; border: 1px solid #B0BEC5; border-radius: 8px; box-sizing: border-box; font-size: 16px; }
-.input-error { border-color: #D32F2F !important; box-shadow: 0 0 0 1px #D32F2F; }
 .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 hr { border: none; border-top: 1px solid #ECEFF1; margin: 16px 0 24px 0; }
 .signup-btn { width: 100%; padding: 14px; margin-top: 16px; background-color: #1976D2; color: white; font-size: 16px; font-weight: 600; border: none; border-radius: 8px; cursor: pointer; }
@@ -249,4 +247,70 @@ hr { border: none; border-top: 1px solid #ECEFF1; margin: 16px 0 24px 0; }
 .otp-actions { display: flex; justify-content: space-between; margin-top: 20px; }
 .text-btn { background: none; border: none; color: #1976D2; font-size: 14px; cursor: pointer; text-decoration: underline; }
 .text-btn.cancel { color: #78909C; }
+
+/* Welcome Overlay Styles */
+.welcome-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: #1976D2; /* Brand Blue */
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  color: white;
+}
+
+.welcome-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+
+.welcome-logo {
+  width: 100px;
+  height: auto;
+  margin-bottom: 16px;
+  background: white;
+  border-radius: 50%;
+  padding: 12px;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+}
+
+.welcome-content h1 {
+  font-size: 32px;
+  margin: 0;
+  font-weight: 700;
+}
+
+.welcome-content p {
+  color: rgba(255,255,255,0.8);
+  font-size: 16px;
+  margin: 0;
+}
+
+.spinner {
+  width: 40px;
+  height: 40px;
+  border: 4px solid rgba(255, 255, 255, 0.3);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin-top: 24px;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.fade-enter-active, .fade-leave-active {
+  transition: opacity 0.5s ease;
+}
+.fade-enter-from, .fade-leave-to {
+  opacity: 0;
+}
 </style>

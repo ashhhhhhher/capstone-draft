@@ -9,17 +9,24 @@ const router = useRouter()
 const email = ref('')
 const password = ref('')
 const errorMessage = ref('')
+const showWelcome = ref(false)
 
 async function handleLogin() {
   errorMessage.value = ''
   try {
     await authStore.login(email.value, password.value)
     
-    if (authStore.userRole === 'admin') {
-      router.push('/')
-    } else {
-      router.push('/member/home') 
-    }
+    // Trigger Welcome Screen
+    showWelcome.value = true;
+
+    // Delay routing for 2.5s
+    setTimeout(() => {
+      if (authStore.userRole === 'admin') {
+        router.push('/')
+      } else {
+        router.push('/member/home') 
+      }
+    }, 2500)
 
   } catch (error) {
     switch (error.code) {
@@ -38,6 +45,19 @@ async function handleLogin() {
 
 <template>
   <div class="login-container">
+    
+    <!-- Welcome Transition Overlay -->
+    <transition name="fade">
+      <div v-if="showWelcome" class="welcome-overlay">
+        <div class="welcome-content">
+          <img src="/ccf logo.png" alt="CCF Logo" class="welcome-logo" />
+          <h1>Welcome, {{ authStore.user?.displayName?.split(' ')[0] || 'Member' }}!</h1>
+          <p>Signing you in...</p>
+          <div class="spinner"></div>
+        </div>
+      </div>
+    </transition>
+
     <div class="login-box">
       <h2>Login</h2>
       <p>Please sign in to continue.</p>
@@ -140,5 +160,71 @@ p {
 .signup-link {
   margin-top: 24px;
   font-size: 14px;
+}
+
+/* Welcome Overlay Styles */
+.welcome-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: #1976D2; /* Brand Blue */
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  color: white;
+}
+
+.welcome-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+
+.welcome-logo {
+  width: 100px;
+  height: auto;
+  margin-bottom: 16px;
+  background: white;
+  border-radius: 50%;
+  padding: 12px;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+}
+
+.welcome-content h1 {
+  font-size: 32px;
+  margin: 0;
+  font-weight: 700;
+}
+
+.welcome-content p {
+  color: rgba(255,255,255,0.8);
+  font-size: 16px;
+  margin: 0;
+}
+
+.spinner {
+  width: 40px;
+  height: 40px;
+  border: 4px solid rgba(255, 255, 255, 0.3);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin-top: 24px;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.fade-enter-active, .fade-leave-active {
+  transition: opacity 0.5s ease;
+}
+.fade-enter-from, .fade-leave-to {
+  opacity: 0;
 }
 </style>
