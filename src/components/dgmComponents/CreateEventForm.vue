@@ -2,7 +2,7 @@
 import { ref, watch } from 'vue'
 import { useEventsStore } from '../../stores/events'
 import { storage } from '../../firebase'
-import { ref as storageRef, uploadBytesResumable, getDownloadURL } from "firebase/storage"
+import { ref as storageRef, uploadBytesResumable, getDownloadURL, deleteObject } from "firebase/storage"
 import { v4 as uuidv4 } from 'uuid'
 
 const props = defineProps({
@@ -81,6 +81,18 @@ function uploadImage(file) {
   })
 }
 
+// Helper to delete image
+async function deleteOldImage(url) {
+  if (!url) return
+  try {
+    const fileRef = storageRef(storage, url)
+    await deleteObject(fileRef)
+    console.log("Old event image deleted.")
+  } catch (error) {
+    console.warn("Could not delete old event image:", error)
+  }
+}
+
 async function handleSubmit() {
   if (!eventName.value || !eventDate.value || !eventTime.value) {
     alert('Please fill in the event name, date, and time.')
@@ -92,6 +104,11 @@ async function handleSubmit() {
 
   try {
     if (imageFile.value) {
+      // If editing and we are replacing an image, delete the old one first
+      if (isEditMode.value && props.eventToEdit.photoURL) {
+        await deleteOldImage(props.eventToEdit.photoURL)
+      }
+      // Upload new
       newPhotoURL = await uploadImage(imageFile.value)
     }
     
