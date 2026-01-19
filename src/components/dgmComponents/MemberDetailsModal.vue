@@ -3,7 +3,7 @@ import { ref, computed } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useMembersStore } from '../../stores/members'
 import { useAttendanceStore } from '../../stores/attendance'
-import { Archive, RotateCcw } from 'lucide-vue-next' 
+import { Archive, RotateCcw, Copy } from 'lucide-vue-next' 
 
 const props = defineProps({
   member: Object
@@ -43,9 +43,17 @@ const memberAttendanceStatus = computed(() => {
   return 'Never Attended';
 });
 
+// --- Date Joined Logic ---
+const memberSince = computed(() => {
+  if (!props.member.createdAt) return 'Unknown';
+  const date = new Date(props.member.createdAt);
+  return date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+});
+
 // --- Helper Computeds ---
 const isArchived = computed(() => props.member.status === 'archived')
 
+// Filter leaders by gender for the dropdown
 const dgroupLeadersList = computed(() => {
   if (!editableMember.value.gender) return [] 
   return leaders.value
@@ -85,11 +93,44 @@ function toTitleCase(str) {
   return str.toLowerCase().replace(/\b\w/g, char => char.toUpperCase());
 }
 
+function generateDgroupID() {
+  const year = new Date().getFullYear().toString().slice(-2);
+  const random = Math.floor(1000 + Math.random() * 9000);
+  return `DG-${year}-${random}`;
+}
+
 function save() {
-  if (editableMember.value.finalTags.isRegular && !editableMember.value.dgroupLeader) {
-    alert('A "Regular Member" must be assigned to a Dgroup Leader.');
+  // Logic: First Timer determination based on Dgroup Leader selection
+  const leaderSelection = editableMember.value.dgroupLeader;
+
+  if (leaderSelection === 'N/A (First Timer)') {
+    editableMember.value.finalTags.isFirstTimer = true;
+    editableMember.value.dgroupLeader = ''; // Clear string for logic, or keep specific string if needed by backend. Keeping empty string implies no leader.
+    // However, to persist the "State" of N/A First Timer, we might want to keep the string or just rely on the tag.
+    // Let's set dgroupLeader to empty string so they appear in Unassigned, and tag as First Timer.
+    editableMember.value.dgroupLeader = ''; 
+  } else if (leaderSelection === 'N/A (D-Lead)') {
+    // For Dgroup Leaders or Regulars with external leaders
+    editableMember.value.finalTags.isFirstTimer = false;
+    // We treat this string as a valid "Leader" placeholder so they don't get flagged as unassigned/first timer logic elsewhere
+    editableMember.value.dgroupLeader = 'N/A (D-Lead)'; 
+  } else {
+    // Specific Leader Selected
+    editableMember.value.finalTags.isFirstTimer = false;
+  }
+
+  // Validate Regular Member Requirement
+  // If marked Regular, must have a leader OR be N/A (D-Lead) OR be a Dgroup Leader themselves
+  if (
+    editableMember.value.finalTags.isRegular && 
+    !editableMember.value.dgroupLeader && 
+    !editableMember.value.finalTags.isDgroupLeader
+  ) {
+    alert('A "Regular Member" must be assigned to a Dgroup Leader or marked as N/A (D-Lead).');
     return;
   }
+  
+  // Update Age & Category
   editableMember.value.age = editableAge.value
   if (editableAge.value >= 12 && editableAge.value <= 21) {
     editableMember.value.finalTags.ageCategory = 'Elevate'
@@ -99,17 +140,27 @@ function save() {
     editableMember.value.finalTags.ageCategory = 'N/A'
   }
   
-  if (!editableMember.value.finalTags.isDgroupLeader) {
+  // Leader Logic: Generate ID if new leader
+  if (editableMember.value.finalTags.isDgroupLeader) {
+    if (!editableMember.value.dgroupId) {
+      editableMember.value.dgroupId = generateDgroupID();
+    }
+    // Default group name if empty
+    if (!editableMember.value.dgroupName) {
+      editableMember.value.dgroupName = `${editableMember.value.firstName}'s Dgroup`;
+    }
+  } else {
     editableMember.value.dgroupCapacity = null
   }
   
+  // Format Strings
   editableMember.value.lastName = toTitleCase(editableMember.value.lastName.trim());
   editableMember.value.firstName = toTitleCase(editableMember.value.firstName.trim());
-  editableMember.value.middleInitial = editableMember.value.middleInitial.toUpperCase().trim();
-  editableMember.value.school = toTitleCase(editableMember.value.school.trim());
-  editableMember.value.email = editableMember.value.email.trim();
-  editableMember.value.fbAccount = editableMember.value.fbAccount.trim();
-  editableMember.value.contactNumber = editableMember.value.contactNumber.trim();
+  editableMember.value.middleInitial = editableMember.value.middleInitial ? editableMember.value.middleInitial.toUpperCase().trim() : '';
+  editableMember.value.school = editableMember.value.school ? toTitleCase(editableMember.value.school.trim()) : '';
+  editableMember.value.email = editableMember.value.email ? editableMember.value.email.trim() : '';
+  editableMember.value.fbAccount = editableMember.value.fbAccount ? editableMember.value.fbAccount.trim() : '';
+  editableMember.value.contactNumber = editableMember.value.contactNumber ? editableMember.value.contactNumber.trim() : '';
   
   emit('saveChanges', editableMember.value)
   isEditMode.value = false
@@ -131,6 +182,11 @@ function confirmArchive() {
 function confirmRestore() {
   emit('restoreMember', props.member.id)
 }
+
+function copyToClipboard(text) {
+  navigator.clipboard.writeText(text);
+  alert('ID copied to clipboard: ' + text);
+}
 </script>
 
 <template>
@@ -138,13 +194,30 @@ function confirmRestore() {
     
     <div class="modal-header-section">
       <div v-if="!isEditMode && !showArchiveConfirmation" class="modal-header">
-        <div class="header-text">
-          <h2>{{ member.firstName }} {{ member.lastName }}</h2>
-          <div class="status-badges">
-            <span class="member-id">ID: {{ member.id }}</span>
-            <span v-if="isArchived" class="archived-badge">ARCHIVED</span>
+        
+        <div class="header-left">
+          <!-- Profile Picture in Modal Header -->
+          <div class="modal-avatar-wrapper">
+            <img 
+              v-if="member.profilePicture" 
+              :src="member.profilePicture" 
+              alt="Profile" 
+              class="modal-avatar-img"
+            />
+            <div v-else class="modal-avatar-placeholder">
+              {{ member.firstName ? member.firstName.charAt(0).toUpperCase() : '?' }}
+            </div>
+          </div>
+
+          <div class="header-text">
+            <h2>{{ member.firstName }} {{ member.lastName }}</h2>
+            <div class="status-badges">
+              <span class="member-id">ID: {{ member.id }}</span>
+              <span v-if="isArchived" class="archived-badge">ARCHIVED</span>
+            </div>
           </div>
         </div>
+
         <button class="btn-primary" @click="isEditMode = true">Edit</button>
       </div>
       <h3 v-if="isEditMode" class="modal-title">Edit Member Details</h3>
@@ -217,7 +290,8 @@ function confirmRestore() {
           <div class="form-group">
             <label>Dgroup Leader</label>
             <select v-model="editableMember.dgroupLeader">
-              <option value="">N/A (First Timer)</option>
+              <option value="N/A (First Timer)">N/A (First Timer)</option>
+              <option value="N/A (D-Lead)">N/A (D-Lead)</option>
               <option v-for="leader in dgroupLeadersList" :key="leader" :value="leader">
                 {{ leader }}
               </option>
@@ -227,10 +301,8 @@ function confirmRestore() {
         
         <h4>Categories & Ministry</h4>
         <div class="tag-group">
-            <div class="checkbox-item">
-                <input type="checkbox" id="firstTimer" v-model="editableMember.finalTags.isFirstTimer">
-                <label for="firstTimer">First Timer</label>
-            </div>
+            <!-- First Timer Checkbox Removed (Handled by Dgroup Leader Dropdown) -->
+            
             <div class="checkbox-item">
                 <input type="checkbox" id="seeker" v-model="editableMember.finalTags.isSeeker">
                 <label for="seeker">Seeker</label>
@@ -244,9 +316,20 @@ function confirmRestore() {
                 <label for="leader">Dgroup Leader</label>
             </div>
              
+             <!-- Leader Specific Settings -->
              <div v-if="editableMember.finalTags.isDgroupLeader" class="form-group indented">
-                 <label>Dgroup Capacity</label>
-                 <input type="number" v-model="editableMember.dgroupCapacity" min="1">
+                 <div class="sub-form-group">
+                   <label>Dgroup Name</label>
+                   <input type="text" v-model="editableMember.dgroupName" placeholder="e.g. Elevate Boys">
+                 </div>
+                 <div class="sub-form-group">
+                   <label>Dgroup Capacity</label>
+                   <input type="number" v-model="editableMember.dgroupCapacity" min="1">
+                 </div>
+                 <div class="sub-form-group" v-if="editableMember.dgroupId">
+                   <label>Dgroup ID (Auto)</label>
+                   <input type="text" :value="editableMember.dgroupId" disabled class="disabled-input">
+                 </div>
             </div>
 
             <div class="checkbox-item">
@@ -258,7 +341,7 @@ function confirmRestore() {
                 <label class="sub-label">Select Ministries:</label>
                 <div class="checkbox-subgroup">
                      <div class="checkbox-item">
-                        <input type="checkbox" value="Host" v-model="editableMember.finalTags.volunteerMinistry">
+                        <input type="checkbox" value="Host Team" v-model="editableMember.finalTags.volunteerMinistry">
                         <label>Host Team</label>
                     </div>
                      <div class="checkbox-item">
@@ -270,12 +353,12 @@ function confirmRestore() {
                         <label>Exalt (Music)</label>
                     </div>
                      <div class="checkbox-item">
-                        <input type="checkbox" value="DGM" v-model="editableMember.finalTags.volunteerMinistry">
-                        <label>DGM (Graphics)</label>
+                        <input type="checkbox" value="Welcome" v-model="editableMember.finalTags.volunteerMinistry">
+                        <label>Welcome</label>
                     </div>
                      <div class="checkbox-item">
-                        <input type="checkbox" value="Usher" v-model="editableMember.finalTags.volunteerMinistry">
-                        <label>Usher</label>
+                        <input type="checkbox" value="DGM" v-model="editableMember.finalTags.volunteerMinistry">
+                        <label>DGM</label>
                     </div>
                 </div>
             </div>
@@ -293,6 +376,10 @@ function confirmRestore() {
         </div>
 
         <div class="details-grid">
+          <div class="detail-item full-width">
+            <span class="label">Member Since</span>
+            <span class="value">{{ memberSince }}</span>
+          </div>
           <div class="detail-item">
             <span class="label">Email</span>
             <span class="value">{{ member.email || 'N/A' }}</span>
@@ -324,6 +411,18 @@ function confirmRestore() {
           <div class="detail-item">
             <span class="label">Attendance</span>
             <span class="value">{{ memberAttendanceStatus }}</span>
+          </div>
+          
+          <!-- Leader Specific View -->
+          <div v-if="member.finalTags.isDgroupLeader && member.dgroupId" class="detail-item full-width highlight-box">
+            <span class="label">Dgroup ID (For Downlines)</span>
+            <div class="value-with-icon">
+              <span class="code-text">{{ member.dgroupId }}</span>
+              <button @click="copyToClipboard(member.dgroupId)" class="copy-btn">
+                <Copy :size="14" />
+              </button>
+            </div>
+            <span class="sub-val">Group Name: {{ member.dgroupName }}</span>
           </div>
         </div>
       </div>
@@ -390,10 +489,51 @@ function confirmRestore() {
 .indented { margin-left: 28px; margin-top: 10px; padding: 12px; background: #F5F7FA; border-radius: 8px; }
 .sub-label { font-weight: 600; margin-bottom: 8px; display: block; color: #546E7A; }
 .checkbox-subgroup { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.sub-form-group { margin-bottom: 10px; }
+.disabled-input { background: #e0e0e0; color: #757575; border-color: #bdbdbd; cursor: not-allowed; font-family: monospace; }
 .mt-20 { margin-top: 20px; }
 
 /* View Mode */
-.modal-header { display: flex; justify-content: space-between; align-items: flex-start; }
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.modal-avatar-wrapper {
+  width: 64px;
+  height: 64px;
+  flex-shrink: 0;
+}
+
+.modal-avatar-img {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid #E3F2FD;
+}
+
+.modal-avatar-placeholder {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background-color: #E3F2FD;
+  color: #1565C0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 24px;
+  border: 2px solid #E3F2FD;
+}
+
 .modal-header h2 { margin: 0; color: #333; }
 .status-badges { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
 .member-id { font-size: 14px; color: #546E7A; }
@@ -406,6 +546,13 @@ function confirmRestore() {
 .detail-item { background-color: #f9f9f9; padding: 12px; border-radius: 8px; }
 .detail-item .label { display: block; font-size: 12px; font-weight: 500; color: #546E7A; margin-bottom: 4px; }
 .detail-item .value { display: block; font-size: 14px; font-weight: 600; color: #333; word-wrap: break-word; }
+.full-width { grid-column: 1 / -1; }
+
+.highlight-box { background-color: #E3F2FD; border: 1px solid #BBDEFB; }
+.value-with-icon { display: flex; align-items: center; justify-content: space-between; }
+.code-text { font-family: monospace; font-size: 16px; color: #1565C0; font-weight: 700; }
+.copy-btn { background: none; border: none; cursor: pointer; color: #1976D2; padding: 4px; }
+.sub-val { display: block; font-size: 12px; color: #546E7A; margin-top: 4px; }
 
 .danger-zone { display: flex; justify-content: flex-end; gap: 10px; }
 .warning-text { color: #546E7A; font-size: 14px; margin-bottom: 20px; }
