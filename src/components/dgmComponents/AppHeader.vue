@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { User, ChevronDown, LogOut } from 'lucide-vue-next'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../../stores/auth'
@@ -19,7 +19,6 @@ function toggleDropdown() {
 }
 
 function onProfileTriggerClick() {
-  // If admin, go straight to admin Profile view. Otherwise open the dropdown.
   if (authStore.userRole === 'admin') {
     router.push('/profile')
   } else {
@@ -50,6 +49,22 @@ function handleProfileClick() {
   }
   isDropdownOpen.value = false
 }
+
+// --- Dynamic Role Tag Logic ---
+const memberDisplayRole = computed(() => {
+  if (authStore.userRole === 'admin') return 'Administrator'
+  
+  const profile = authStore.userProfile
+  if (!profile || !profile.finalTags) return 'Member'
+
+  if (profile.finalTags.isDgroupLeader) return 'Dgroup Leader'
+  // "Member" implies they are part of a dgroup (Regular)
+  if (profile.finalTags.isRegular || profile.dgroupLeader) return 'Member'
+  if (profile.finalTags.isSeeker) return 'Seeker'
+  
+  // Default fallback for new signups
+  return 'First Timer'
+})
 
 onMounted(() => {
   document.addEventListener('click', closeDropdown)
@@ -138,7 +153,14 @@ function openNotificationFocus(focusKey) {
       <!-- Profile Dropdown Trigger -->
       <div class="profile-trigger" @click.stop="onProfileTriggerClick">
         <div class="profile-avatar">
-          <User :size="24" color="#1976D2" />
+          <!-- Show uploaded pic if available, else icon -->
+          <img 
+            v-if="authStore.userProfile?.profilePicture" 
+            :src="authStore.userProfile.profilePicture" 
+            alt="Profile" 
+            class="avatar-img"
+          />
+          <User v-else :size="24" color="#1976D2" />
         </div>
         <ChevronDown :size="16" :class="{ rotate: isDropdownOpen }" />
       </div>
@@ -148,7 +170,13 @@ function openNotificationFocus(focusKey) {
         <div v-if="isDropdownOpen" class="dropdown-menu">
           <div class="dropdown-header">
             <p class="user-name">{{ authStore.user?.displayName || 'User' }}</p>
-            <p class="user-role">{{ authStore.userRole || 'Member' }}</p>
+            <!-- Dynamic Role Display -->
+            <span 
+              class="user-role-badge" 
+              :class="memberDisplayRole.toLowerCase().replace(' ', '-')"
+            >
+              {{ memberDisplayRole }}
+            </span>
           </div>
 
           <div class="dropdown-items">
@@ -217,6 +245,12 @@ function openNotificationFocus(focusKey) {
   align-items: center;
   justify-content: center;
   border: 2px solid #1976D2;
+  overflow: hidden;
+}
+.avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .rotate {
@@ -229,35 +263,48 @@ function openNotificationFocus(focusKey) {
   position: absolute;
   top: 120%;
   right: 0;
-  width: 220px;
+  width: 240px;
   background: #fff;
   border-radius: 12px;
   box-shadow: 0 4px 20px rgba(0,0,0,0.15);
   border: 1px solid #EEE;
+  z-index: 500;
 }
 
 .dropdown-header {
   padding: 16px;
   background: #F8FAFC;
   border-bottom: 1px solid #EEE;
+  text-align: center;
 }
 .user-name {
   font-weight: 700;
-  font-size: 14px;
+  font-size: 16px;
+  margin: 0 0 4px 0;
 }
-.user-role {
-  font-size: 12px;
-  color: #78909C;
-  text-transform: capitalize;
+
+/* Dynamic Badge Styles */
+.user-role-badge {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  padding: 4px 10px;
+  border-radius: 12px;
+  display: inline-block;
 }
+.user-role-badge.first-timer { background: #E0E0E0; color: #616161; }
+.user-role-badge.seeker { background: #FFF3E0; color: #E65100; }
+.user-role-badge.member { background: #E3F2FD; color: #1565C0; }
+.user-role-badge.dgroup-leader { background: #E8F5E9; color: #2E7D32; }
+.user-role-badge.administrator { background: #37474F; color: #FFF; }
 
 .dropdown-item {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 12px;
+  padding: 12px 16px;
   width: 100%;
-  border-radius: 8px;
+  border-radius: 0;
   cursor: pointer;
   background: none;
   border: none;
@@ -266,6 +313,12 @@ function openNotificationFocus(focusKey) {
 .dropdown-item:hover {
   background: #F1F5F9;
   color: #1976D2;
+}
+.dropdown-item.logout {
+  color: #D32F2F;
+}
+.dropdown-item.logout:hover {
+  background: #FFEBEE;
 }
 
 /* NOTIFICATIONS */
@@ -277,17 +330,17 @@ function openNotificationFocus(focusKey) {
   width: 40px;
   height: 40px;
   border-radius: 50%;
-  background: #FFFFFF; /* white inside */
+  background: #FFFFFF;
   display: flex;
   justify-content: center;
   align-items: center;
-  color: #1976D2; /* blue icon */
-  border: 2px solid #1976D2; /* blue outline */
+  color: #1976D2;
+  border: 2px solid #1976D2;
   box-shadow: none;
 }
 
 .notification-btn:hover {
-  background: #E3F2FD; /* subtle blue tint on hover */
+  background: #E3F2FD;
 }
 
 .notification-btn:focus {
@@ -306,13 +359,10 @@ function openNotificationFocus(focusKey) {
   border-radius: 50%;
 }
 
-/* Force the inline SVG bell to use the blue color (avoid inheriting black) */
 .notification-btn svg {
   color: #1976D2;
 }
-.notification-btn svg path,
-.notification-btn svg circle,
-.notification-btn svg rect {
+.notification-btn svg path {
   stroke: #1976D2 !important;
   fill: none !important;
 }
@@ -393,7 +443,6 @@ function openNotificationFocus(focusKey) {
   justify-content: flex-end;
 }
 
-/* Clear button in panel footer - white with blue outline */
 .clear-btn {
   background: #FFFFFF;
   border: 2px solid #1976D2;
@@ -406,41 +455,26 @@ function openNotificationFocus(focusKey) {
 .clear-btn:hover {
   background: #E3F2FD;
 }
-/* Close (X) button in panel header - Improved Design */
+
 .notification-panel .close-btn {
-  /* Layout & Reset */
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 28px; /* Standard icon size */
+  width: 28px;
   height: 28px;
-  background: transparent; /* Start transparent */
+  background: transparent;
   border: none;
   cursor: pointer;
   padding: 0;
-  
-  /* Visual Style */
-  color: #6B7280; /* Subtle dark gray color for the 'X' */
-  font-size: 18px; /* Slightly larger 'X' */
-  border-radius: 50%; /* Make it round for a standard icon look */
+  color: #6B7280;
+  font-size: 18px;
+  border-radius: 50%;
   line-height: 1; 
-  
-  /* Transition for smooth effects */
   transition: background-color 0.15s ease, color 0.15s ease;
 }
 
-/* Hover and Focus States for interactivity */
 .notification-panel .close-btn:hover {
-  background-color: #F3F4F6; /* Light gray background on hover */
-  color: #374151; /* Slightly darker 'X' on hover */
-}
-
-.notification-panel .close-btn:active {
-  background-color: #E5E7EB; /* Darker background when pressed */
-}
-
-.notification-panel .close-btn:focus {
-  outline: 2px solid #1976D2; /* Focus ring for accessibility */
-  outline-offset: 2px;
+  background-color: #F3F4F6;
+  color: #374151;
 }
 </style>
