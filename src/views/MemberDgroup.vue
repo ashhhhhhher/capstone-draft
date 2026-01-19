@@ -1,15 +1,28 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, reactive } from 'vue'
 import { useAuthStore } from '../stores/auth'
 import { useMembersStore } from '../stores/members'
-import { User, Users, ChevronRight, Plus, X, AlertCircle, ArrowLeft, UserMinus } from 'lucide-vue-next'
+import { User, Users, ChevronRight, Plus, X, AlertCircle, ArrowLeft, UserMinus, HelpCircle, Pencil } from 'lucide-vue-next'
 
 const authStore = useAuthStore()
 const membersStore = useMembersStore()
 
 const activeTab = ref('upline') 
 const showCreateModal = ref(false)
-const showPersonModal = ref(false) 
+const showPersonModal = ref(false)
+const showJoinByIdModal = ref(false)
+const showEditGroupModal = ref(false)
+
+// Join by ID logic
+const dgroupIdInput = ref('')
+const joinStatus = ref({ type: '', msg: '' })
+
+// Edit Group Logic (Leader)
+const editGroupForm = reactive({
+  dgroupName: '',
+  capacity: 12,
+  dgroupId: ''
+})
 
 // Drill-down state 
 const selectedGroup = ref(null) 
@@ -18,12 +31,6 @@ const currentGroupMembers = ref([])
 const selectedPerson = ref(null) 
 const mockGroups = ref([])
 
-const newGroupForm = ref({ 
-  name: '', 
-  capacity: 12, 
-  lifeStage: 'Elevate' 
-})
-
 onMounted(() => {
   membersStore.fetchMembers()
 })
@@ -31,6 +38,13 @@ onMounted(() => {
 const myProfile = computed(() => authStore.userProfile)
 const isLeader = computed(() => myProfile.value?.finalTags?.isDgroupLeader)
 const myLeaderName = computed(() => myProfile.value?.dgroupLeader)
+
+// Seeker Logic: If not a leader, and no leader assigned, and NOT marked seeker yet
+const showSeekerQuestionnaire = computed(() => {
+  if (!myProfile.value) return false
+  const p = myProfile.value
+  return !p.finalTags.isDgroupLeader && !p.dgroupLeader && !p.finalTags.isSeeker
+})
 
 const myLeaderObject = computed(() => {
   if (!myLeaderName.value) return null
@@ -53,8 +67,8 @@ const myDownlineGroups = computed(() => {
     const members = membersStore.activeMembers.filter(m => m.dgroupLeader === myName)
     
     groups.push({
-      id: 'g-default',
-      name: `${myProfile.value?.firstName}'s Dgroup`,
+      id: myProfile.value.dgroupId || 'g-default',
+      name: myProfile.value.dgroupName || `${myProfile.value?.firstName}'s Dgroup`,
       members: members,
       lifeStage: myProfile.value?.finalTags?.ageCategory || 'Mixed',
       capacity: myProfile.value?.dgroupCapacity || 12
@@ -64,13 +78,11 @@ const myDownlineGroups = computed(() => {
 })
 
 function openGroupDetails(group) {
-  // Switch to drill-down view (List view)
   currentGroupMembers.value = [...group.members]
   selectedGroup.value = group
 }
 
 function closeGroupDetails() {
-  // Go back to Grid view
   selectedGroup.value = null
   currentGroupMembers.value = []
 }
@@ -87,180 +99,289 @@ function removeMember(member) {
   }
 }
 
-function createDgroup() {
-  if(!newGroupForm.value.name) return alert("Please enter a group name")
+// --- Seeker Actions ---
+async function handleSeekerYes() {
+  if (!myProfile.value) return
+  const updates = {
+    finalTags: {
+      ...myProfile.value.finalTags,
+      isSeeker: true,
+      isFirstTimer: false 
+    }
+  }
+  try {
+    await authStore.updateExtendedProfile(updates)
+    alert("You have been marked as a Seeker. A leader will reach out to you soon!")
+  } catch (e) {
+    console.error(e)
+    alert("Failed to update status.")
+  }
+}
+
+function handleSeekerNo() {
+  alert("No problem! Enjoy the services and events.")
+}
+
+// --- Join By ID ---
+async function joinDgroupById() {
+  joinStatus.value = { type: '', msg: '' }
+  const idToFind = dgroupIdInput.value.trim();
   
-  const newGroup = {
-    id: `new-${Date.now()}`,
-    name: newGroupForm.value.name,
-    capacity: newGroupForm.value.capacity,
-    lifeStage: newGroupForm.value.lifeStage,
-    members: [] 
+  if (!idToFind) {
+    joinStatus.value = { type: 'error', msg: 'Please enter a Dgroup ID' }
+    return;
   }
 
-  mockGroups.value.push(newGroup)
-  showCreateModal.value = false
-  newGroupForm.value = { name: '', capacity: 12, lifeStage: 'Elevate' }
+  // Find the leader who owns this dgroupId
+  const leader = membersStore.leaders.find(l => l.dgroupId === idToFind);
+
+  if (!leader) {
+    joinStatus.value = { type: 'error', msg: 'Dgroup ID not found.' }
+    return;
+  }
+
+  // Join Logic
+  const leaderName = `${leader.firstName} ${leader.lastName}`;
+  const updates = {
+    dgroupLeader: leaderName,
+    finalTags: {
+      ...myProfile.value.finalTags,
+      isSeeker: false,
+      isFirstTimer: false,
+      isRegular: true
+    }
+  }
+
+  try {
+    await authStore.updateExtendedProfile(updates)
+    joinStatus.value = { type: 'success', msg: `Successfully joined ${leaderName}'s group!` }
+    setTimeout(() => {
+        showJoinByIdModal.value = false;
+        dgroupIdInput.value = '';
+    }, 1500);
+  } catch (e) {
+    console.error(e)
+    joinStatus.value = { type: 'error', msg: 'Failed to join group.' }
+  }
+}
+
+// --- Edit Group (Leader Only) ---
+function openEditGroupModal() {
+  if (!myProfile.value) return
+  editGroupForm.dgroupName = myProfile.value.dgroupName || ''
+  editGroupForm.capacity = myProfile.value.dgroupCapacity || 12
+  editGroupForm.dgroupId = myProfile.value.dgroupId || 'N/A'
+  showEditGroupModal.value = true
+}
+
+async function saveGroupDetails() {
+  if (!editGroupForm.dgroupName) return alert("Group name is required")
+  
+  try {
+    await authStore.updateExtendedProfile({
+      dgroupName: editGroupForm.dgroupName,
+      dgroupCapacity: editGroupForm.capacity
+    })
+    showEditGroupModal.value = false
+    alert("Group details updated!")
+  } catch (e) {
+    console.error(e)
+    alert("Failed to save changes.")
+  }
 }
 </script>
 
 <template>
   <div class="dgroup-view">
     
-    <!-- Tab Switcher (Hidden when viewing group details to simulate drill-down navigation) -->
-    <div class="tabs" v-if="!selectedGroup">
-      <button :class="{ active: activeTab === 'upline' }" @click="activeTab = 'upline'">
-        My Dgroup (Upline)
-      </button>
-      <button v-if="isLeader" :class="{ active: activeTab === 'downline' }" @click="activeTab = 'downline'">
-        My Groups (Downline)
-      </button>
-    </div>
-
-    <!-- UPLINE VIEW -->
-    <div v-if="activeTab === 'upline' && !selectedGroup" class="tab-content">
-      <div 
-        class="leader-card" 
-        v-if="myLeaderName"
-        @click="viewPerson(myLeaderObject)"
-        :class="{ 'clickable': !!myLeaderObject }"
-      >
-        <div class="avatar-ring">
-          <User :size="32" color="#1565C0" />
-        </div>
-        <div class="leader-info">
-          <span class="label">Your Leader</span>
-          <h3>{{ myLeaderName }}</h3>
-          <span v-if="!myLeaderObject" class="missing-info-text">(Profile not found)</span>
-        </div>
-        <ChevronRight v-if="myLeaderObject" :size="20" color="#B0BEC5" style="margin-left: auto;" />
+    <!-- SEEKER QUESTIONNAIRE (First Timers / Unassigned) -->
+    <div v-if="showSeekerQuestionnaire" class="seeker-prompt">
+      <div class="icon-circle">
+        <HelpCircle :size="32" color="#1976D2" />
       </div>
-
-      <div v-else class="empty-state">
-        <p>You are not assigned to a Dgroup yet.</p>
-      </div>
-
-      <div class="members-list" v-if="myLeaderName">
-        <h4>Co-Members ({{ myUplineGroup.length }})</h4>
-        <div 
-          v-for="member in myUplineGroup" 
-          :key="member.id" 
-          class="member-row clickable"
-          @click="viewPerson(member)"
-        >
-          <div class="member-avatar">{{ member.firstName.charAt(0) }}</div>
-          <div class="member-name">{{ member.firstName }} {{ member.lastName }}</div>
-          <ChevronRight :size="16" color="#CFD8DC" style="margin-left: auto;" />
-        </div>
-      </div>
-    </div>
-
-    <!-- DOWNLINE VIEW (Leader Only) -->
-    <div v-if="activeTab === 'downline'" class="tab-content">
+      <h3>Looking for a Dgroup?</h3>
+      <p>It looks like you aren't part of a Discipleship Group yet.</p>
       
-      <!-- 1. GROUPS GRID (Shown when NO group is selected) -->
-      <div v-if="!selectedGroup">
-        <div class="groups-header">
-          <h3>Your Groups</h3>
-          <button class="create-btn" @click="showCreateModal = true"><Plus :size="16" /> New</button>
-        </div>
-
-        <div class="groups-grid">
-          <div v-for="group in myDownlineGroups" :key="group.id" class="group-card" @click="openGroupDetails(group)">
-            <div class="group-icon"><Users :size="24" color="white"/></div>
-            <div class="group-info">
-              <h4>{{ group.name }}</h4>
-              <p>{{ group.members.length }} / {{ group.capacity }} Members • {{ group.lifeStage }}</p>
-            </div>
-            <ChevronRight :size="20" color="#B0BEC5" />
-          </div>
-          <div v-if="myDownlineGroups.length === 0" class="empty-state">
-            <p>You don't have any members yet.</p>
-          </div>
-        </div>
-      </div>
-
-      <!-- 2. GROUP DETAIL LIST VIEW (Shown when A group IS selected) -->
-      <div v-else class="drill-down-view">
-        <!-- Back Header -->
-        <div class="drill-header">
-          <button @click="closeGroupDetails" class="back-btn">
-            <ArrowLeft :size="20" />
+      <div class="question-box">
+        <p class="question">How would you like to proceed?</p>
+        <div class="seeker-actions">
+          <button class="btn-action primary" @click="handleSeekerYes">
+            I'm looking for a group
           </button>
-          <div class="header-info">
-            <h3>{{ selectedGroup.name }}</h3>
-            <span class="subtitle">{{ currentGroupMembers.length }} / {{ selectedGroup.capacity }} Members</span>
+          <button class="btn-action secondary" @click="showJoinByIdModal = true">
+            I have a Dgroup ID
+          </button>
+          <button class="btn-action text-only" @click="handleSeekerNo">
+            Not right now
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div v-else>
+      <!-- Normal Dgroup View -->
+      
+      <!-- Tab Switcher -->
+      <div class="tabs" v-if="!selectedGroup">
+        <button :class="{ active: activeTab === 'upline' }" @click="activeTab = 'upline'">
+          My Dgroup (Upline)
+        </button>
+        <button v-if="isLeader" :class="{ active: activeTab === 'downline' }" @click="activeTab = 'downline'">
+          My Groups (Downline)
+        </button>
+      </div>
+
+      <!-- UPLINE VIEW -->
+      <div v-if="activeTab === 'upline' && !selectedGroup" class="tab-content">
+        <div 
+          class="leader-card" 
+          v-if="myLeaderName"
+          @click="viewPerson(myLeaderObject)"
+          :class="{ 'clickable': !!myLeaderObject }"
+        >
+          <div class="avatar-ring">
+            <User :size="32" color="#1565C0" />
           </div>
+          <div class="leader-info">
+            <span class="label">Your Leader</span>
+            <h3>{{ myLeaderName }}</h3>
+            <span v-if="!myLeaderObject" class="missing-info-text">(Profile not found)</span>
+          </div>
+          <ChevronRight v-if="myLeaderObject" :size="20" color="#B0BEC5" style="margin-left: auto;" />
         </div>
 
-        <!-- Members List -->
-        <div class="members-list-full">
-          <div 
-            v-for="m in currentGroupMembers" 
-            :key="m.id" 
-            class="member-row clickable"
-            @click="viewPerson(m)"
-          >
-            <div class="member-avatar">{{ m.firstName.charAt(0) }}</div>
-            <div class="member-name-col">
-              <span class="name">{{ m.firstName }} {{ m.lastName }}</span>
-              <span class="status-sub">{{ m.status }}</span>
-            </div>
-            
-            <!-- Remove Dmember Button -->
-            <button class="icon-btn remove" @click.stop="removeMember(m)" title="Remove Member">
-              <UserMinus :size="18" />
-            </button>
-          </div>
+        <div v-else class="empty-state">
+          <p v-if="myProfile?.finalTags.isSeeker">
+            You are listed as a <strong>Seeker</strong>. Waiting for a leader to add you.
+          </p>
+          <p v-else>You are not assigned to a Dgroup yet.</p>
+        </div>
 
-          <div v-if="currentGroupMembers.length === 0" class="empty-members">
-            <AlertCircle :size="32" color="#B0BEC5" />
-            <p>No members in this group yet.</p>
+        <div class="members-list" v-if="myLeaderName">
+          <h4>Co-Members ({{ myUplineGroup.length }})</h4>
+          <div 
+            v-for="member in myUplineGroup" 
+            :key="member.id" 
+            class="member-row clickable"
+            @click="viewPerson(member)"
+          >
+            <div class="member-avatar">{{ member.firstName.charAt(0) }}</div>
+            <div class="member-name">{{ member.firstName }} {{ member.lastName }}</div>
+            <ChevronRight :size="16" color="#CFD8DC" style="margin-left: auto;" />
           </div>
         </div>
       </div>
 
+      <!-- DOWNLINE VIEW (Leader Only) -->
+      <div v-if="activeTab === 'downline'" class="tab-content">
+        
+        <!-- 1. GROUPS GRID -->
+        <div v-if="!selectedGroup">
+          <div class="groups-header">
+            <h3>Your Groups</h3>
+            <button class="create-btn" @click="openEditGroupModal"><Pencil :size="16" /> Edit Details</button>
+          </div>
+
+          <div class="groups-grid">
+            <div v-for="group in myDownlineGroups" :key="group.id" class="group-card" @click="openGroupDetails(group)">
+              <div class="group-icon"><Users :size="24" color="white"/></div>
+              <div class="group-info">
+                <h4>{{ group.name }}</h4>
+                <p>{{ group.members.length }} / {{ group.capacity }} Members • {{ group.lifeStage }}</p>
+              </div>
+              <ChevronRight :size="20" color="#B0BEC5" />
+            </div>
+            <div v-if="myDownlineGroups.length === 0" class="empty-state">
+              <p>You don't have any members yet.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- 2. GROUP DETAIL LIST VIEW -->
+        <div v-else class="drill-down-view">
+          <div class="drill-header">
+            <button @click="closeGroupDetails" class="back-btn">
+              <ArrowLeft :size="20" />
+            </button>
+            <div class="header-info">
+              <h3>{{ selectedGroup.name }}</h3>
+              <span class="subtitle">{{ currentGroupMembers.length }} / {{ selectedGroup.capacity }} Members</span>
+            </div>
+          </div>
+
+          <div class="members-list-full">
+            <div 
+              v-for="m in currentGroupMembers" 
+              :key="m.id" 
+              class="member-row clickable"
+              @click="viewPerson(m)"
+            >
+              <div class="member-avatar">{{ m.firstName.charAt(0) }}</div>
+              <div class="member-name-col">
+                <span class="name">{{ m.firstName }} {{ m.lastName }}</span>
+                <span class="status-sub">{{ m.status }}</span>
+              </div>
+              
+              <button class="icon-btn remove" @click.stop="removeMember(m)" title="Remove Member">
+                <UserMinus :size="18" />
+              </button>
+            </div>
+
+            <div v-if="currentGroupMembers.length === 0" class="empty-members">
+              <AlertCircle :size="32" color="#B0BEC5" />
+              <p>No members in this group yet.</p>
+            </div>
+          </div>
+        </div>
+
+      </div>
     </div>
     
-    <!-- CREATE NEW DGROUP MODAL -->
-    <div v-if="showCreateModal" class="modal-overlay">
+    <!-- JOIN BY ID MODAL -->
+    <div v-if="showJoinByIdModal" class="modal-overlay" @click.self="showJoinByIdModal = false">
       <div class="modal create-modal">
-        <h3>New Dgroup</h3>
-        <div class="preview-section">
-          <span class="preview-label">Preview</span>
-          <div class="group-card preview-card">
-            <div class="group-icon"><Users :size="24" color="white"/></div>
-            <div class="group-info">
-              <h4>{{ newGroupForm.name || 'Dgroup Name' }}</h4>
-              <p>0 / {{ newGroupForm.capacity }} Members • {{ newGroupForm.lifeStage }}</p>
-            </div>
-            <ChevronRight :size="20" color="#B0BEC5" />
-          </div>
-        </div>
-
+        <h3>Join by Dgroup ID</h3>
+        <p class="modal-desc">Ask your leader for their Dgroup ID code.</p>
+        
         <div class="form-group">
-          <label>Dgroup Name</label>
-          <input v-model="newGroupForm.name" placeholder="Ex. Elevate Baguio Boys" />
+          <label>Dgroup ID</label>
+          <input v-model="dgroupIdInput" placeholder="e.g. DG-26-1234" />
         </div>
-
-        <div class="form-row">
-          <div class="form-group half">
-            <label>Capacity</label>
-            <input type="number" v-model="newGroupForm.capacity" min="1" />
-          </div>
-          <div class="form-group half">
-            <label>Life Stage</label>
-            <select v-model="newGroupForm.lifeStage">
-              <option>Elevate</option>
-              <option>B1G</option>
-              <option>Mixed</option>
-            </select>
-          </div>
+        
+        <div v-if="joinStatus.msg" class="status-msg" :class="joinStatus.type">
+          {{ joinStatus.msg }}
         </div>
 
         <div class="actions">
-          <button @click="showCreateModal = false" class="cancel">Cancel</button>
-          <button @click="createDgroup" class="confirm">Create</button>
+          <button @click="showJoinByIdModal = false" class="cancel">Cancel</button>
+          <button @click="joinDgroupById" class="confirm">Join Group</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- EDIT GROUP MODAL (Leader) -->
+    <div v-if="showEditGroupModal" class="modal-overlay">
+      <div class="modal create-modal">
+        <h3>Edit Group Details</h3>
+        
+        <div class="form-group">
+          <label>Group Name</label>
+          <input v-model="editGroupForm.dgroupName" />
+        </div>
+
+        <div class="form-group">
+          <label>Capacity</label>
+          <input type="number" v-model="editGroupForm.capacity" min="1" />
+        </div>
+        
+        <div class="form-group">
+          <label>Dgroup ID (Read Only)</label>
+          <input :value="editGroupForm.dgroupId" disabled class="disabled-input" />
+        </div>
+
+        <div class="actions">
+          <button @click="showEditGroupModal = false" class="cancel">Cancel</button>
+          <button @click="saveGroupDetails" class="confirm">Save Changes</button>
         </div>
       </div>
     </div>
@@ -278,20 +399,16 @@ function createDgroup() {
 
         <div class="profile-details">
           <div class="detail-row">
-            <span class="label">Age</span>
-            <span class="value">{{ selectedPerson.age || 'N/A' }}</span>
-          </div>
-          <div class="detail-row">
-            <span class="label">Gender</span>
-            <span class="value">{{ selectedPerson.gender }}</span>
-          </div>
-          <div class="detail-row">
             <span class="label">Life Stage</span>
             <span class="value">{{ selectedPerson.finalTags?.ageCategory || 'N/A' }}</span>
           </div>
-          <div class="detail-row" v-if="!selectedPerson.finalTags?.isDgroupLeader">
-            <span class="label">School</span>
-            <span class="value">{{ selectedPerson.school || 'Not Indicated' }}</span>
+          <div class="detail-row">
+            <span class="label">Birthday</span>
+            <span class="value">{{ selectedPerson.birthday || 'N/A' }}</span>
+          </div>
+          <div class="detail-row">
+            <span class="label">Facebook</span>
+            <span class="value link-color">{{ selectedPerson.fbAccount || 'Not Linked' }}</span>
           </div>
         </div>
       </div>
@@ -337,7 +454,7 @@ function createDgroup() {
 
 /* Group Card */
 .groups-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
-.create-btn { background: #1976D2; color: white; border: none; padding: 8px 12px; border-radius: 8px; display: flex; align-items: center; gap: 4px; font-size: 13px; font-weight: 600; }
+.create-btn { background: #E3F2FD; color: #1976D2; border: none; padding: 8px 12px; border-radius: 8px; display: flex; align-items: center; gap: 4px; font-size: 13px; font-weight: 600; cursor: pointer; }
 
 .group-card { background: white; padding: 16px; border-radius: 12px; display: flex; align-items: center; gap: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); margin-bottom: 12px; cursor: pointer; border: 1px solid transparent; transition: all 0.2s; }
 .group-icon { width: 48px; height: 48px; background: linear-gradient(135deg, #42A5F5, #1976D2); border-radius: 10px; display: flex; align-items: center; justify-content: center; }
@@ -384,4 +501,33 @@ function createDgroup() {
 .detail-row:last-child { border-bottom: none; }
 .detail-row .label { color: #78909C; font-size: 13px; font-weight: 500; }
 .detail-row .value { color: #37474F; font-size: 14px; font-weight: 600; }
+.link-color { color: #1976D2; text-decoration: underline; }
+
+/* Seeker Prompt Styles */
+.seeker-prompt {
+  background: white;
+  padding: 30px 20px;
+  border-radius: 16px;
+  text-align: center;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+  margin-top: 20px;
+}
+.icon-circle {
+  width: 60px; height: 60px; background: #E3F2FD; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 16px;
+}
+.seeker-prompt h3 { margin: 0 0 8px; color: #1976D2; font-size: 20px; }
+.seeker-prompt p { color: #546E7A; margin: 0 0 24px; font-size: 14px; }
+.question-box { background: #F5F7FA; border-radius: 12px; padding: 20px; }
+.question { font-weight: 700; font-size: 16px; margin-bottom: 16px; color: #37474F; }
+.seeker-actions { display: flex; flex-direction: column; gap: 10px; }
+.btn-action { padding: 12px; border-radius: 8px; font-weight: 600; border: none; cursor: pointer; width: 100%; font-size: 14px; }
+.btn-action.primary { background: #1976D2; color: white; }
+.btn-action.secondary { background: white; border: 1px solid #CFD8DC; color: #37474F; }
+.btn-action.text-only { background: transparent; color: #78909C; margin-top: 4px; }
+
+.modal-desc { color: #546E7A; font-size: 14px; margin-bottom: 20px; margin-top: -10px; }
+.status-msg { margin-top: 10px; padding: 10px; border-radius: 8px; font-size: 13px; text-align: center; }
+.status-msg.error { background: #FFEBEE; color: #D32F2F; }
+.status-msg.success { background: #E8F5E9; color: #2E7D32; }
+.disabled-input { background: #e0e0e0; color: #757575; border-color: #bdbdbd; cursor: not-allowed; }
 </style>
