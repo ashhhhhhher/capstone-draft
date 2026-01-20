@@ -95,23 +95,32 @@ const router = createRouter({
   ]
 })
 
-router.beforeEach((to, from) => {
+router.beforeEach((to) => {
   const authStore = useAuthStore()
+
+  // 🔑 WAIT until auth is ready
+  if (!authStore.isAuthReady) {
+    return true
+  }
+
   const isAuthenticated = !!authStore.user
-  const userRole = authStore.userRole
+  const role = authStore.userRole
 
   if (to.meta.requiresAuth && !isAuthenticated) {
-    return { name: 'login', query: { redirect: to.fullPath } }
+    return { name: 'login' }
   }
 
-  if (isAuthenticated) {
-    if (to.name === 'login' || to.name === 'signup') {
-      return { name: userRole === 'admin' ? 'home' : 'memberHome' }
-    }
-    if (to.meta.role && to.meta.role !== userRole) {
-      return { name: userRole === 'admin' ? 'home' : 'memberHome' }
-    }
+  // 🚫 STOP redirects if role is unresolved
+  if (isAuthenticated && !role) {
+    return true
   }
+
+  if (to.meta.role && to.meta.role !== role) {
+    return { name: role === 'admin' ? 'home' : 'memberHome' }
+  }
+
+  return true
 })
+
 
 export default router

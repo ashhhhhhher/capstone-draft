@@ -66,17 +66,19 @@ export const useAuthStore = defineStore('auth', () => {
 
   // --- FETCH PROFILE ---
   async function fetchMemberProfile(uid, currentBranchId) {
-      if (!currentBranchId) return null;
-      const membersRef = collection(db, "branches", currentBranchId, "members");
-      const q = query(membersRef, where("authUid", "==", uid));
-      const querySnapshot = await getDocs(q);
+    if (!currentBranchId || userRole.value !== 'member') return null;
 
-      if (!querySnapshot.empty) {
-          userProfile.value = querySnapshot.docs[0].data();
-      } else {
-          userProfile.value = null;
-      }
+    const membersRef = collection(db, "branches", currentBranchId, "members");
+    const q = query(membersRef, where("authUid", "==", uid));
+    const snap = await getDocs(q);
+
+    if (!snap.empty) {
+      userProfile.value = snap.docs[0].data();
+    } else {
+      userProfile.value = null;
+    }
   }
+
 
   // --- SIGNUP ---
   async function signup(email, password, basicData) {
@@ -92,16 +94,6 @@ export const useAuthStore = defineStore('auth', () => {
       })
       
       const defaultBranch = basicData.branchId || 'baguio'; 
-
-      // Create User Doc
-      const userDocRef = doc(db, "users", user.value.uid);
-      await setDoc(userDocRef, {
-        email: user.value.email,
-        role: 'member',
-        branchId: defaultBranch,
-        displayName: displayName,
-        createdAt: new Date().toISOString()
-      });
       
       // Generate ID & Create Member Profile
       const newMemberId = await generateMemberID(defaultBranch);
@@ -217,16 +209,38 @@ export const useAuthStore = defineStore('auth', () => {
   }
   
   async function fetchUserProfile(uid) {
-    const userDocRef = doc(db, "users", uid);
-    const userDoc = await getDoc(userDocRef);
-    if (userDoc.exists()) {
-      userRole.value = userDoc.data().role;
-      branchId.value = userDoc.data().branchId;
-    } else {
-      userRole.value = 'member';
-      branchId.value = 'baguio';
-    }
+  const branch = 'baguio';
+
+  // 1️⃣ CHECK DGMS (ADMINS) FIRST
+  const dgmRef = doc(db, "branches", branch, "dgms", uid);
+  const dgmSnap = await getDoc(dgmRef);
+
+  if (dgmSnap.exists()) {
+    userRole.value = 'admin';
+    branchId.value = branch;
+    userProfile.value = dgmSnap.data();
+    return;
   }
+
+  // 2️⃣ CHECK MEMBERS
+  const membersRef = collection(db, "branches", branch, "members");
+  const q = query(membersRef, where("authUid", "==", uid));
+  const snap = await getDocs(q);
+
+  if (!snap.empty) {
+    userRole.value = 'member';
+    branchId.value = branch;
+    userProfile.value = snap.docs[0].data();
+    return;
+  }
+
+  // 3️⃣ FALLBACK (INVALID ACCOUNT)
+  userRole.value = null;
+  branchId.value = null;
+  userProfile.value = null;
+  console.warn("No profile found for user:", uid);
+}
+
 
   function toTitleCase(str) {
     if (!str) return '';
