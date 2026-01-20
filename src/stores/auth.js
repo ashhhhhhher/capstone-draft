@@ -120,6 +120,11 @@ export const useAuthStore = defineStore('auth', () => {
       id: memberId,         
       authUid: uid, 
       createdAt: todayISO,  
+
+      role: 'member',
+      branchId: branchId,
+      displayName: `${toTitleCase(basicData.firstName.trim())} ${toTitleCase(basicData.lastName.trim())}`,
+
       
       lastName: toTitleCase(basicData.lastName.trim()),
       firstName: toTitleCase(basicData.firstName.trim()),
