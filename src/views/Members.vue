@@ -1,6 +1,6 @@
 <script setup>
 import { ref, computed } from 'vue'
-import { Search, List, LayoutGrid, SlidersHorizontal, Archive, ChevronDown, ChevronRight } from 'lucide-vue-next'
+import { Search, List, LayoutGrid, Archive, ChevronDown, ChevronRight } from 'lucide-vue-next'
 import { storeToRefs } from 'pinia'
 import { useMembersStore } from '../stores/members'
 import { useAttendanceStore } from '../stores/attendance'
@@ -8,7 +8,6 @@ import { useEventsStore } from '../stores/events'
 import MemberCard from '../components/dgmComponents/MemberCard.vue'
 import MemberDetailsModal from '../components/dgmComponents/MemberDetailsModal.vue'
 import Modal from '../components/dgmComponents/Modal.vue'
-import FilterModal from '../components/dgmComponents/FilterModal.vue'
 import AbsenceMonitoring from '../components/dgmComponents/AbsenceMonitoring.vue' 
 
 // --- Store Setup ---
@@ -26,24 +25,16 @@ const showMemberModal = ref(false)
 const selectedMember = ref(null)
 const expandedDgroups = ref([])
 const searchQuery = ref('') 
-const showFilterModal = ref(false)
 const showAbsenceMonitoringModal = ref(false)
 
-const filters = ref({
-  attendance: [],
-  age: [],
-  type: [],
-  ministries: []
-})
+// --- Inline Filters State ---
+const filterAge = ref([]) // ['Elevate', 'B1G']
+const filterCats = ref([]) // ['First Timer', 'Seeker', 'Regular', 'Dgroup Leader', 'Volunteer']
+const filterMinistries = ref([]) // ['Host Team', 'Live Prod', etc]
+
+const ministriesOptions = ['Host Team', 'Live Prod', 'Exalt', 'Welcome', 'DGM']
 
 // --- Computed Properties ---
-const activeFilterCount = computed(() => {
-  return filters.value.attendance.length +
-         filters.value.age.length +
-         filters.value.type.length +
-         filters.value.ministries.length
-})
-
 const presentMemberIds = computed(() => {
   return new Set(currentEventAttendees.value.map(att => att.memberId))
 })
@@ -52,6 +43,7 @@ const presentMemberIds = computed(() => {
 const filteredMembers = computed(() => {
   let list = showArchived.value ? archivedMembers.value : activeMembers.value
 
+  // 1. Text Search
   if (searchQuery.value.trim() !== '') {
     const query = searchQuery.value.toLowerCase()
     list = list.filter(member => 
@@ -61,34 +53,30 @@ const filteredMembers = computed(() => {
     )
   }
 
-  // Note: Attendance filter removed from here because we split by column now, 
-  // but if user explicitly filters "Present Only" in modal, we should respect it.
-  if (filters.value.attendance.length > 0) {
+  // 2. Age Filter
+  if (filterAge.value.length > 0) {
+    list = list.filter(m => filterAge.value.includes(m.finalTags.ageCategory))
+  }
+
+  // 3. Category Filters
+  if (filterCats.value.length > 0) {
     list = list.filter(m => {
-      const isPresent = presentMemberIds.value.has(m.id)
-      return (filters.value.attendance.includes('present') && isPresent) ||
-             (filters.value.attendance.includes('absent') && !isPresent)
-    })
+      // Check if member matches AT LEAST ONE of the selected categories
+      if (filterCats.value.includes('First Timer') && m.finalTags.isFirstTimer) return true;
+      if (filterCats.value.includes('Seeker') && m.finalTags.isSeeker) return true;
+      if (filterCats.value.includes('Regular') && m.finalTags.isRegular) return true;
+      if (filterCats.value.includes('Dgroup Leader') && m.finalTags.isDgroupLeader) return true;
+      if (filterCats.value.includes('Volunteer') && m.finalTags.isVolunteer) return true;
+      return false;
+    });
   }
-  if (filters.value.age.length > 0) {
-    list = list.filter(m => filters.value.age.includes(m.finalTags.ageCategory))
-  }
-  if (filters.value.type.includes('leader')) {
-    list = list.filter(m => m.finalTags.isDgroupLeader)
-  }
-  if (filters.value.type.includes('regular')) {
-    list = list.filter(m => m.finalTags.isRegular)
-  }
-  if (filters.value.type.includes('firstTimer')) {
-    list = list.filter(m => m.finalTags.isFirstTimer)
-  }
-  if (filters.value.type.includes('volunteer')) {
-    list = list.filter(m => m.finalTags.isVolunteer)
-  }
-  if (filters.value.ministries.length > 0) {
+
+  // 4. Ministry Filters (Only if Volunteer is selected implicitly or explicitly)
+  // Logic: If specific ministries are checked, only show volunteers with those ministries
+  if (filterMinistries.value.length > 0) {
     list = list.filter(m => 
       m.finalTags.isVolunteer &&
-      m.finalTags.volunteerMinistry.some(v => filters.value.ministries.includes(v))
+      m.finalTags.volunteerMinistry.some(v => filterMinistries.value.includes(v))
     )
   }
   
@@ -98,7 +86,7 @@ const filteredMembers = computed(() => {
   return list
 })
 
-// Split filtered list into Present and Absent for the columns
+// Split filtered list into Present and Absent for the columns (Only used for Active View)
 const presentList = computed(() => {
   return filteredMembers.value.filter(m => presentMemberIds.value.has(m.id))
 })
@@ -304,20 +292,51 @@ const absenceCount = computed(() => {
       </div>
     </div>
     
-    <div class="filter-controls" v-if="viewMode === 'list'">
-      <button class="filter-btn" @click="showFilterModal = true">
-        <SlidersHorizontal :size="16" />
-        <span>Filters</span>
-        <span v-if="activeFilterCount > 0" class="filter-badge">
-          {{ activeFilterCount }}
-        </span>
-      </button>
+    <!-- INLINE FILTERS (Replacement for Modal) -->
+    <div class="inline-filters" v-if="viewMode === 'list'">
+      <div class="filter-row">
+        <span class="filter-label">Age:</span>
+        <label><input type="checkbox" value="Elevate" v-model="filterAge"> Elevate</label>
+        <label><input type="checkbox" value="B1G" v-model="filterAge"> B1G</label>
+      </div>
+
+      <div class="filter-row">
+        <span class="filter-label">Type:</span>
+        <label><input type="checkbox" value="First Timer" v-model="filterCats"> First Timer</label>
+        <label><input type="checkbox" value="Seeker" v-model="filterCats"> Seeker</label>
+        <label><input type="checkbox" value="Regular" v-model="filterCats"> Regular</label>
+        <label><input type="checkbox" value="Dgroup Leader" v-model="filterCats"> DL</label>
+        <label><input type="checkbox" value="Volunteer" v-model="filterCats"> Volunteer</label>
+      </div>
+
+      <!-- Ministry Checkboxes (Only show if Volunteer is selected) -->
+      <div class="filter-row ministries" v-if="filterCats.includes('Volunteer')">
+        <span class="filter-label">Ministry:</span>
+        <label v-for="m in ministriesOptions" :key="m">
+          <input type="checkbox" :value="m" v-model="filterMinistries"> {{ m }}
+        </label>
+      </div>
     </div>
     
-    <!-- LIST VIEW (Split Present / Absent) -->
+    <!-- LIST VIEW -->
     <div class="member-list-view" v-if="viewMode === 'list'">
-      <div class="columns-grid">
-        
+      
+      <!-- 1. ARCHIVE VIEW (Simple List) -->
+      <div v-if="showArchived" class="simple-list">
+        <MemberCard 
+          v-for="member in filteredMembers" 
+          :key="member.id"
+          :member="member"
+          :isPresent="presentMemberIds.has(member.id)"
+          @click="openMemberDetails(member)"
+        />
+        <div v-if="filteredMembers.length === 0" class="no-results">
+          No archived members found.
+        </div>
+      </div>
+
+      <!-- 2. ACTIVE VIEW (Present / Absent Columns) -->
+      <div v-else class="columns-grid">
         <!-- Present Column -->
         <div class="column-block">
           <h3 class="column-title present-header">
@@ -355,8 +374,8 @@ const absenceCount = computed(() => {
             </div>
           </div>
         </div>
-
       </div>
+
     </div>
 
     <!-- DGROUP VIEW (Split Columns) -->
@@ -493,14 +512,6 @@ const absenceCount = computed(() => {
       @saveChanges="handleSaveChanges"
       @archiveMember="handleArchiveMember"
       @restoreMember="handleRestoreMember"
-    />
-  </Modal>
-
-  <Modal v-if="showFilterModal" @close="showFilterModal = false">
-    <FilterModal 
-      v-model="filters"
-      @apply="showFilterModal = false"
-      @clear="showFilterModal = false"
     />
   </Modal>
 
@@ -644,34 +655,40 @@ const absenceCount = computed(() => {
   box-shadow: 0 1px 3px rgba(0,0,0,0.1);
 }
 
-.filter-controls {
+/* Inline Filters */
+.inline-filters {
+  background: #FFF;
+  border-radius: 12px;
+  padding: 16px;
   margin-bottom: 24px;
+  border: 1px solid #ECEFF1;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
-.filter-btn {
-  background-color: #fff;
-  border: 1px solid #B0BEC5;
-  color: #37474F;
-  border-radius: 8px;
-  padding: 8px 14px;
+.filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
+}
+.filter-label {
+  font-weight: 700;
   font-size: 14px;
-  font-weight: 600;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  cursor: pointer;
-  position: relative;
+  color: #546E7A;
+  min-width: 60px;
 }
-.filter-badge {
-  background-color: #1976D2;
-  color: white;
-  font-size: 12px;
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
+.filter-row label {
+  font-size: 14px;
+  color: #37474F;
   display: flex;
   align-items: center;
-  justify-content: center;
-  margin-left: 4px;
+  gap: 6px;
+  cursor: pointer;
+}
+.filter-row.ministries {
+  padding-top: 8px;
+  border-top: 1px dashed #ECEFF1;
 }
 
 /* --- Common Grid Layout for Columns --- */
@@ -711,6 +728,13 @@ const absenceCount = computed(() => {
 .column-title.absent-header { color: #C62828; border-color: #C62828; }
 
 .list-content {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* Simple list for archive */
+.simple-list {
   display: flex;
   flex-direction: column;
   gap: 12px;
