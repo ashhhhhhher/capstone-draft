@@ -100,34 +100,89 @@ function generateDgroupID() {
 }
 
 function save() {
-  // Logic: First Timer determination based on Dgroup Leader selection
-  const leaderSelection = editableMember.value.dgroupLeader;
+  const finalTags = editableMember.value.finalTags;
+  const dgroupLeaderSelection = editableMember.value.dgroupLeader;
 
-  if (leaderSelection === 'N/A (First Timer)') {
-    editableMember.value.finalTags.isFirstTimer = true;
-    editableMember.value.dgroupLeader = ''; // Clear string for logic, or keep specific string if needed by backend. Keeping empty string implies no leader.
-    // However, to persist the "State" of N/A First Timer, we might want to keep the string or just rely on the tag.
-    // Let's set dgroupLeader to empty string so they appear in Unassigned, and tag as First Timer.
-    editableMember.value.dgroupLeader = ''; 
-  } else if (leaderSelection === 'N/A (D-Lead)') {
-    // For Dgroup Leaders or Regulars with external leaders
-    editableMember.value.finalTags.isFirstTimer = false;
-    // We treat this string as a valid "Leader" placeholder so they don't get flagged as unassigned/first timer logic elsewhere
-    editableMember.value.dgroupLeader = 'N/A (D-Lead)'; 
-  } else {
-    // Specific Leader Selected
-    editableMember.value.finalTags.isFirstTimer = false;
+  // --- Derived State ---
+  // If they selected N/A First Timer, they are logically a First Timer.
+  const isFirstTimer = dgroupLeaderSelection === 'N/A (First Timer)';
+
+  // --- 1. Validate Invalid Combinations ---
+  if (finalTags.isDgroupLeader && finalTags.isRegular) {
+    alert("Invalid Combination: A member cannot be both a Dgroup Leader and a Regular Member.");
+    return;
+  }
+  if (finalTags.isDgroupLeader && isFirstTimer) {
+    alert("Invalid Combination: A Dgroup Leader cannot be a First Timer. Change Church Info from 'N/A (First Timer)'.");
+    return;
+  }
+  if (finalTags.isDgroupLeader && finalTags.isSeeker) {
+    alert("Invalid Combination: A Dgroup Leader cannot be a Seeker.");
+    return;
+  }
+  if (finalTags.isRegular && isFirstTimer) {
+    alert("Invalid Combination: A Regular Member cannot be a First Timer. Change Church Info from 'N/A (First Timer)'.");
+    return;
+  }
+  if (finalTags.isRegular && finalTags.isSeeker) {
+    alert("Invalid Combination: A Regular Member cannot be a Seeker.");
+    return;
+  }
+  if (finalTags.isSeeker && finalTags.isVolunteer) {
+    alert("Invalid Combination: A Seeker cannot be a Volunteer.");
+    return;
+  }
+  // Check: Seeker cannot have a Dgroup Leader assigned (must be N/A First Timer or empty if they are just arriving, but strictly seekers don't have leaders yet)
+  if (finalTags.isSeeker && dgroupLeaderSelection && !isFirstTimer) {
+    alert("Invalid: A member assigned to a Dgroup Leader cannot be tagged as a Seeker.");
+    return;
   }
 
-  // Validate Regular Member Requirement
-  // If marked Regular, must have a leader OR be N/A (D-Lead) OR be a Dgroup Leader themselves
-  if (
-    editableMember.value.finalTags.isRegular && 
-    !editableMember.value.dgroupLeader && 
-    !editableMember.value.finalTags.isDgroupLeader
-  ) {
-    alert('A "Regular Member" must be assigned to a Dgroup Leader or marked as N/A (D-Lead).');
+  // --- 2. Empty Category Check ---
+  // Must have at least one Manual Category OR be a First Timer (via dropdown)
+  const hasManualCategory = finalTags.isSeeker || finalTags.isRegular || finalTags.isDgroupLeader;
+  if (!hasManualCategory && !isFirstTimer) {
+    alert("Please select at least one Category (Seeker, Regular, or Dgroup Leader) or set Church Info to 'N/A (First Timer)'.");
     return;
+  }
+
+  // --- 3. Volunteer Ministry Validation ---
+  if (finalTags.isVolunteer) {
+    if (!finalTags.volunteerMinistry || finalTags.volunteerMinistry.length === 0) {
+      alert("You selected 'Volunteer' but no ministry was chosen. Please select a ministry.");
+      return;
+    }
+    // Volunteer must belong to a Dgroup (Cannot be First Timer)
+    if (isFirstTimer) {
+        alert("Invalid: A First Timer cannot be a Volunteer.");
+        return;
+    }
+    // Volunteer must have a leader or be N/A D-Lead
+    if (!dgroupLeaderSelection) {
+       alert("A Volunteer must belong to a Dgroup (Church Information cannot be empty).");
+       return;
+    }
+  }
+
+  // --- 4. Church Information / Dgroup Leader Validation ---
+  if (finalTags.isDgroupLeader) {
+      // Dgroup Leaders must have a Leader or be set to 'N/A (D-Lead)'
+      if (!dgroupLeaderSelection) {
+          alert("Dgroup Leaders must have a Leader or be set to 'N/A (D-Lead)' in Church Information.");
+          return;
+      }
+  } else if (!isFirstTimer && !dgroupLeaderSelection) {
+      // If not a Leader and not a First Timer, field cannot be empty
+      alert("Church Information (Dgroup Leader) cannot be empty.");
+      return;
+  }
+
+  // --- 5. Apply Data ---
+  if (isFirstTimer) {
+      finalTags.isFirstTimer = true;
+      editableMember.value.dgroupLeader = ''; // Clear string so they appear as Unassigned in view
+  } else {
+      finalTags.isFirstTimer = false;
   }
   
   // Update Age & Category
@@ -141,11 +196,10 @@ function save() {
   }
   
   // Leader Logic: Generate ID if new leader
-  if (editableMember.value.finalTags.isDgroupLeader) {
+  if (finalTags.isDgroupLeader) {
     if (!editableMember.value.dgroupId) {
       editableMember.value.dgroupId = generateDgroupID();
     }
-    // Default group name if empty
     if (!editableMember.value.dgroupName) {
       editableMember.value.dgroupName = `${editableMember.value.firstName}'s Dgroup`;
     }
@@ -337,6 +391,7 @@ function copyToClipboard(text) {
                 <label for="volunteer">Volunteer</label>
             </div>
 
+             <!-- Show Ministry Options ONLY if Volunteer is checked -->
              <div v-if="editableMember.finalTags.isVolunteer" class="indented">
                 <label class="sub-label">Select Ministries:</label>
                 <div class="checkbox-subgroup">
