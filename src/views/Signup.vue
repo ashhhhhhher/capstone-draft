@@ -2,98 +2,42 @@
 import { ref } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
-import emailjs from '@emailjs/browser'
+import { getAuth, sendEmailVerification, signOut } from "firebase/auth"
+import { Eye, EyeOff } from 'lucide-vue-next'
 
 const authStore = useAuthStore()
 const router = useRouter()
-
-// --- YOUR EMAILJS CREDENTIALS ---
-const EMAILJS_SERVICE_ID = "service_wfpraos";   
-const EMAILJS_TEMPLATE_ID = "template_2jzbcff"; 
-const EMAILJS_PUBLIC_KEY = "qL--G6n60cgb4-HXX";   
+const auth = getAuth()
 
 // --- State Management ---
-const step = ref(1) 
-const generatedOTP = ref('')
-const inputOTP = ref('')
 const errorMessage = ref('')
-const isResending = ref(false)
-const isSendingEmail = ref(false) 
-const showWelcome = ref(false) // For Blue Screen Transition
+const isSuccess = ref(false)
+const showPassword = ref(false)
+const showConfirmPassword = ref(false)
 
-// --- Form Data (Simplified) ---
+// --- Form Data ---
 const email = ref('')
 const password = ref('')
 const confirmPassword = ref('')
 const selectedBranch = ref('baguio') 
 
-// Reduced Personal Info
+// Personal Info
 const firstName = ref('')
 const lastName = ref('')
 const birthday = ref('')
 const gender = ref('')
 
-// --- Validation ---
-async function handleInitialSubmit() {
+async function handleSignup() {
   errorMessage.value = ''
   
   if (password.value !== confirmPassword.value) {
     errorMessage.value = "Passwords do not match."
     return
   }
+  
   if (!firstName.value || !lastName.value || !birthday.value || !gender.value || !email.value) {
     errorMessage.value = "Please fill in all required fields."
     return
-  }
-
-  await generateAndSendOTP();
-}
-
-async function generateAndSendOTP() {
-  isSendingEmail.value = true;
-  errorMessage.value = '';
-
-  const code = Math.floor(100000 + Math.random() * 900000).toString();
-  generatedOTP.value = code;
-
-  const templateParams = {
-    name: firstName.value,             
-    time: new Date().toLocaleString(), 
-    otp_code: code,                    
-    to_email: email.value              
-  };
-
-  try {
-    await emailjs.send(
-      EMAILJS_SERVICE_ID,
-      EMAILJS_TEMPLATE_ID,
-      templateParams,
-      EMAILJS_PUBLIC_KEY
-    );
-
-    alert(`Verification code sent to ${email.value}`);
-    step.value = 2;
-    isResending.value = false;
-
-  } catch (error) {
-    console.error('EmailJS Error:', error);
-    errorMessage.value = "Failed to send email. Please check your internet connection.";
-  } finally {
-    isSendingEmail.value = false;
-  }
-}
-
-async function resendOTP() {
-  isResending.value = true;
-  await generateAndSendOTP();
-}
-
-async function verifyAndSignup() {
-  errorMessage.value = '';
-
-  if (inputOTP.value !== generatedOTP.value) {
-    errorMessage.value = "Invalid verification code. Please try again.";
-    return;
   }
 
   try {
@@ -108,26 +52,31 @@ async function verifyAndSignup() {
       }
     }
     
-    // Create account
+    // 1. Create account (this automatically signs them in)
     await authStore.signup(email.value, password.value, userData)
     
-    // Show Welcome Screen
-    showWelcome.value = true;
-    
-    // Delay routing to let the animation play
-    setTimeout(() => {
-        router.push({ name: 'memberHome' }) 
-    }, 2500)
+    // 2. Send Verification Email (Native Firebase)
+    if (auth.currentUser && !auth.currentUser.emailVerified) {
+      await sendEmailVerification(auth.currentUser)
+    }
+
+    // 3. Sign out immediately so they can't access dashboard yet
+    await signOut(auth)
+
+    // 4. Show Success State
+    isSuccess.value = true
 
   } catch (error) {
+    console.error("Signup Error:", error)
     if (error.code === 'auth/email-already-in-use') {
       errorMessage.value = 'This email is already in use.'
-      step.value = 1; 
     } else if (error.code === 'auth/weak-password') {
-      errorMessage.value = 'Password must be at least 6 characters.'
-      step.value = 1; 
+      // Handles password policy enforcement errors
+      errorMessage.value = 'Password is too weak. ' + (error.message.includes('characters') ? 'It must be at least 6 characters.' : error.message)
+    } else if (error.message) {
+      errorMessage.value = error.message
     } else {
-      errorMessage.value = 'An unexpected error occurred: ' + error.message;
+      errorMessage.value = 'An unexpected error occurred during signup.'
     }
   }
 }
@@ -135,94 +84,116 @@ async function verifyAndSignup() {
 
 <template>
   <div class="signup-container">
-    
-    <!-- Welcome Transition Overlay -->
-    <transition name="fade">
-      <div v-if="showWelcome" class="welcome-overlay">
-        <div class="welcome-content">
-          <img src="/ccf logo.png" alt="CCF Logo" class="welcome-logo" />
-          <h1>Welcome, {{ firstName }}!</h1>
-          <p>Getting your dashboard ready...</p>
-          <div class="spinner"></div>
-        </div>
-      </div>
-    </transition>
-
     <div class="signup-box">
-      <h2>{{ step === 1 ? 'Member Sign Up' : 'Verify Email' }}</h2>
-      <p v-if="step === 1">Join Elevate Baguio. Your profile will be created automatically.</p>
-      <p v-else>We sent a 6-digit code to <strong>{{ email }}</strong>.</p>
-
-      <form v-if="step === 1" @submit.prevent="handleInitialSubmit" class="signup-form">
-        <div class="form-group">
-          <label for="branch">Branch</label>
-          <select id="branch" v-model="selectedBranch" required disabled>
-            <option value="baguio">Elevate Baguio</option>
-          </select>
+      
+      <!-- Success / Verify Email Screen -->
+      <div v-if="isSuccess" class="success-content">
+        <div class="icon-circle">
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
+            <polyline points="22,6 12,13 2,6"></polyline>
+          </svg>
         </div>
+        <h2>Verify your email</h2>
+        <p>
+          We've sent a verification link to <strong>{{ email }}</strong>.<br>
+          Please check your inbox (and spam folder) and click the link to activate your account.
+        </p>
+        <p class="sub-text">Once verified, you can log in.</p>
+        
+        <RouterLink to="/login" class="login-btn-link">
+          Go to Login
+        </RouterLink>
+      </div>
 
-        <div class="personal-info">
-          <div class="form-grid">
-            <div class="form-group">
-              <label for="firstName">First Name *</label>
-              <input type="text" id="firstName" v-model="firstName" required>
+      <!-- Signup Form -->
+      <div v-else>
+        <h2>Member Sign Up</h2>
+        <p>Join Elevate Baguio. Create your account.</p>
+
+        <form @submit.prevent="handleSignup" class="signup-form">
+          <div class="form-group">
+            <label for="branch">Branch</label>
+            <select id="branch" v-model="selectedBranch" required disabled>
+              <option value="baguio">Elevate Baguio</option>
+            </select>
+          </div>
+
+          <div class="personal-info">
+            <div class="form-grid">
+              <div class="form-group">
+                <label for="firstName">First Name *</label>
+                <input type="text" id="firstName" v-model="firstName" required>
+              </div>
+              <div class="form-group">
+                <label for="lastName">Last Name *</label>
+                <input type="text" id="lastName" v-model="lastName" required>
+              </div>
             </div>
-            <div class="form-group">
-              <label for="lastName">Last Name *</label>
-              <input type="text" id="lastName" v-model="lastName" required>
+            <div class="form-grid">
+              <div class="form-group">
+                <label for="birthday">Birthday *</label>
+                <input type="date" id="birthday" v-model="birthday" required>
+              </div>
+              <div class="form-group">
+                <label for="gender">Gender *</label>
+                <select id="gender" v-model="gender" required>
+                  <option value="" disabled>Select...</option>
+                  <option value="Male">Male</option>
+                  <option value="Female">Female</option>
+                </select>
+              </div>
             </div>
           </div>
-          <div class="form-grid">
-            <div class="form-group">
-              <label for="birthday">Birthday *</label>
-              <input type="date" id="birthday" v-model="birthday" required>
-            </div>
-            <div class="form-group">
-              <label for="gender">Gender *</label>
-              <select id="gender" v-model="gender" required>
-                <option value="" disabled>Select...</option>
-                <option value="Male">Male</option>
-                <option value="Female">Female</option>
-              </select>
+          <hr />
+          <div class="form-group">
+            <label for="email">Email *</label>
+            <input type="email" id="email" v-model="email" required>
+          </div>
+          
+          <div class="form-group">
+            <label for="password">Password *</label>
+            <div class="password-wrapper">
+              <input 
+                :type="showPassword ? 'text' : 'password'" 
+                id="password" 
+                v-model="password" 
+                placeholder="At least 6 characters" 
+                required
+              >
+              <button type="button" class="eye-btn" @click="showPassword = !showPassword">
+                <EyeOff v-if="showPassword" :size="18" />
+                <Eye v-else :size="18" />
+              </button>
             </div>
           </div>
-        </div>
-        <hr />
-        <div class="form-group">
-          <label for="email">Email *</label>
-          <input type="email" id="email" v-model="email" required>
-        </div>
-        <div class="form-group">
-          <label for="password">Password *</label>
-          <input type="password" id="password" v-model="password" placeholder="At least 6 characters" required>
-        </div>
-        <div class="form-group">
-          <label for="confirmPassword">Confirm Password *</label>
-          <input type="password" id="confirmPassword" v-model="confirmPassword" required>
-        </div>
-        <p v-if="errorMessage" class="error-message">{{ errorMessage }}</p>
-        <button type="submit" class="signup-btn" :disabled="isSendingEmail">
-          {{ isSendingEmail ? 'Sending Code...' : 'Next: Verify Email' }}
-        </button>
-      </form>
 
-      <form v-else @submit.prevent="verifyAndSignup" class="signup-form">
-        <div class="otp-container">
-          <label for="otp">Enter Verification Code</label>
-          <input type="text" id="otp" v-model="inputOTP" placeholder="000000" maxlength="6" class="otp-input" required>
-        </div>
-        <p v-if="errorMessage" class="error-message">{{ errorMessage }}</p>
-        <button type="submit" class="signup-btn" :disabled="authStore.isLoading">
-          {{ authStore.isLoading ? 'Creating Account...' : 'Verify & Create Account' }}
-        </button>
-        <div class="otp-actions">
-          <button type="button" class="text-btn" @click="resendOTP" :disabled="isResending || isSendingEmail">
-             {{ isResending ? 'Sending...' : 'Resend Code' }}
+          <div class="form-group">
+            <label for="confirmPassword">Confirm Password *</label>
+            <div class="password-wrapper">
+              <input 
+                :type="showConfirmPassword ? 'text' : 'password'" 
+                id="confirmPassword" 
+                v-model="confirmPassword" 
+                required
+              >
+              <button type="button" class="eye-btn" @click="showConfirmPassword = !showConfirmPassword">
+                <EyeOff v-if="showConfirmPassword" :size="18" />
+                <Eye v-else :size="18" />
+              </button>
+            </div>
+          </div>
+
+          <div v-if="errorMessage" class="message-box error">
+            {{ errorMessage }}
+          </div>
+
+          <button type="submit" class="signup-btn" :disabled="authStore.isLoading">
+            {{ authStore.isLoading ? 'Creating Account...' : 'Sign Up' }}
           </button>
-          <button type="button" class="text-btn cancel" @click="step = 1">Change Email</button>
-        </div>
-      </form>
-      <p v-if="step === 1" class="login-link">Already have an account? <RouterLink to="/login">Login</RouterLink></p>
+        </form>
+        <p class="login-link">Already have an account? <RouterLink to="/login">Login</RouterLink></p>
+      </div>
     </div>
   </div>
 </template>
@@ -240,77 +211,22 @@ p { color: #546E7A; margin-bottom: 24px; }
 hr { border: none; border-top: 1px solid #ECEFF1; margin: 16px 0 24px 0; }
 .signup-btn { width: 100%; padding: 14px; margin-top: 16px; background-color: #1976D2; color: white; font-size: 16px; font-weight: 600; border: none; border-radius: 8px; cursor: pointer; }
 .signup-btn:disabled { background-color: #90A4AE; }
-.error-message { color: #D32F2F; background-color: #FFEBEE; border: 1px solid #FFCDD2; padding: 10px; border-radius: 8px; margin-bottom: 20px; }
 .login-link { margin-top: 24px; font-size: 14px; }
-.otp-container { margin-bottom: 24px; text-align: center; }
-.otp-input { text-align: center; font-size: 24px !important; letter-spacing: 8px; font-weight: bold; color: #0D47A1; }
-.otp-actions { display: flex; justify-content: space-between; margin-top: 20px; }
-.text-btn { background: none; border: none; color: #1976D2; font-size: 14px; cursor: pointer; text-decoration: underline; }
-.text-btn.cancel { color: #78909C; }
 
-/* Welcome Overlay Styles */
-.welcome-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background-color: #1976D2; /* Brand Blue */
-  z-index: 9999;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-  color: white;
-}
+/* Password Eye Icon */
+.password-wrapper { position: relative; display: flex; align-items: center; }
+.password-wrapper input { padding-right: 40px; }
+.eye-btn { position: absolute; right: 12px; background: none; border: none; cursor: pointer; color: #78909C; display: flex; align-items: center; padding: 0; }
+.eye-btn:hover { color: #37474F; }
 
-.welcome-content {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 16px;
-}
+/* Error/Success Messages */
+.message-box { padding: 10px; border-radius: 8px; margin-bottom: 20px; font-size: 14px; text-align: center; }
+.message-box.error { color: #D32F2F; background-color: #FFEBEE; border: 1px solid #FFCDD2; }
 
-.welcome-logo {
-  width: 100px;
-  height: auto;
-  margin-bottom: 16px;
-  background: white;
-  border-radius: 50%;
-  padding: 12px;
-  box-shadow: 0 4px 15px rgba(0,0,0,0.2);
-}
-
-.welcome-content h1 {
-  font-size: 32px;
-  margin: 0;
-  font-weight: 700;
-}
-
-.welcome-content p {
-  color: rgba(255,255,255,0.8);
-  font-size: 16px;
-  margin: 0;
-}
-
-.spinner {
-  width: 40px;
-  height: 40px;
-  border: 4px solid rgba(255, 255, 255, 0.3);
-  border-top-color: white;
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
-  margin-top: 24px;
-}
-
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
-
-.fade-enter-active, .fade-leave-active {
-  transition: opacity 0.5s ease;
-}
-.fade-enter-from, .fade-leave-to {
-  opacity: 0;
-}
+/* Success Screen */
+.success-content { display: flex; flex-direction: column; align-items: center; gap: 16px; padding: 20px 0; }
+.icon-circle { width: 80px; height: 80px; background: #E8F5E9; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #2E7D32; margin-bottom: 10px; }
+.sub-text { font-size: 14px; color: #78909C; margin-top: -10px; }
+.login-btn-link { display: inline-block; background-color: #1976D2; color: white; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: 600; margin-top: 10px; transition: background 0.2s; }
+.login-btn-link:hover { background-color: #1565C0; }
 </style>

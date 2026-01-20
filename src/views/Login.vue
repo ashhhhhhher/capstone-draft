@@ -2,17 +2,25 @@
 import { ref } from 'vue'
 import { RouterLink, useRouter } from 'vue-router' 
 import { useAuthStore } from '../stores/auth'
+import { getAuth, sendPasswordResetEmail } from "firebase/auth"
+import { Eye, EyeOff } from 'lucide-vue-next'
 
 const authStore = useAuthStore()
 const router = useRouter()
+const auth = getAuth()
 
 const email = ref('')
 const password = ref('')
 const errorMessage = ref('')
+const successMessage = ref('')
 const showWelcome = ref(false)
+const showPassword = ref(false)
+const isLoadingReset = ref(false)
 
 async function handleLogin() {
   errorMessage.value = ''
+  successMessage.value = ''
+  
   try {
     await authStore.login(email.value, password.value)
     
@@ -36,9 +44,47 @@ async function handleLogin() {
       case 'auth/invalid-credential':
         errorMessage.value = 'Incorrect email or password.'
         break;
+      case 'auth/too-many-requests':
+        errorMessage.value = 'Too many failed attempts. Please try again later.'
+        break;
       default:
         errorMessage.value = 'An unexpected error occurred. Please try again.'
     }
+  }
+}
+
+async function handleForgotPassword() {
+  if (!email.value) {
+    errorMessage.value = "Please enter your email address first."
+    return
+  }
+  
+  isLoadingReset.value = true
+  errorMessage.value = ''
+  successMessage.value = ''
+
+  try {
+    // Explicitly define the redirect URL to ensure a valid link is generated
+    const actionCodeSettings = {
+      url: window.location.origin + '/login', 
+      handleCodeInApp: false
+    }
+    
+    await sendPasswordResetEmail(auth, email.value, actionCodeSettings)
+    successMessage.value = "Password reset link sent! Check your email."
+  } catch (error) {
+    console.error(error)
+    if (error.code === 'auth/user-not-found') {
+      errorMessage.value = "No account found with this email."
+    } else if (error.code === 'auth/invalid-email') {
+      errorMessage.value = "Please enter a valid email address."
+    } else if (error.code === 'auth/unauthorized-continue-uri') {
+      errorMessage.value = "Domain not authorized in Firebase Console."
+    } else {
+      errorMessage.value = "Failed to send reset email. Try again later."
+    }
+  } finally {
+    isLoadingReset.value = false
   }
 }
 </script>
@@ -64,16 +110,37 @@ async function handleLogin() {
       <form @submit.prevent="handleLogin" class="login-form">
         <div class="form-group">
           <label for="email">Email</label>
-          <input type="email" id="email" v-model="email" required>
-        </div>
-        <div class="form-group">
-          <label for="password">Password</label>
-          <input type="password" id="password" v-model="password" required>
+          <input type="email" id="email" v-model="email" required placeholder="Enter your email">
         </div>
         
-        <p v-if="errorMessage" class="error-message">
+        <div class="form-group">
+          <label for="password">Password</label>
+          <div class="password-wrapper">
+            <input 
+              :type="showPassword ? 'text' : 'password'" 
+              id="password" 
+              v-model="password" 
+              required
+              placeholder="Enter your password"
+            >
+            <button type="button" class="eye-btn" @click="showPassword = !showPassword">
+              <EyeOff v-if="showPassword" :size="20" />
+              <Eye v-else :size="20" />
+            </button>
+          </div>
+          <div class="forgot-link-wrapper">
+            <button type="button" class="forgot-btn" @click="handleForgotPassword" :disabled="isLoadingReset">
+              {{ isLoadingReset ? 'Sending...' : 'Forgot Password?' }}
+            </button>
+          </div>
+        </div>
+        
+        <div v-if="errorMessage" class="message-box error">
           {{ errorMessage }}
-        </p>
+        </div>
+        <div v-if="successMessage" class="message-box success">
+          {{ successMessage }}
+        </div>
 
         <button type="submit" class="login-btn" :disabled="authStore.isLoading">
           {{ authStore.isLoading ? 'Loading...' : 'Login' }}
@@ -134,6 +201,55 @@ p {
   box-sizing: border-box;
   font-size: 16px;
 }
+
+/* Password Input Wrapper */
+.password-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.password-wrapper input {
+  padding-right: 40px; /* Space for eye icon */
+}
+.eye-btn {
+  position: absolute;
+  right: 12px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #78909C;
+  display: flex;
+  align-items: center;
+  padding: 0;
+}
+.eye-btn:hover {
+  color: #37474F;
+}
+
+/* Forgot Password Link */
+.forgot-link-wrapper {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 6px;
+}
+.forgot-btn {
+  background: none;
+  border: none;
+  color: #1976D2;
+  font-size: 13px;
+  cursor: pointer;
+  padding: 0;
+  font-weight: 500;
+}
+.forgot-btn:hover {
+  text-decoration: underline;
+}
+.forgot-btn:disabled {
+  color: #B0BEC5;
+  cursor: not-allowed;
+  text-decoration: none;
+}
+
 .login-btn {
   width: 100%;
   padding: 14px;
@@ -149,14 +265,25 @@ p {
 .login-btn:disabled {
   background-color: #90A4AE;
 }
-.error-message {
-  color: #D32F2F;
-  background-color: #FFEBEE;
-  border: 1px solid #FFCDD2;
+
+.message-box {
   padding: 10px;
   border-radius: 8px;
   margin-bottom: 20px;
+  font-size: 14px;
+  text-align: center;
 }
+.message-box.error {
+  color: #D32F2F;
+  background-color: #FFEBEE;
+  border: 1px solid #FFCDD2;
+}
+.message-box.success {
+  color: #2E7D32;
+  background-color: #E8F5E9;
+  border: 1px solid #A5D6A7;
+}
+
 .signup-link {
   margin-top: 24px;
   font-size: 14px;

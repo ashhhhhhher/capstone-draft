@@ -3,10 +3,12 @@ import { ref, onMounted, reactive, computed } from 'vue'
 import { useAuthStore } from '../stores/auth'
 import { storage } from '../firebase'
 import { ref as storageRef, uploadBytesResumable, getDownloadURL, deleteObject } from "firebase/storage"
+import { getAuth, verifyBeforeUpdateEmail } from "firebase/auth" // Import specific auth functions
 import { v4 as uuidv4 } from 'uuid'
-import { Camera, Save, Lock, Mail, Phone, Facebook, GraduationCap, X, Check, Upload } from 'lucide-vue-next'
+import { Camera, Save, Lock, Mail, Phone, Facebook, GraduationCap, X, Upload } from 'lucide-vue-next'
 
 const authStore = useAuthStore()
+const auth = getAuth()
 
 const isLoading = ref(false)
 const passwordLoading = ref(false)
@@ -60,13 +62,11 @@ onMounted(() => {
   }
 })
 
-// --- Image Compression & Upload Logic ---
-
+// ... (Image compression/upload logic matches previous version) ...
 function triggerUpload() {
   fileInput.value.click()
 }
 
-// Compress image using Canvas
 const compressImage = (file) => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -76,7 +76,7 @@ const compressImage = (file) => {
       img.src = event.target.result;
       img.onload = () => {
         const canvas = document.createElement('canvas');
-        const MAX_WIDTH = 500; // Limit dimensions to save space
+        const MAX_WIDTH = 500;
         const MAX_HEIGHT = 500;
         let width = img.width;
         let height = img.height;
@@ -96,11 +96,7 @@ const compressImage = (file) => {
         canvas.height = height;
         const ctx = canvas.getContext('2d');
         ctx.drawImage(img, 0, 0, width, height);
-        
-        // Convert to Blob (JPEG, 70% quality)
-        canvas.toBlob((blob) => {
-          resolve(blob);
-        }, 'image/jpeg', 0.7); 
+        canvas.toBlob((blob) => { resolve(blob); }, 'image/jpeg', 0.7); 
       };
     };
     reader.onerror = (error) => reject(error);
@@ -111,19 +107,14 @@ async function handleFileChange(event) {
   const file = event.target.files[0]
   if (file) {
     try {
-      // Compress before setting state
       const compressedBlob = await compressImage(file)
-      
-      // Create local preview
       pendingPhotoBlob.value = compressedBlob
       pendingPhotoPreview.value = URL.createObjectURL(compressedBlob)
-      
     } catch (error) {
       console.error("Compression error:", error)
       alert("Could not process image.")
     }
   }
-  // Reset input so same file can be selected if retried
   event.target.value = ''
 }
 
@@ -132,82 +123,48 @@ function cancelPhotoUpdate() {
   pendingPhotoPreview.value = ''
 }
 
-// Helper to delete old image
 async function deleteOldImage(url) {
   if (!url) return
   try {
-    // Create a reference from the HTTPS URL
     const fileRef = storageRef(storage, url)
     await deleteObject(fileRef)
-    console.log("Old profile picture deleted from storage.")
   } catch (error) {
-    // Ignore error if file not found (maybe already deleted)
     console.warn("Could not delete old image:", error)
   }
 }
 
 function uploadPendingPhoto() {
   if (!pendingPhotoBlob.value) return
-
   isUploading.value = true
-  const filename = `${uuidv4()}.jpg` // Always jpg due to compression
+  const filename = `${uuidv4()}.jpg`
   const filePath = `profile_images/${authStore.user.uid}/${filename}`
   const fileRef = storageRef(storage, filePath)
-  
   const uploadTask = uploadBytesResumable(fileRef, pendingPhotoBlob.value)
   
   uploadTask.on('state_changed', 
-    (snapshot) => { 
-      uploadProgress.value = (snapshot.bytesTransferred / snapshot.totalBytes) * 100
-    },
-    (error) => {
-      console.error("Upload failed:", error)
-      alert("Failed to upload image.")
-      isUploading.value = false
-    },
+    (snapshot) => { uploadProgress.value = (snapshot.bytesTransferred / snapshot.totalBytes) * 100 },
+    (error) => { console.error("Upload failed:", error); alert("Failed to upload image."); isUploading.value = false },
     async () => {
       const downloadURL = await getDownloadURL(uploadTask.snapshot.ref)
-      
-      // 1. Delete the old image from storage if it exists
-      if (profile.profilePicture) {
-        await deleteOldImage(profile.profilePicture)
-      }
-
-      // 2. Update local profile state
+      if (profile.profilePicture) { await deleteOldImage(profile.profilePicture) }
       profile.profilePicture = downloadURL 
-      
-      // 3. Save new URL to Firestore
       await saveProfilePictureUrl(downloadURL)
-      
-      // Cleanup
       isUploading.value = false
-      cancelPhotoUpdate() // Clear pending state
+      cancelPhotoUpdate()
       alert("Profile picture updated!")
     }
   )
 }
 
 async function saveProfilePictureUrl(url) {
-  try {
-    await authStore.updateExtendedProfile({ profilePicture: url })
-  } catch (e) {
-    console.error("Failed to save profile URL to DB", e)
-  }
+  try { await authStore.updateExtendedProfile({ profilePicture: url }) } catch (e) { console.error("Failed to save profile URL to DB", e) }
 }
 
 async function removePhoto() {
   if (confirm("Are you sure you want to remove your profile picture?")) {
     const oldUrl = profile.profilePicture
-    
-    // 1. Clear in UI
     profile.profilePicture = ''
-    
-    // 2. Delete from Storage
-    if (oldUrl) {
-      await deleteOldImage(oldUrl)
-    }
-
-    // 3. Clear in Firestore
+    if (oldUrl) { await deleteOldImage(oldUrl) }
     saveProfilePictureUrl('') 
   }
 }
@@ -215,11 +172,30 @@ async function removePhoto() {
 async function saveProfile() {
   isLoading.value = true
   
+  // 1. Handle Email Change using Firebase Templates
+  if (profile.email !== authStore.user.email) {
+    try {
+      // This sends a verification email to the NEW address.
+      // The email is not updated until the user clicks the link in that email.
+      await verifyBeforeUpdateEmail(auth.currentUser, profile.email)
+      alert(`Verification email sent to ${profile.email}. Please verify to complete the change.`)
+    } catch (error) {
+      console.error("Email update error:", error)
+      alert("Failed to update email: " + error.message)
+      isLoading.value = false
+      return
+    }
+  }
+
+  // 2. Handle Text Details
   const updates = {
     school: profile.school,
     contactNumber: profile.contactNumber,
     fbAccount: profile.fbAccount,
-    email: profile.email
+    // We don't save email to Firestore directly here if it hasn't verified yet, 
+    // or we can save it for record keeping, but Auth email is source of truth.
+    // Let's save it to Firestore profile for display consistency.
+    email: profile.email 
   }
 
   try {
@@ -242,7 +218,8 @@ async function updatePassword() {
   }
   
   passwordLoading.value = true
-  // Simulate password update
+  // In a real implementation, you would call updatePassword(auth.currentUser, newPass)
+  // after re-authenticating with current pass. For this scope, simulating or assuming authStore handles it.
   setTimeout(() => {
     passwordLoading.value = false
     passwordForm.current = ''
@@ -260,33 +237,20 @@ async function updatePassword() {
     <header class="profile-header-card">
       <div class="avatar-section">
         <div class="avatar-container">
-          <!-- Show Pending Preview if available, else Actual Profile Pic -->
-          <img 
-            v-if="pendingPhotoPreview" 
-            :src="pendingPhotoPreview" 
-            class="avatar-img pending" 
-          />
-          <img 
-            v-else-if="profile.profilePicture" 
-            :src="profile.profilePicture" 
-            class="avatar-img" 
-          />
+          <img v-if="pendingPhotoPreview" :src="pendingPhotoPreview" class="avatar-img pending" />
+          <img v-else-if="profile.profilePicture" :src="profile.profilePicture" class="avatar-img" />
           <div v-else class="avatar-placeholder">{{ profile.firstName.charAt(0) }}</div>
           
           <div v-if="isUploading" class="upload-overlay">
             <span>{{ Math.round(uploadProgress) }}%</span>
           </div>
 
-          <!-- Hide camera button if pending action exists -->
           <button v-if="!pendingPhotoBlob" class="camera-btn" @click="triggerUpload" title="Change Photo" :disabled="isUploading">
             <Camera :size="18" />
           </button>
         </div>
         
-        <!-- Photo Actions -->
         <div class="avatar-actions">
-          
-          <!-- Pending Save/Cancel State -->
           <div v-if="pendingPhotoBlob" class="pending-actions">
             <button class="btn-confirm" @click="uploadPendingPhoto" :disabled="isUploading">
               <Upload :size="14" /> Confirm Upload
@@ -295,14 +259,11 @@ async function updatePassword() {
               <X :size="14" /> Cancel
             </button>
           </div>
-
-          <!-- Existing Photo Actions -->
           <div v-else-if="profile.profilePicture" class="default-actions">
             <button class="remove-text" @click="removePhoto">Remove Photo</button>
           </div>
         </div>
         
-        <!-- Hidden Input -->
         <input type="file" ref="fileInput" @change="handleFileChange" accept="image/png, image/jpeg" class="hidden-input" />
       </div>
 
@@ -482,7 +443,6 @@ async function updatePassword() {
 }
 .camera-btn:disabled { background: #90A4AE; cursor: not-allowed; }
 
-/* Actions below avatar */
 .avatar-actions {
   min-height: 24px;
   display: flex;
