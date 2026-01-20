@@ -110,7 +110,14 @@ export const useEventsStore = defineStore('events', {
         try {
           // 1. Delete from Storage
           const imageRef = storageRef(storage, event.photoURL);
-          await deleteObject(imageRef);
+          try {
+            await deleteObject(imageRef)
+          } catch (error) {
+            if (error.code !== 'storage/object-not-found') {
+              console.error('Failed to delete image:', error)
+            }
+          }
+
           
           // 2. Update Firestore Doc to remove the URL
           const eventRef = doc(this.getEventCollection(), event.id);
