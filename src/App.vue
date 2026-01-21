@@ -12,6 +12,7 @@ const membersStore = useMembersStore()
 const eventsStore = useEventsStore()
 const attendanceStore = useAttendanceStore()
 
+
 const route = useRoute()
 
 const isAuthReady = computed(() => authStore.isAuthReady)
@@ -31,7 +32,7 @@ watch(() => [authStore.user, authStore.branchId], ([newUser, newBranchId]) => {
     // Fetch data for the determined branch
     membersStore.fetchMembers()
     eventsStore.fetchEvents()
-    attendanceStore.fetchAllAttendance()
+      attendanceStore.fetchAllAttendance()
   }
 }, { immediate: true })
 
