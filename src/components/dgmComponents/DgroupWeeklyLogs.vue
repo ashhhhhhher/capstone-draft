@@ -44,7 +44,7 @@ const exportLogs = () => {
     <div class="logs-header">
       <div class="title-area">
         <ClipboardList :size="20" color="#1976D2" />
-        <h3>DGroup Attendance</h3>
+        <h3>Weekly DGroup Submissions</h3>
       </div>
       <button @click="exportLogs" class="mini-export-btn" v-if="logs.length > 0">
         <Download :size="14" /> Export

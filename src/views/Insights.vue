@@ -257,6 +257,7 @@ const historicalAttendanceData = computed(() => {
         <div class="chart-card"><h3>Member Category Distribution</h3><div class="chart-wrapper" style="height: 350px;"><DoughnutChart v-if="demographics.total > 0" :chartData="categoryDistributionData" :chartOptions="doughnutChartOptions" /><p v-else class="no-data-text">No members registered yet.</p></div></div>
         <div class="chart-card"><h3>Gender & Age Distribution</h3><div class="chart-wrapper" style="height: 350px;"><BarChart v-if="members.length > 0" :chartData="genderAgeDistributionData" :chartOptions="genderAgeChartOptions" /><p v-else class="no-data-text">No members registered yet.</p></div></div>
       </div>
+  
       
       <!-- 3. VOLUNTEER TRACKING REPORT -->
       <div class="chart-card-full">
@@ -289,6 +290,8 @@ const historicalAttendanceData = computed(() => {
             <p v-else class="no-data-text">No active volunteer records found yet.</p>
          </div>
       </div>
+
+      <DgroupWeeklyLogs />
 
       <!-- 4. Historical Attendance -->
       <div class="chart-card-full">
