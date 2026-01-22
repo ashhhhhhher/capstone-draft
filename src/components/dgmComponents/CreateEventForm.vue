@@ -124,6 +124,11 @@ async function handleSubmit() {
       photoURL: newPhotoURL
     }
 
+    // If eventType is specifically a B1G event, restrict visibility
+    if (eventType.value === 'b1g_event') {
+      eventData.allowedAgeCategories = ['B1G']
+    }
+
     if (isEditMode.value) {
       await eventsStore.updateEvent(eventId.value, eventData)
     } else {

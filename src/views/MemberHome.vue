@@ -1,32 +1,52 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed } from 'vue'
 import { useAuthStore } from '../stores/auth'
 import { useEventsStore } from '../stores/events'
 import { useRouter } from 'vue-router'
-import { Calendar, MapPin, QrCode, BarChart2, Clock, Info, X } from 'lucide-vue-next'
+import { MapPin, QrCode, BarChart2, Clock, Info, X } from 'lucide-vue-next'
 
+const router = useRouter()
 const authStore = useAuthStore()
 const eventsStore = useEventsStore()
-const router = useRouter()
 
 const memberProfile = computed(() => authStore.userProfile)
 
-// --- MODAL STATE ---
 const showEventModal = ref(false)
 const selectedEvent = ref(null)
 
-onMounted(() => {
-  eventsStore.fetchEvents()
-})
+const todayEvent = computed(() => {
+  const today = new Date()
+  const todayStr = today.toISOString().split('T')[0]
+  const ageCat = memberProfile.value?.finalTags?.ageCategory
 
-const todayEvent = computed(() => eventsStore.currentEvent)
+  return eventsStore.allEvents.find(e => {
+    if (!e.date) return false
+    const eDate = new Date(e.date).toISOString().split('T')[0]
+    if (eDate !== todayStr) return false
+    if (e.ended) return false
+    if (!e.allowedAgeCategories || e.allowedAgeCategories.length === 0) return true
+    return ageCat && e.allowedAgeCategories.includes(ageCat)
+  })
+})
 
 // Filter for upcoming events (Future dates)
 const upcomingEvents = computed(() => {
   const now = new Date()
   now.setHours(0,0,0,0)
+  const ageCat = memberProfile.value?.finalTags?.ageCategory
+
   return eventsStore.allEvents
-    .filter(e => new Date(e.date) >= now && e.id !== todayEvent.value?.id)
+    .filter(e => {
+      if (!e.date) return false
+      // exclude past dates
+      if (new Date(e.date) < now) return false
+      // exclude events explicitly ended even if same day
+      if (e.ended) return false
+      // skip today's current event (shown separately)
+      if (e.id === todayEvent.value?.id) return false
+      if (!e.allowedAgeCategories || e.allowedAgeCategories.length === 0) return true
+      return ageCat && e.allowedAgeCategories.includes(ageCat)
+    })
     .sort((a, b) => new Date(a.date) - new Date(b.date))
 })
 
@@ -71,14 +91,6 @@ function formatShortDate(dateStr) {
       <div class="today-overlay">
         <div class="badge">HAPPENING TODAY</div>
         <h3>{{ todayEvent.name }}</h3>
-        <div class="event-meta">
-          <div class="meta-item">
-            <Calendar :size="14" /> {{ formatShortDate(todayEvent.date) }}
-          </div>
-          <div class="meta-item">
-            <Clock :size="14" /> {{ todayEvent.time || 'TBA' }}
-          </div>
-        </div>
       </div>
     </section>
 
@@ -88,41 +100,41 @@ function formatShortDate(dateStr) {
     </section>
 
     <!-- Upcoming Events -->
-    <section class="section-block">
       <div class="section-header">
         <h3>Upcoming Events</h3>
       </div>
 
-      <div v-if="upcomingEvents.length > 0" class="events-scroll-container">
-        <div
-          v-for="event in upcomingEvents"
-          :key="event.id"
-          class="upcoming-card-wrapper"
-          @click="openEventDetails(event)"
-        >
+      <div class="upcoming-column">
+        <div v-if="upcomingEvents.length > 0" class="events-scroll-container">
           <div
-            class="upcoming-card"
-            :style="event.photoURL ? { backgroundImage: `url(${event.photoURL})` } : {}"
+            v-for="event in upcomingEvents"
+            :key="event.id"
+            class="upcoming-card-wrapper"
+            @click="openEventDetails(event)"
           >
-            <div class="card-overlay">
-              <div class="card-content">
-                <span class="card-date">
-                  {{ formatShortDate(event.date) }}
-                </span>
-                <h4 class="card-title">{{ event.name }}</h4>
-                <span class="card-type">
-                  <MapPin :size="10" /> {{ event.eventLocation || 'Main Hall' }}
-                </span>
+            <div
+              class="upcoming-card"
+              :style="event.photoURL ? { backgroundImage: `url(${event.photoURL})` } : {}"
+            >
+              <div class="card-overlay">
+                <div class="card-content">
+                  <span class="card-date">
+                    {{ formatShortDate(event.date) }}
+                  </span>
+                  <h4 class="card-title">{{ event.name }}</h4>
+                  <span class="card-type">
+                    <MapPin :size="10" /> {{ event.eventLocation}}
+                  </span>
+                </div>
               </div>
             </div>
           </div>
         </div>
+
+        <div v-else class="empty-text">
+          No upcoming events scheduled.
+        </div>
       </div>
-      
-      <div v-else class="empty-text">
-        No upcoming events scheduled.
-      </div>
-    </section>
 
     <!-- My Dgroup Schedule Section Removed -->
 
@@ -224,10 +236,15 @@ function formatShortDate(dateStr) {
 .section-header h3 { font-size: 18px; color: #37474F; margin: 0 0 12px 0; }
 .events-scroll-container {
   display: flex;
-  overflow-x: auto;
+  flex-direction: column;
+  overflow-y: auto;
   gap: 12px;
   padding-bottom: 10px; /* Space for scrollbar */
   -webkit-overflow-scrolling: touch;
+}
+
+@media (min-width: 900px) {
+  .upcoming { flex-direction: row; }
 }
 .upcoming-card-wrapper {
   flex: 0 0 100%; /* Fixed width for cards */

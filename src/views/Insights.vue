@@ -76,7 +76,7 @@ const demographics = computed(() => {
 
 const attendanceTrends = computed(() => {
   const today = new Date(); today.setHours(0, 0, 0, 0);
-  const pastEvents = allEvents.value.filter(e => new Date(e.date + 'T00:00:00') <= today);
+  const pastEvents = allEvents.value.filter(e => e.eventType === 'service' && new Date(e.date + 'T00:00:00') <= today);
   if (pastEvents.length === 0) return { avg: 0, high: 0, low: 0 };
   const attendanceCounts = pastEvents.map(event => allAttendance.value.filter(att => att.eventId === event.id).length);
   const totalAttendance = attendanceCounts.reduce((sum, count) => sum + count, 0);
@@ -90,9 +90,14 @@ const conversionRate = computed(() => {
   const firstTimers = activeMembers.value.filter(m => m.finalTags.isFirstTimer);
   const totalFirstTimers = firstTimers.length;
   let convertedCount = 0;
-  firstTimers.forEach(ft => {
+    firstTimers.forEach(ft => {
     const isConverted = ft.finalTags.isRegular || !!ft.dgroupLeader
-    const attendanceCount = allAttendance.value.filter(att => att.memberId === ft.id).length
+    // Only count attendance from WKND services (exclude b1g_event attendance)
+    const attendanceCount = allAttendance.value.filter(att => {
+      if (att.memberId !== ft.id) return false
+      const ev = allEvents.value.find(e => e.id === att.eventId)
+      return ev && ev.eventType === 'service'
+    }).length
     if (isConverted && attendanceCount >= 2) convertedCount++
   })
   const total = totalFirstTimers + convertedCount;
@@ -300,7 +305,9 @@ const historicalAttendanceData = computed(() => {
 
     <!-- Modals -->
     <Modal v-if="showDgroupModal" @close="showDgroupModal = false" size="xl"><DgroupMatchingModal @close="showDgroupModal = false" /></Modal>
-    <Modal v-if="showAttendanceOverview" @close="showAttendanceOverview = false" size="xl"><AttendanceOverviewModal :events="allEvents" :attendance="allAttendance" :members="members" @close="showAttendanceOverview = false" /></Modal>
+    <Modal v-if="showAttendanceOverview" @close="showAttendanceOverview = false" size="xl">
+      <AttendanceOverviewModal :events="allEvents.filter(e => e.eventType === 'service')" :attendance="allAttendance" :members="members" @close="showAttendanceOverview = false" />
+    </Modal>
     
     <!-- Full Volunteer List Modal -->
     <Modal v-if="showFullVolunteerList" @close="showFullVolunteerList = false" size="xl">
