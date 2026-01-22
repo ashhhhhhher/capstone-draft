@@ -16,7 +16,6 @@ import AttendanceStats from '../components/dgmComponents/AttendanceStats.vue'
 import Modal from '../components/dgmComponents/Modal.vue'
 import CreateEventForm from '../components/dgmComponents/CreateEventForm.vue'
 import AttendanceListModal from '../components/dgmComponents/AttendanceListModal.vue'
-import EventListModal from '../components/dgmComponents/EventListModal.vue'
 import CalendarModal from '../components/dgmComponents/CalendarModal.vue' 
 import AbsenceMonitoring from '../components/dgmComponents/AbsenceMonitoring.vue'
 
@@ -31,41 +30,82 @@ const { currentEventAttendees, allAttendance } = storeToRefs(useAttendanceStore(
 // --- Modal State ---
 const showCreateEventModal = ref(false)
 const showAttendanceModal = ref(false)
-const showEventListModal = ref(false) 
 const showCalendarModal = ref(false) 
 const showEventDetailsModal = ref(false)
-const showAbsenceModal = ref(false)       // <-- new: absence modal
+const showAbsenceModal = ref(false) 
 const eventToEdit = ref(null) 
 const selectedStatFilter = ref('All')
 
-// --- Dynamic Data ---
+// --- Dynamic Data (MERGING PROFILE + ATTENDANCE RECORD) ---
 const presentMembers = computed(() => {
   if (!members.value || members.value.length === 0) return [];
-  const attendeeIds = new Set(
-    currentEventAttendees.value.map(att => att.memberId)
-  );
-  return members.value.filter(member => attendeeIds.has(member.id))
+  
+  // Merge attendance details (ministry role) into the member object
+  return currentEventAttendees.value.map(att => {
+      const profile = members.value.find(m => m.id === att.memberId);
+      if (!profile) return null;
+      return {
+          ...profile,
+          attendanceMinistry: att.ministry || 'N/A', // The actual role played
+          checkedInAt: att.timestamp
+      }
+  }).filter(Boolean);
 })
 
 const totalAttendance = computed(() => presentMembers.value.length)
 
+// --- UPDATED STATS LOGIC ---
+// Stats now reflect ACTUAL attendance role for THIS EVENT
 const dynamicStats = computed(() => {
   if (!members.value) return []; 
+  
+  const dleaders = presentMembers.value.filter(m => m.finalTags.isDgroupLeader);
+  const firstTimers = presentMembers.value.filter(m => m.finalTags.isFirstTimer);
+  
+  // Active Volunteers: Members who are NOT DLs, NOT First Timers, and have a valid attendanceMinistry
+  const activeVolunteers = presentMembers.value.filter(m => 
+      !m.finalTags.isDgroupLeader && 
+      !m.finalTags.isFirstTimer && 
+      m.attendanceMinistry && m.attendanceMinistry !== 'N/A'
+  );
+  
+  // Regulars: Everyone else (Not DL, Not FT, Not Active Volunteer)
+  const regulars = presentMembers.value.filter(m => 
+      !m.finalTags.isDgroupLeader && 
+      !m.finalTags.isFirstTimer && 
+      (!m.attendanceMinistry || m.attendanceMinistry === 'N/A')
+  );
+
   return [
-    { id: 1, title: "Regulars", count: presentMembers.value.filter(m => m.finalTags.isRegular).length },
-    { id: 2, title: "Volunteers", count: presentMembers.value.filter(m => m.finalTags.isVolunteer).length },
-    { id: 3, title: "Dgroup Leaders", count: presentMembers.value.filter(m => m.finalTags.isDgroupLeader).length },
-    { id: 4, title: "First Timers", count: presentMembers.value.filter(m => m.finalTags.isFirstTimer).length }
+    { id: 1, title: "Regulars", count: regulars.length },
+    { id: 2, title: "Volunteers", count: activeVolunteers.length },
+    { id: 3, title: "Dgroup Leaders", count: dleaders.length },
+    { id: 4, title: "First Timers", count: firstTimers.length }
   ]
 })
 
 const filteredAttendees = computed(() => {
   const filter = selectedStatFilter.value
+  
+  // Reuse logic from dynamicStats for consistency
+  const dleaders = presentMembers.value.filter(m => m.finalTags.isDgroupLeader);
+  const firstTimers = presentMembers.value.filter(m => m.finalTags.isFirstTimer);
+  const activeVolunteers = presentMembers.value.filter(m => 
+      !m.finalTags.isDgroupLeader && 
+      !m.finalTags.isFirstTimer && 
+      m.attendanceMinistry && m.attendanceMinistry !== 'N/A'
+  );
+  const regulars = presentMembers.value.filter(m => 
+      !m.finalTags.isDgroupLeader && 
+      !m.finalTags.isFirstTimer && 
+      (!m.attendanceMinistry || m.attendanceMinistry === 'N/A')
+  );
+
   if (filter === 'All') return presentMembers.value
-  if (filter === 'Regulars') return presentMembers.value.filter(m => m.finalTags.isRegular)
-  if (filter === 'Volunteers') return presentMembers.value.filter(m => m.finalTags.isVolunteer)
-  if (filter === 'Dgroup Leaders') return presentMembers.value.filter(m => m.finalTags.isDgroupLeader)
-  if (filter === 'First Timers') return presentMembers.value.filter(m => m.finalTags.isFirstTimer)
+  if (filter === 'Regulars') return regulars
+  if (filter === 'Volunteers') return activeVolunteers
+  if (filter === 'Dgroup Leaders') return dleaders
+  if (filter === 'First Timers') return firstTimers
   return []
 })
 
@@ -200,7 +240,7 @@ function handleEditEvent(event) {
 function exportEventAttendance(event) {
   try {
     if (!event || !event.id) { alert('No event selected to export.'); return }
-    // build attendee list for this event using allAttendance and members
+    
     const records = (allAttendance.value || []).filter(a => a.eventId === event.id)
     if (!records.length) { alert('No attendance records found for this event.'); return }
 
@@ -210,24 +250,41 @@ function exportEventAttendance(event) {
     rows.push([`Event Attendance: ${event.name}`])
     rows.push([`Date: ${event.date || 'N/A'}`])
     rows.push([""])
-    const headers = ['Name', 'Age', 'Age Group', 'Gender', 'Contact #']
+    // Extended Header for Ministry
+    const headers = ['Name', 'Age', 'Age Group', 'Gender', 'Contact #', 'Event Role / Ministry']
     rows.push(headers)
 
     const memberList = (members && members.value) ? members.value : []
-    records.forEach(r => {
-      const m = memberList.find(x => x.id === r.memberId)
-      if (!m) return
-      rows.push([`${m.lastName || ''}, ${m.firstName || ''}`.trim(), m.age || '', m.finalTags?.ageCategory || '', m.gender || '', m.contactNumber || ''])
+    
+    // Process records to find attendees
+    const attendees = records.map(r => {
+        const m = memberList.find(x => x.id === r.memberId)
+        if (!m) return null
+        return {
+            ...m,
+            attendanceMinistry: r.ministry || 'N/A' // Capture ministry from attendance record
+        }
+    }).filter(Boolean)
+
+    attendees.forEach(m => {
+      rows.push([
+          `${m.lastName || ''}, ${m.firstName || ''}`.trim(), 
+          m.age || '', 
+          m.finalTags?.ageCategory || '', 
+          m.gender || '', 
+          m.contactNumber || '',
+          m.attendanceMinistry // This might be 'N/A' or 'Welcome', etc.
+      ])
     })
 
     // Add interpretation for the event attendance
-    const attendees = records.map(r => memberList.find(x => x.id === r.memberId)).filter(Boolean)
     const total = attendees.length
     const elevate = attendees.filter(m => m.finalTags?.ageCategory === 'Elevate').length
     const b1g = attendees.filter(m => m.finalTags?.ageCategory === 'B1G').length
     const male = attendees.filter(m => m.gender === 'Male').length
     const female = attendees.filter(m => m.gender === 'Female').length
     const pct = (n) => total > 0 ? `${Math.round((n / total) * 100)}%` : '0%'
+    
     rows.push([])
     rows.push(['Interpretation:'])
     rows.push([`Total: ${total} — Elevate ${elevate} (${pct(elevate)}), B1G ${b1g} (${pct(b1g)}). Gender: M ${male}, F ${female}.`])
@@ -248,15 +305,16 @@ function exportEventAttendance(event) {
           else if (R > 4) ws[cell].s = { alignment: { vertical: 'center' } }
         }
       }
-      ws['!cols'] = [{ wch: 30 }, { wch: 10 }, { wch: 15 }, { wch: 12 }, { wch: 18 }]
+      ws['!cols'] = [{ wch: 30 }, { wch: 10 }, { wch: 15 }, { wch: 12 }, { wch: 18 }, { wch: 25 }]
     }
 
     XLSX.utils.book_append_sheet(wb, ws, `Attendance_${(event.date||'event')}`)
-    // Append Event Comparison sheet (charts data + tables) using EventComparison logic
+    // Append Event Comparison sheet...
     try {
       const payload = buildComparisonPayload({ allEvents: allEvents.value || [], allAttendance: allAttendance.value || [], members: members.value || [], activeMembers: activeMembers?.value || [] })
       if (payload && payload.cards && payload.cards.length) {
-        const rowsComp = []
+        // ... (existing comparison sheet logic) ...
+         const rowsComp = []
         rowsComp.push(["CHRIST COMMISSION FOUNDATION INC."])
         rowsComp.push(["Event Comparison (Current vs Previous 3)"])
         rowsComp.push([""])
@@ -300,134 +358,6 @@ function exportEventAttendance(event) {
   }
 }
 
-// PDF export counterpart for single event attendance
-function exportEventAttendancePDF(event) {
-  try {
-    if (!event || !event.id) { alert('No event selected to export.'); return }
-    const records = (allAttendance.value || []).filter(a => a.eventId === event.id)
-    if (!records.length) { alert('No attendance records found for this event.'); return }
-
-    const memberList = (members && members.value) ? members.value : []
-    const attendees = records.map(r => memberList.find(x => x.id === r.memberId)).filter(Boolean)
-
-    const doc = new jsPDF()
-    try { doc.addImage('/ccf logo.png', 'PNG', 15, 10, 20, 20); } catch (e) {}
-    doc.setFontSize(14).setFont('helvetica','bold').setTextColor(13,71,161).text("CHRIST'S COMMISSION FELLOWSHIP", 40, 20)
-    doc.setFontSize(10).setFont('helvetica','normal').setTextColor(100).text('Event Attendance Report', 40, 26)
-    doc.line(15, 35, 195, 35)
-
-    doc.setFontSize(10).setTextColor(0)
-    doc.text(`Event: ${event.name}`, 15, 45)
-    doc.text(`Date: ${event.date || 'N/A'}`, 15, 50)
-
-    let y = 60
-    // Summary
-    const totalAttended = attendees.length
-    doc.text(`Total Attendees: ${totalAttended}`, 15, y)
-    y += 8
-
-    // --- Event Comparison (from EventComparison defaultActive) ---
-    try {
-      const payload = buildComparisonPayload({ allEvents: allEvents.value || [], allAttendance: allAttendance.value || [], members: members.value || [], activeMembers: activeMembers?.value || [] })
-      if (payload && payload.cards && payload.cards.length) {
-        // small spacer
-        if (y > 240) { doc.addPage(); y = 20 }
-        doc.setFontSize(11).setFont('helvetica','bold').setTextColor(13,71,161)
-        doc.text('Event Comparison (Current vs Previous 3)', 15, y)
-        y += 6
-        payload.cards.forEach(card => {
-          if (card.tableHeaders && card.tableRows) {
-            if (y > 240) { doc.addPage(); y = 20 }
-            autoTable(doc, { startY: y, head: [card.tableHeaders], body: card.tableRows, headStyles: { fillColor: [33,150,243], textColor: [255,255,255] }, styles: { fontSize: 9 }, margin: { left: 15, right: 15 } })
-            y = (doc.lastAutoTable && typeof doc.lastAutoTable.finalY === 'number') ? doc.lastAutoTable.finalY + 8 : y + 8
-          }
-
-          if (card.charts && card.charts.length) {
-            // render charts as tables of labels + datasets
-            card.charts.forEach(ch => {
-              if (y > 240) { doc.addPage(); y = 20 }
-              const head = ['Label'].concat((ch.labels || []))
-              const body = []
-              (ch.datasets || []).forEach(ds => {
-                const line = [ds.label || 'Dataset'].concat((ds.raw || ds.data || []).map(v => String(v)))
-                body.push(line)
-              })
-              autoTable(doc, { startY: y, head: [head], body, headStyles: { fillColor: [33,150,243], textColor: [255,255,255] }, styles: { fontSize: 9 }, margin: { left: 15, right: 15 } })
-              y = (doc.lastAutoTable && typeof doc.lastAutoTable.finalY === 'number') ? doc.lastAutoTable.finalY + 6 : y + 6
-            })
-          }
-
-          if (card.interpretation) {
-            const wrapped = doc.splitTextToSize(`Interpretation: ${card.interpretation}`, 170)
-            doc.setFontSize(9).setFont('helvetica','normal').setTextColor(80)
-            wrapped.forEach(line => {
-              if (y > 270) { doc.addPage(); y = 20 }
-              doc.text(line, 18, y); y += 5
-            })
-            y += 6
-          }
-        })
-      }
-    } catch (e) { console.warn('Comparison PDF build failed', e) }
-
-
-    // Build tables similar to AttendanceListModal PDF
-    const sortByName = (list) => list.slice().sort((a,b) => a.lastName.localeCompare(b.lastName) || a.firstName.localeCompare(b.firstName))
-    const firstTimers = sortByName(attendees.filter(m => m.finalTags?.isFirstTimer))
-    const leaders = sortByName(attendees.filter(m => !m.finalTags?.isFirstTimer && m.finalTags?.isDgroupLeader))
-    const volunteers = sortByName(attendees.filter(m => !m.finalTags?.isFirstTimer && !m.finalTags?.isDgroupLeader && m.finalTags?.isVolunteer))
-    const regulars = attendees.filter(m => !m.finalTags?.isFirstTimer && !m.finalTags?.isDgroupLeader && !m.finalTags?.isVolunteer)
-
-    const createTable = (title, list, columns, mapFn) => {
-      if (!list.length) return
-      if (y > 250) { doc.addPage(); y = 20 }
-      doc.setFontSize(11).setTextColor(13,71,161).setFont('helvetica','bold')
-      doc.text(`${title} (${list.length})`, 15, y)
-      y += 5
-      autoTable(doc, { startY: y, head: [columns], body: list.map(mapFn), headStyles: { fillColor: [33,150,243], textColor: [255,255,255] }, styles: { fontSize: 9 }, margin: { left: 15, right: 15 } })
-      y = (doc.lastAutoTable && typeof doc.lastAutoTable.finalY === 'number') ? doc.lastAutoTable.finalY + 8 : y + 8
-
-      // interpretation
-      const total = list.length || 0
-      const elevate = list.filter(m => m.finalTags?.ageCategory === 'Elevate').length
-      const b1g = list.filter(m => m.finalTags?.ageCategory === 'B1G').length
-      const male = list.filter(m => m.gender === 'Male').length
-      const female = list.filter(m => m.gender === 'Female').length
-      const pct = (n) => total > 0 ? `${Math.round((n / total) * 100)}%` : '0%'
-      const interp = `Interpretation: ${total} total — Elevate ${elevate} (${pct(elevate)}), B1G ${b1g} (${pct(b1g)}). Gender: M ${male}, F ${female}.`
-      const wrapped = doc.splitTextToSize(interp, 170)
-      doc.setFontSize(9).setFont('helvetica','normal').setTextColor(80)
-      wrapped.forEach(line => {
-        if (y > 270) { doc.addPage(); y = 20 }
-        doc.text(line, 18, y); y += 5
-      })
-      y += 8
-    }
-
-    createTable('First Timers', firstTimers, ['Name','Age','Age Group','Gender','Contact'], m => [`${m.lastName}, ${m.firstName}`, m.age, m.finalTags?.ageCategory || '-', m.gender, m.contactNumber || '-'])
-    createTable('Dgroup Leaders', leaders, ['Name','Age','Age Group','Gender','Volunteer'], m => [`${m.lastName}, ${m.firstName}`, m.age, m.finalTags?.ageCategory || '-', m.gender, (m.finalTags?.volunteerMinistry||[]).join(', ') || 'N/A'])
-    createTable('Volunteers', volunteers, ['Name','Age','Age Group','Gender','Ministry'], m => [`${m.lastName}, ${m.firstName}`, m.age, m.finalTags?.ageCategory || '-', m.gender, (m.finalTags?.volunteerMinistry||[]).join(', ') || '-'])
-
-    // Regular splits
-    const regColumns = ['Name','Age','Gender','Dgroup Leader']
-    const regMap = m => [`${m.lastName}, ${m.firstName}`, m.age, m.gender, m.dgroupLeader || 'Unassigned']
-    const b1gMale = sortByName(regulars.filter(m => m.finalTags?.ageCategory === 'B1G' && m.gender === 'Male'))
-    const b1gFemale = sortByName(regulars.filter(m => m.finalTags?.ageCategory === 'B1G' && m.gender === 'Female'))
-    const elevateMale = sortByName(regulars.filter(m => m.finalTags?.ageCategory === 'Elevate' && m.gender === 'Male'))
-    const elevateFemale = sortByName(regulars.filter(m => m.finalTags?.ageCategory === 'Elevate' && m.gender === 'Female'))
-
-    createTable('B1G Male Members', b1gMale, regColumns, regMap)
-    createTable('B1G Female Members', b1gFemale, regColumns, regMap)
-    createTable('ELEVATE Male Members', elevateMale, regColumns, regMap)
-    createTable('ELEVATE Female Members', elevateFemale, regColumns, regMap)
-
-    doc.save(`${event.name || 'Event'}_Attendance_Report.pdf`)
-  } catch (err) {
-    console.error('exportEventAttendancePDF failed', err)
-    alert('Export failed. See console for details.')
-  }
-}
-
 // Open details modal (called when CurrentEvent emits open-details)
 function openEventDetails() {
   showEventDetailsModal.value = true
@@ -462,7 +392,7 @@ async function handleEndCurrentEvent() {
     // open absence monitoring modal after ending
     showAbsenceModal.value = true
     buildAbsenceNotifications()   // build notifications after event ended
-    alert('Event ended successfully.')
+    alert('Event ended successfully. Volunteer inactivity check initiated.')
   } catch (err) {
     console.error('Failed to end event:', err)
     alert('Failed to end event. See console for details.')
@@ -488,7 +418,7 @@ function goToMembers(focusKey) {
       @click="openAttendanceList('All')"
     >
       <div class="total-attendance">
-        Total Attendance: <strong>{{ totalAttendance }}</strong>
+        Current Event's Total Attendance: <strong>{{ totalAttendance }}</strong>
       </div>
       <span class="click-hint">Click to view list</span>
     </div>
