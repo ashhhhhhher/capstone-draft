@@ -12,6 +12,7 @@ import {
   serverTimestamp
 } from 'firebase/firestore'
 import { useAuthStore } from './auth'
+import { useMembersStore } from './members'
 
 export const useAttendanceStore = defineStore('attendance', () => {
 
@@ -167,7 +168,7 @@ export const useAttendanceStore = defineStore('attendance', () => {
    * Mark attendance safely (prevents duplicates)
    * UPDATED: Accepts specific ministry role for this event
    */
-  async function markAttendance(memberId, eventId, ministry = 'N/A') {
+  async function markAttendance(memberId, eventId, ministry = 'N/A', name = null) {
     if (!memberId || !eventId) {
       return { status: 'error', message: 'Missing member or event ID' }
     }
@@ -191,10 +192,38 @@ export const useAttendanceStore = defineStore('attendance', () => {
         return { status: 'warning', message: 'Already marked present.' }
       }
 
+      // Resolve member name if not provided: try local members store, then Firestore
+      let resolvedName = name
+      try {
+        if (!resolvedName) {
+          const membersStore = useMembersStore()
+          const local = (membersStore.members || []).find(m => m.id === memberId)
+          if (local) resolvedName = local.displayName || `${local.firstName || ''} ${local.lastName || ''}`.trim() || null
+        }
+      } catch (err) {
+        console.warn('Members store lookup failed:', err)
+      }
+
+      if (!resolvedName) {
+        try {
+          const memberRef = doc(db, 'branches', authStore.branchId, 'members', memberId)
+          const memberSnap = await getDoc(memberRef)
+          if (memberSnap.exists()) {
+            const md = memberSnap.data()
+            resolvedName = md.displayName || `${md.firstName || ''} ${md.lastName || ''}`.trim() || null
+          }
+        } catch (err) {
+          console.warn('Failed to fetch member for name fallback:', err)
+        }
+      }
+
+      if (!resolvedName) resolvedName = 'Unknown'
+
       // ✅ Create attendance record with Dynamic Ministry
       // ministry defaults to 'N/A' (Regular attendance) if not provided
       await setDoc(attendanceRef, {
         timestamp: new Date(),
+        name: resolvedName,
         checkedInBy: authStore.user?.uid || null,
         ministry: ministry 
       })

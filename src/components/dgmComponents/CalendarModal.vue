@@ -132,7 +132,7 @@ function handleDelete(event) {
                         :key="event.id" 
                         class="dot"
                         :title="event.name"
-                        :class="event.eventType === 'service' ? 'dot-service' : 'dot-event'"
+                            :class="event.eventType === 'service' ? 'dot-service' : (event.eventType === 'b1g_event' ? 'dot-b1g_service' : 'dot-event')"
                     ></div>
                 </div>
             </div>
@@ -140,6 +140,7 @@ function handleDelete(event) {
         
         <div class="legend">
             <div class="legend-item"><span class="dot dot-service"></span> Wknd Service</div>
+            <div class="legend-item"><span class="dot dot-b1g_service"></span> B1G Service</div>
             <div class="legend-item"><span class="dot dot-event"></span> CCF Event</div>
         </div>
         
@@ -157,8 +158,8 @@ function handleDelete(event) {
                 <div v-for="event in selectedDayEvents" :key="event.id" class="detail-card">
                     <div class="detail-header">
                         <div class="detail-name">
-                            <span :class="event.eventType === 'service' ? 'service-tag' : 'ccf-tag'">
-                                {{ event.eventType === 'service' ? 'Service' : 'CCF Event' }}
+                            <span :class="(event.eventType === 'service' && 'service-tag') || (event.eventType === 'b1g_event' && 'b1g-tag') || 'ccf-tag'">
+                                {{ event.eventType === 'service' ? 'Service' : (event.eventType === 'b1g_event' ? 'B1G Service' : 'CCF Event') }}
                             </span>
                             <h4>{{ event.name }}</h4>
                         </div>
@@ -277,6 +278,7 @@ function handleDelete(event) {
 .event-dots { display: flex; gap: 4px; margin-top: 4px; flex-wrap: wrap; justify-content: center; }
 .dot { width: 8px; height: 8px; border-radius: 50%; }
 .dot-service { background-color: #1976D2; }
+.dot-b1g_service { background-color: #D32F2F; }
 .dot-event { background-color: #FFA000; }
 
 .legend { display: flex; justify-content: center; gap: 20px; margin-top: 16px; }
@@ -331,6 +333,7 @@ function handleDelete(event) {
 .detail-name { display: flex; flex-direction: column; }
 .detail-name h4 { margin: 4px 0 0 0; font-size: 16px; font-weight: 600; }
 .service-tag { color: #1976D2; font-weight: 700; font-size: 10px; }
+.b1g-tag { color: #D32F2F; font-weight: 700; font-size: 10px; }
 .ccf-tag { color: #FFA000; font-weight: 700; font-size: 10px; }
 .action-buttons { display: flex; gap: 8px; }
 .btn-icon {

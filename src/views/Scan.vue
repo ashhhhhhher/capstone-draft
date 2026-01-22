@@ -3,6 +3,7 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { Html5QrcodeScanner } from 'html5-qrcode'
 import { storeToRefs } from 'pinia'
 import { useMembersStore } from '../stores/members'
+import { useAuthStore } from '../stores/auth'
 import { useEventsStore } from '../stores/events'
 import { useAttendanceStore } from '../stores/attendance'
 import Modal from '../components/dgmComponents/Modal.vue'
@@ -12,6 +13,7 @@ const membersStore = useMembersStore()
 const { members } = storeToRefs(membersStore)
 const { currentEvent } = storeToRefs(useEventsStore())
 const attendanceStore = useAttendanceStore()
+const authStore = useAuthStore()
 
 // --- Refs ---
 const manualIdInput = ref('')
@@ -28,7 +30,7 @@ const standardMinistries = ['Host Team', 'Live Prod', 'Exalt', 'Welcome', 'DGM']
 
 // ---Computed check for event type ---
 const isAttendanceEvent = computed(() => {
-  return currentEvent.value && currentEvent.value.eventType === 'service'
+  return currentEvent.value && (currentEvent.value.eventType === 'service' || currentEvent.value.eventType === 'b1g_event')
 })
 
 // --- Core Logic ---
@@ -53,6 +55,16 @@ async function processMemberId(memberId) {
     return
   }
 
+  // If this is a B1G event, only members whose ageCategory is 'B1G' may attend
+  if (currentEvent.value && currentEvent.value.eventType === 'b1g_event') {
+    const ageCat = member.finalTags?.ageCategory
+    if (ageCat !== 'B1G') {
+      const message = ageCat === 'Elevate' ? 'Member is not under B1G.' : 'Member is not eligible for B1G events.'
+      scanResult.value = { status: 'error', message }
+      return
+    }
+  }
+
   // --- DYNAMIC VOLUNTEER CHECK ---
   // If member is a volunteer, pause and ask for role
   if (member.finalTags && member.finalTags.isVolunteer) {
@@ -72,8 +84,9 @@ async function processMemberId(memberId) {
 async function finalizeAttendance(member, ministryRole) {
   isProcessing.value = true
   const currentEventId = currentEvent.value.id
-  
-  const result = await attendanceStore.markAttendance(member.id, currentEventId, ministryRole)
+  // prefer name from auth store (current logged-in user's profile), then member record
+  const name = authStore.userProfile?.displayName || member.displayName || `${member.firstName || ''} ${member.lastName || ''}`.trim() || 'Unknown'
+  const result = await attendanceStore.markAttendance(member.id, currentEventId, ministryRole, name)
 
   if (result.status === 'success') {
     const ministryMsg = ministryRole !== 'N/A' ? ` (Serving: ${ministryRole})` : ''

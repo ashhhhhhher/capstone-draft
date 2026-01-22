@@ -457,7 +457,11 @@ function goToMembers(focusKey) {
               <div class="card-content">
                 <span class="card-date">{{ formatShortDate(event.date) }} at {{ event.time }}</span>
                 <h4 class="card-title">{{ event.name }}</h4>
-                <span class="card-type">{{ event.eventType === 'service' ? 'Service' : 'CCF Event' }} &middot; {{ event.eventLocation || 'Online' }}</span>
+                <span :class="['card-type', event.eventType === 'b1g_event' ? 'b1g-type' : (event.eventType === 'service' ? 'service-type' : 'ccf-type') ]">
+                  {{ event.eventType === 'service' ? 'Service' : (event.eventType === 'b1g_event' ? 'B1G Service' : 'CCF Event') }}
+                  <span v-if="event.eventType === 'ccf_event' || event.eventType === 'service'"> &middot; {{ event.eventLocation || 'Online' }}</span>
+                  <span v-else-if="event.eventType === 'b1g_event' && event.eventLocation"> &middot; {{ event.eventLocation }}</span>
+                </span>
               </div>
             </div>
           </div>
@@ -689,6 +693,10 @@ function goToMembers(focusKey) {
   margin-top: 4px;
   display: block;
 }
+
+.card-type.b1g-type { color: #FFCDD2; }
+.card-type.ccf-type { color: #FFD54F; }
+.card-type.service-type { color: #BBDEFB; }
 
 .no-upcoming-box {
   text-align: center;
