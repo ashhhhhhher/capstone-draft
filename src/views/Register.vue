@@ -1,10 +1,10 @@
 <script setup>
 import { ref, computed } from 'vue'
 import { storeToRefs } from 'pinia'
-import Modal from '../components/Modal.vue'
-import RegistrationSuccess from '../components/RegistrationSuccess.vue'
+import Modal from '../components/dgmComponents/Modal.vue'
+import RegistrationSuccess from '../components/dgmComponents/RegistrationSuccess.vue'
 import { useMembersStore } from '../stores/members'
-import { useAuthStore } from '../stores/auth'; // Ensure this is imported for the branch check
+import { useAuthStore } from '../stores/auth'; 
 
 const authStore = useAuthStore();
 const membersStore = useMembersStore()
@@ -115,6 +115,18 @@ async function handleSubmit() {
   // --- Data Assembly ---
   const newId = 'Q-' + Math.floor(100000 + Math.random() * 900000).toString();
 
+  // AUTOMATION: When first-timer gets assigned to D-group during registration, automatically tag as regular
+  const finalTags = {
+    ...tags.value,
+    ageCategory: ageCategory.value,
+    isFirstTimer: isFirstTimer.value
+  };
+  
+  if (finalTags.isFirstTimer && selectedDgroupLeader.value) {
+    finalTags.isFirstTimer = false;
+    finalTags.isRegular = true;
+  }
+  
   const memberData = {
     id: newId,
     lastName: toTitleCase(lastName.value.trim()),
@@ -129,14 +141,10 @@ async function handleSubmit() {
     fbAccount: fbAccount.value.trim(),
     dgroupLeader: selectedDgroupLeader.value,
     dgroupCapacity: tags.value.isDgroupLeader ? dgroupCapacity.value : null,
-    finalTags: {
-      ...tags.value,
-      ageCategory: ageCategory.value,
-      isFirstTimer: isFirstTimer.value
-    }
+    finalTags: finalTags
   }
 
-  // --- CRITICAL FIX: Error Handling ---
+  // --- Error Handling ---
   try {
     // Call the store action which now handles Auth account creation and email sending
     await membersStore.registerNewMember(memberData);
@@ -281,8 +289,8 @@ async function handleSubmit() {
               <label for="vol-exalt">Exalt (Worship)</label>
             </div>
             <div class="checkbox-item">
-              <input type="checkbox" id="vol-usher" value="Usher" v-model="tags.volunteerMinistry" />
-              <label for="vol-usher">Usher</label>
+              <input type="checkbox" id="vol-dgm" value="DGM" v-model="tags.volunteerMinistry" />
+              <label for="vol-dgm">DGM</label>
             </div>
           </div>
         </div>

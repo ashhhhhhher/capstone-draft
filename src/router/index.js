@@ -15,14 +15,46 @@ const router = createRouter({
       name: 'signup',
       component: () => import('../views/Signup.vue')
     },
-    // --- Member Dashboard Route ---
-    {
-      path: '/member-dashboard',
-      name: 'memberDashboard',
-      component: () => import('../views/MemberDashboard.vue'), // <-- NEW FILE REFERENCE
-      meta: { requiresAuth: true, role: 'member' } 
-    },
     
+    // --- MEMBER APP ROUTES ---
+    {
+      path: '/member',
+      component: () => import('../layout/MemberLayout.vue'), 
+      meta: { requiresAuth: true, role: 'member' },
+      children: [
+        {
+          path: '', 
+          redirect: { name: 'memberHome' }
+        },
+        {
+          path: 'home',
+          name: 'memberHome',
+          component: () => import('../views/MemberHome.vue') 
+        },
+        {
+          path: 'dgroup',
+          name: 'memberDgroup',
+          component: () => import('../views/MemberDgroup.vue')
+        },
+        {
+          path: 'attendance',
+          name: 'memberAttendance',
+          component: () => import('../views/MemberAttendance.vue')
+        },
+        {
+          path: 'qr',
+          name: 'memberQR',
+          component: () => import('../views/MemberQR.vue')
+        },
+        // NEW PROFILE ROUTE ADDED HERE
+        {
+          path: 'profile',
+          name: 'memberProfile',
+          component: () => import('../views/MemberProfile.vue')
+        }
+      ]
+    },
+
     // --- ADMIN ROUTES ---
     {
       path: '/',
@@ -63,26 +95,32 @@ const router = createRouter({
   ]
 })
 
-// --- Navigation Guard ---
-router.beforeEach((to, from) => {
+router.beforeEach((to) => {
   const authStore = useAuthStore()
 
+  // 🔑 WAIT until auth is ready
+  if (!authStore.isAuthReady) {
+    return true
+  }
+
   const isAuthenticated = !!authStore.user
-  const userRole = authStore.userRole
+  const role = authStore.userRole
 
   if (to.meta.requiresAuth && !isAuthenticated) {
-    return { name: 'login', query: { redirect: to.fullPath } }
+    return { name: 'login' }
   }
 
-  if (isAuthenticated) {
-    if (to.name === 'login' || to.name === 'signup') {
-      return { name: userRole === 'admin' ? 'home' : 'memberDashboard' }
-    }
-    
-    if (to.meta.role && to.meta.role !== userRole) {
-      return { name: userRole === 'admin' ? 'home' : 'memberDashboard' }
-    }
+  // 🚫 STOP redirects if role is unresolved
+  if (isAuthenticated && !role) {
+    return true
   }
+
+  if (to.meta.role && to.meta.role !== role) {
+    return { name: role === 'admin' ? 'home' : 'memberHome' }
+  }
+
+  return true
 })
+
 
 export default router

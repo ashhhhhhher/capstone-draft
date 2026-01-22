@@ -16,7 +16,7 @@ const manualIdInput = ref('')
 const scanResult = ref({ status: null, message: '' })
 let scannerInstance = null
 
-// --- NEW: Computed check for event type ---
+// ---Computed check for event type ---
 const isAttendanceEvent = computed(() => {
   return currentEvent.value && currentEvent.value.eventType === 'service'
 })
@@ -30,7 +30,7 @@ async function processMemberId(memberId) {
     scanResult.value = { status: 'error', message: 'No active event.' }
     return
   }
-  // 2. NEW: Check if this event type records attendance
+  // 2. Check if this event type records attendance
   if (!isAttendanceEvent.value) {
     scanResult.value = { status: 'error', message: `Attendance is not recorded for this event type (${currentEvent.value.name}).` }
     return
@@ -75,7 +75,6 @@ function onScanSuccess(decodedText, decodedResult) {
   processMemberId(decodedText)
 }
 function onScanError(errorMessage) {
-  // We can ignore these
 }
 
 function handleManualSubmit() {
@@ -122,7 +121,7 @@ onUnmounted(() => {
       </p>
     </div>
 
-    <!-- NEW: Conditional rendering of scanner -->
+    <!--  Conditional rendering of scanner -->
     <div v-if="isAttendanceEvent" class="scanner-wrapper">
       <div id="qr-reader"></div>
     </div>
@@ -205,7 +204,7 @@ onUnmounted(() => {
   display: none;
 }
 
-/* NEW: Style for disabled scanner */
+/* Style for disabled scanner */
 .scanner-disabled {
   width: 100%;
   border-radius: 12px;
@@ -294,7 +293,7 @@ onUnmounted(() => {
   border-radius: 8px;
   cursor: pointer;
 }
-/* NEW: Disabled state */
+/*  Disabled state */
 .submit-btn:disabled, .manual-input:disabled {
   background-color: #90A4AE;
   cursor: not-allowed;

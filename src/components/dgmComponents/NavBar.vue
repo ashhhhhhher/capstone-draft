@@ -50,13 +50,13 @@ import { Home, Users, PlusSquare, BarChart2, QrCode } from 'lucide-vue-next'
   align-items: center;
   justify-content: center;
   text-decoration: none;
-  color: #90A4AE; /* A muted gray color */
+  color: #90A4AE; 
   font-size: 10px;
 }
 
 /* This style will apply to the active page link */
 .nav-link.router-link-exact-active {
-  color: #0D47A1; /* A nice deep blue */
+  color: #0D47A1; 
 }
 
 .qr-scan-btn {
@@ -76,7 +76,6 @@ import { Home, Users, PlusSquare, BarChart2, QrCode } from 'lucide-vue-next'
 
 /* This will make the QR button "active" when you are on the /scan page */
 .qr-scan-btn.router-link-exact-active {
-   /* You could add a subtle effect, like a stronger shadow or a slightly different blue */
    box-shadow: 0 6px 16px rgba(25, 118, 210, 0.6);
 }
 </style>

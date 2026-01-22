@@ -1,120 +1,177 @@
 import { ref } from 'vue'
 import { defineStore } from 'pinia'
 import { db } from '../firebase'
-import { 
-  collection, 
-  addDoc, 
-  onSnapshot, 
-  query, 
-  where 
-} from "firebase/firestore";
-import { useAuthStore } from './auth'; // Import Auth Store
-
+import {
+  collection,
+  doc,
+  setDoc,
+  getDoc,
+  collectionGroup,
+  onSnapshot
+} from 'firebase/firestore'
+import { useAuthStore } from './auth'
 
 export const useAttendanceStore = defineStore('attendance', () => {
+
   // --- State ---
   const currentEventAttendees = ref([])
   const allAttendance = ref([])
   const isLoading = ref(false)
+  let allAttendanceUnsub = null
 
-  // Helper to get the correct Firestore collection path
-  const getAttendanceCollection = () => {
-    const authStore = useAuthStore();
-    if (!authStore.branchId) {
-        console.error("Branch ID not available. Cannot fetch attendance.");
-        return collection(db, "attendance_error");
+  // --- Helpers ---
+  const getEventAttendanceCollection = (eventId) => {
+    const authStore = useAuthStore()
+
+    if (!authStore.branchId || !eventId) {
+      console.error('Branch ID or Event ID missing')
+      return null
     }
-    // CRITICAL: Use the dynamic branch path
-    return collection(db, "branches", authStore.branchId, "attendance");
-  };
+
+    return collection(
+      db,
+      'branches',
+      authStore.branchId,
+      'events',
+      eventId,
+      'attendance'
+    )
+  }
 
   // --- Actions ---
 
   /**
-   * Fetches attendance records for a specific event ID within the branch.
+   * Fetch attendance for a specific event
    */
   function fetchAttendanceForEvent(eventId) {
     if (!eventId) {
       currentEventAttendees.value = []
       return
     }
-    
-    this.isLoading = true;
-    const attQuery = query(
-      getAttendanceCollection(), // Use the branch-aware collection
-      where("eventId", "==", eventId)
-    );
 
-    onSnapshot(attQuery, (querySnapshot) => {
-      const attendees = [];
-      querySnapshot.forEach((doc) => {
-        attendees.push(doc.data());
-      });
-      currentEventAttendees.value = attendees;
-      this.isLoading = false;
-      console.log("Attendance store updated for event:", eventId);
-    }, (error) => {
-      console.error("Error fetching attendance: ", error);
-      this.isLoading = false;
-    });
+    isLoading.value = true
+
+    const attendanceCol = getEventAttendanceCollection(eventId)
+    if (!attendanceCol) return
+
+    onSnapshot(
+      attendanceCol,
+      (snapshot) => {
+        const attendees = []
+        snapshot.forEach((docSnap) => {
+          attendees.push({
+            memberId: docSnap.id,
+            ...docSnap.data()
+          })
+        })
+        currentEventAttendees.value = attendees
+        isLoading.value = false
+      },
+      (error) => {
+        console.error('Attendance fetch error:', error)
+        isLoading.value = false
+      }
+    )
   }
-  
+
   /**
-   * Fetches ALL attendance records for historical insights within the branch.
+   * Fetch all attendance records for the current branch using a collectionGroup
+   * Listens to all subcollections named 'attendance' and filters by branchId
    */
   function fetchAllAttendance() {
-    const allQuery = query(getAttendanceCollection());
-    
-    onSnapshot(allQuery, (querySnapshot) => {
-      const allRecords = [];
-      querySnapshot.forEach((doc) => {
-        allRecords.push(doc.data());
-      });
-      allAttendance.value = allRecords;
-      console.log("Historical attendance loaded.");
-    }, (error) => {
-      console.error("Error fetching all attendance: ", error);
-    });
+    const authStore = useAuthStore()
+
+    if (!authStore.branchId) {
+      allAttendance.value = []
+      return Promise.resolve(allAttendance.value)
+    }
+
+    // avoid creating multiple listeners
+    if (allAttendanceUnsub) return Promise.resolve(allAttendance.value)
+
+    isLoading.value = true
+
+    return new Promise((resolve, reject) => {
+      allAttendanceUnsub = onSnapshot(
+        collectionGroup(db, 'attendance'),
+        (snapshot) => {
+          const records = []
+          snapshot.forEach((docSnap) => {
+            // path: branches/{branchId}/events/{eventId}/attendance/{memberId}
+            const pathParts = docSnap.ref.path.split('/')
+            // basic guard for expected structure
+            if (pathParts.length >= 6 && pathParts[0] === 'branches') {
+              const branchId = pathParts[1]
+              const eventId = pathParts[3]
+              if (branchId !== authStore.branchId) return
+
+              records.push({
+                eventId,
+                memberId: docSnap.id,
+                ...docSnap.data()
+              })
+            }
+          })
+          allAttendance.value = records
+          isLoading.value = false
+          resolve(allAttendance.value)
+        },
+        (error) => {
+          console.error('All attendance fetch error:', error)
+          isLoading.value = false
+          reject(error)
+        }
+      )
+    })
   }
 
   /**
-   * Marks a member's attendance by creating a new document in the branch.
+   * Mark attendance safely (prevents duplicates)
    */
   async function markAttendance(memberId, eventId) {
     if (!memberId || !eventId) {
-      console.error("Missing memberId or eventId");
-      return;
+      return { status: 'error', message: 'Missing member or event ID' }
     }
 
-    const isAlreadyScanned = currentEventAttendees.value.some(
-      att => att.memberId === memberId
-    );
-    
-    if (isAlreadyScanned) {
-      return { status: 'warning', message: 'Already marked present.' };
-    }
+    const authStore = useAuthStore()
 
     try {
-      const newRecord = {
-        memberId: memberId,
-        eventId: eventId,
-        timestamp: new Date()
-      };
-      await addDoc(getAttendanceCollection(), newRecord);
-      
-      return { status: 'success', message: 'Attendance recorded.' };
+      const attendanceRef = doc(
+        db,
+        'branches',
+        authStore.branchId,
+        'events',
+        eventId,
+        'attendance',
+        memberId
+      )
+
+      // ✅ Check if already scanned
+      const existingDoc = await getDoc(attendanceRef)
+      if (existingDoc.exists()) {
+        return { status: 'warning', message: 'Already marked present.' }
+      }
+
+      // ✅ Create attendance record
+      await setDoc(attendanceRef, {
+        timestamp: new Date(),
+        checkedInBy: authStore.user?.uid || null
+      })
+
+      return { status: 'success', message: 'Attendance recorded.' }
 
     } catch (error) {
-      return { status: 'error', message: 'Database error.' };
+      console.error('Attendance write error:', error)
+      return { status: 'error', message: 'Database error.' }
     }
   }
 
-  return { 
-    currentEventAttendees, 
+  return {
+    currentEventAttendees,
     allAttendance,
-    isLoading, 
-    fetchAttendanceForEvent, 
+    isLoading,
+    fetchAttendanceForEvent,
     fetchAllAttendance,
-    markAttendance 
+    markAttendance
   }
 })

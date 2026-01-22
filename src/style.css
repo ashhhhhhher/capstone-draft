@@ -1,6 +1,6 @@
 /* Global styles */
 body {
-  margin: 0;
+  margin: 25px;
   background-color: #f4f7f9; /* A light blue-gray background */
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
 }
@@ -8,4 +8,5 @@ body {
 /* Add padding to the bottom to prevent content from hiding behind the navbar */
 .main-content {
   padding-bottom: 80px; 
+  scroll-padding-top: 50px;
 }

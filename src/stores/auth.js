@@ -7,13 +7,19 @@ import {
   onAuthStateChanged,
   createUserWithEmailAndPassword,
   updateProfile,
-  updateEmail,
-  EmailAuthProvider,
-  reauthenticateWithCredential,
-  sendPasswordResetEmail,
-  updatePassword
 } from "firebase/auth";
-import { doc, getDoc, setDoc, updateDoc, collection, query, where, getDocs, deleteDoc } from "firebase/firestore";
+import { 
+  doc, 
+  getDoc, 
+  setDoc, 
+  updateDoc, 
+  collection, 
+  query, 
+  where, 
+  getDocs, 
+  orderBy, 
+  limit 
+} from "firebase/firestore";
 
 export const useAuthStore = defineStore('auth', () => {
   const user = ref(null)
@@ -22,39 +28,158 @@ export const useAuthStore = defineStore('auth', () => {
   const branchId = ref(null)
   const isLoading = ref(false)
   const isAuthReady = ref(false)
+  
+  // --- 1. PATTERNED ID GENERATION (YYMM##) ---
+  // Example: Jan 2026 -> 260101, 260102...
+  async function generateMemberID(branchId) {
+    const now = new Date();
+    const year = now.getFullYear().toString().slice(-2); // e.g., "26"
+    const month = String(now.getMonth() + 1).padStart(2, '0'); // e.g., "01"
+    const prefix = `${year}${month}`; // "2601"
 
-  // (Helper function fetchMemberProfile is unchanged)
-  async function fetchMemberProfile(uid, branchId) {
-      if (!branchId) return null;
-      const membersRef = collection(db, "branches", branchId, "members");
-      const q = query(membersRef, where("authUid", "==", uid));
-      const querySnapshot = await getDocs(q);
+    const membersRef = collection(db, "branches", branchId, "members");
+    
+    // Find the latest ID starting with prefix
+    const q = query(
+      membersRef, 
+      where("id", ">=", prefix), 
+      where("id", "<=", prefix + "\uf8ff"),
+      orderBy("id", "desc"),
+      limit(1)
+    );
 
-      if (!querySnapshot.empty) {
-          userProfile.value = querySnapshot.docs[0].data();
-          await updateProfile(user.value, { 
-            displayName: `${userProfile.value.firstName} ${userProfile.value.lastName}` 
-          });
-      } else {
-          userProfile.value = null;
+    const snapshot = await getDocs(q);
+    
+    let nextOrder = 1;
+    if (!snapshot.empty) {
+      const lastId = snapshot.docs[0].data().id; // e.g., "260101"
+      const suffix = lastId.substring(4); // "01"
+      if (!isNaN(suffix)) {
+        nextOrder = parseInt(suffix) + 1;
       }
+    }
+
+    // Pad order with zeros (01, 02... 99)
+    const orderStr = String(nextOrder).padStart(2, '0');
+    return `${prefix}${orderStr}`; // "260102"
   }
 
-  // --- THIS IS THE FIX for the login button ---
+  // --- FETCH PROFILE ---
+  async function fetchMemberProfile(uid, currentBranchId) {
+    if (!currentBranchId || userRole.value !== 'member') return null;
+
+    const membersRef = collection(db, "branches", currentBranchId, "members");
+    const q = query(membersRef, where("authUid", "==", uid));
+    const snap = await getDocs(q);
+
+    if (!snap.empty) {
+      userProfile.value = snap.docs[0].data();
+    } else {
+      userProfile.value = null;
+    }
+  }
+
+
+  // --- SIGNUP ---
+  async function signup(email, password, basicData) {
+    isLoading.value = true
+    try {
+      const userCredential = await createUserWithEmailAndPassword(auth, email, password)
+      user.value = userCredential.user
+      
+      const displayName = `${basicData.profile.firstName} ${basicData.profile.lastName}`;
+
+      await updateProfile(user.value, {
+          displayName: displayName
+      })
+      
+      const defaultBranch = basicData.branchId || 'baguio'; 
+      
+      // Generate ID & Create Member Profile
+      const newMemberId = await generateMemberID(defaultBranch);
+      await createMemberProfile(user.value.uid, defaultBranch, basicData.profile, newMemberId);
+      
+      await fetchMemberProfile(user.value.uid, defaultBranch);
+      userRole.value = 'member';
+      branchId.value = defaultBranch;
+
+    } catch (error) {
+      throw error;
+    } finally {
+      isLoading.value = false
+    }
+  }
+
+  async function createMemberProfile(uid, branchId, basicData, memberId) {
+    const age = new Date().getFullYear() - new Date(basicData.birthday).getFullYear(); 
+    const ageCategory = (age >= 12 && age <= 21) ? 'Elevate' : (age >= 22 ? 'B1G' : 'N/A');
+    const todayISO = new Date().toISOString();
+
+    // Default to First Timer, NOT Seeker yet
+    const memberData = {
+      id: memberId,         
+      authUid: uid, 
+      createdAt: todayISO,  
+
+      role: 'member',
+      branchId: branchId,
+      displayName: `${toTitleCase(basicData.firstName.trim())} ${toTitleCase(basicData.lastName.trim())}`,
+
+      
+      lastName: toTitleCase(basicData.lastName.trim()),
+      firstName: toTitleCase(basicData.firstName.trim()),
+      middleInitial: '',
+      birthday: basicData.birthday,
+      age: age,
+      gender: basicData.gender,
+      email: auth.currentUser.email,
+      
+      // Empty fields for later
+      school: '', 
+      contactNumber: '', 
+      fbAccount: '', 
+      profilePicture: '', 
+      
+      dgroupLeader: '', 
+      dgroupDetails: null, 
+
+      finalTags: {
+        isRegular: false, 
+        isVolunteer: false, 
+        volunteerMinistry: [],
+        isDgroupLeader: false, 
+        isSeeker: false,    // Starts false, set to true via Dgroup tab questionnaire
+        isFirstTimer: true, // Default true
+        ageCategory: ageCategory
+      }
+    }
+    
+    const memberRef = doc(db, "branches", branchId, "members", memberId);
+    await setDoc(memberRef, memberData);
+  }
+
+  async function updateExtendedProfile(data) {
+    if (!userProfile.value || !branchId.value) return;
+    
+    userProfile.value = { ...userProfile.value, ...data };
+    
+    const memberRef = doc(db, "branches", branchId.value, "members", userProfile.value.id);
+    await updateDoc(memberRef, data);
+  }
+
   async function login(email, password) {
     isLoading.value = true
     try {
       const userCredential = await signInWithEmailAndPassword(auth, email, password)
       user.value = userCredential.user
       await fetchUserProfile(user.value.uid)
+      
       if (userRole.value === 'member') {
           await fetchMemberProfile(user.value.uid, branchId.value);
       }
     } catch (error) {
-      // Re-throw the error so the Login.vue page can catch it
       throw error;
     } finally {
-      // This *always* runs, even if an error is thrown
       isLoading.value = false
     }
   }
@@ -89,125 +214,42 @@ export const useAuthStore = defineStore('auth', () => {
   }
   
   async function fetchUserProfile(uid) {
-    const userDocRef = doc(db, "users", uid);
-    const userDoc = await getDoc(userDocRef);
-    if (userDoc.exists()) {
-      userRole.value = userDoc.data().role;
-      branchId.value = userDoc.data().branchId;
-    } else {
-      userRole.value = 'member';
-      branchId.value = 'baguio';
-      console.warn("User profile not found in Firestore. Defaulting to 'member/baguio'.");
-    }
+  const branch = 'baguio';
+
+  // 1️⃣ CHECK DGMS (ADMINS) FIRST
+  const dgmRef = doc(db, "branches", branch, "dgms", uid);
+  const dgmSnap = await getDoc(dgmRef);
+
+  if (dgmSnap.exists()) {
+    userRole.value = 'admin';
+    branchId.value = branch;
+    userProfile.value = dgmSnap.data();
+    return;
   }
 
-  // --- THIS IS THE FIX for the signup button ---
-  async function signup(email, password, userData) {
-    isLoading.value = true
-    try {
-      const userCredential = await createUserWithEmailAndPassword(auth, email, password)
-      user.value = userCredential.user
-      
-      await updateProfile(user.value, {
-          displayName: `${userData.profile.firstName} ${userData.profile.lastName}`
-      })
-      
-      // 2. Create the User document (Role & Branch)
-      const userDocRef = doc(db, "users", user.value.uid);
-      await setDoc(userDocRef, {
-        email: user.value.email,
-        role: 'member',
-        branchId: userData.branchId,
-        displayName: `${userData.profile.firstName} ${userData.profile.lastName}`,
-        createdAt: new Date()
-      });
-      
-      // 3. Create the member profile document
-      await createMemberProfile(user.value.uid, userData.branchId, userData.profile);
-      await fetchMemberProfile(user.value.uid, branchId.value);
-      
-      userRole.value = 'member';
-      branchId.value = userData.branchId;
+  // 2️⃣ CHECK MEMBERS
+  const membersRef = collection(db, "branches", branch, "members");
+  const q = query(membersRef, where("authUid", "==", uid));
+  const snap = await getDocs(q);
 
-    } catch (error) {
-      // Re-throw the error for the Signup.vue page
-      throw error;
-    } finally {
-      // This *always* runs, even if an error is thrown
-      isLoading.value = false
-    }
+  if (!snap.empty) {
+    userRole.value = 'member';
+    branchId.value = branch;
+    userProfile.value = snap.docs[0].data();
+    return;
   }
 
-  async function createMemberProfile(uid, branchId, profileData) {
-    const newId = 'Q-' + Math.floor(100000 + Math.random() * 900000).toString();
-    const age = new Date().getFullYear() - new Date(profileData.birthday).getFullYear(); 
-    const ageCategory = (age >= 12 && age <= 21) ? 'Elevate' : (age >= 22 ? 'B1G' : 'N/A');
+  // 3️⃣ FALLBACK (INVALID ACCOUNT)
+  userRole.value = null;
+  branchId.value = null;
+  userProfile.value = null;
+  console.warn("No profile found for user:", uid);
+}
 
-    const memberData = {
-      id: newId,
-      authUid: uid, 
-      lastName: toTitleCase(profileData.lastName.trim()),
-      firstName: toTitleCase(profileData.firstName.trim()),
-      middleInitial: '',
-      birthday: profileData.birthday,
-      age: age,
-      gender: profileData.gender,
-      school: '', 
-      email: auth.currentUser.email, 
-      contactNumber: profileData.contactNumber, 
-      fbAccount: profileData.fbAccount, 
-      dgroupLeader: profileData.dgroupLeader || '',
-      dgroupCapacity: null,
-      finalTags: {
-        isRegular: false, isVolunteer: false, volunteerMinistry: [],
-        isDgroupLeader: false, isSeeker: true, isFirstTimer: true,
-        ageCategory: ageCategory
-      }
-    }
-    const memberRef = doc(db, "branches", branchId, "members", newId);
-    await setDoc(memberRef, memberData);
-  }
-  
-  async function sendCreationEmail(email) {
-    try {
-        await sendPasswordResetEmail(auth, email);
-    } catch (error) {
-        console.error("Error sending creation email:", error);
-        throw new Error("Failed to send account creation email.");
-    }
-  }
 
   function toTitleCase(str) {
     if (!str) return '';
     return str.toLowerCase().replace(/\b\w/g, char => char.toUpperCase());
-  }
-  
-  async function reauthenticate(currentPassword) {
-    const credential = EmailAuthProvider.credential(user.value.email, currentPassword)
-    await reauthenticateWithCredential(auth.currentUser, credential)
-  }
-  
-  async function updateAdminProfile(currentPassword, newName, newEmail) {
-    await reauthenticate(currentPassword);
-    
-    if (newName !== user.value.displayName) {
-      await updateProfile(auth.currentUser, { displayName: newName });
-    }
-    if (newEmail !== user.value.email) {
-      await updateEmail(auth.currentUser, newEmail);
-    }
-    const userDocRef = doc(db, "users", user.value.uid);
-    await updateDoc(userDocRef, { 
-      email: newEmail,
-      displayName: newName
-    });
-
-    user.value = { ...auth.currentUser };
-  }
-  
-  async function updateAdminPassword(currentPassword, newPassword) {
-    await reauthenticate(currentPassword);
-    await updatePassword(auth.currentUser, newPassword);
   }
 
   return { 
@@ -221,8 +263,7 @@ export const useAuthStore = defineStore('auth', () => {
     logout, 
     init,
     signup,
-    sendCreationEmail, 
-    updateAdminProfile, 
-    updateAdminPassword 
+    updateExtendedProfile,
+    fetchMemberProfile
   }
 })
