@@ -272,11 +272,6 @@ function exportToExcel() {
             compRows.push(['']);
           });
         }
-        if (card.interpretation) {
-          compRows.push(['Interpretation:']);
-          compRows.push([card.interpretation]);
-          compRows.push(['']);
-        }
         compRows.push(['']);
       });
 
@@ -315,11 +310,6 @@ function exportToExcel() {
               continue;
             }
 
-            if (row0 === 'Interpretation:' || (row0 && row0.startsWith('Interpretation:'))) {
-              ws[cellAddr].s = Object.assign({}, ws[cellAddr].s || {}, { font: { italic: true }, alignment: { wrapText: true, horizontal: 'left' } });
-              continue;
-            }
-
             if (compRows[R] && compRows[R][0] === 'Current') {
               ws[cellAddr].s = Object.assign({}, ws[cellAddr].s || {}, { fill: { fgColor: { rgb: 'FFF3CD' } }, font: Object.assign({}, (ws[cellAddr].s && ws[cellAddr].s.font) || {}, { bold: true }), alignment: Object.assign({}, (ws[cellAddr].s && ws[cellAddr].s.alignment) || {}, { wrapText: true }) });
               continue;
@@ -332,10 +322,6 @@ function exportToExcel() {
         const merges = ws['!merges'] || [];
         for (let R = range.s.r; R <= range.e.r; ++R) {
           const row0 = compRows[R] && compRows[R][0] ? String(compRows[R][0]) : '';
-          if (row0 === 'Interpretation:' || row0 === 'Summary' || row0 === 'Event Details' || row0 === 'Demographics (Current vs Previous avg)' || row0 === 'Absence Monitoring' || row0 === 'Event Comparison (Current vs Previous 3)' ) {
-            const next = R + 1;
-            if (next <= range.e.r) merges.push({ s: { r: R, c: 0 }, e: { r: next, c: range.e.c } });
-          }
         }
         ws['!merges'] = merges;
 
@@ -362,17 +348,6 @@ function exportToExcel() {
     if (memberList.length > 0) { memberList.forEach(m => rows.push(mapFunction(m))); } 
     else { rows.push(["No attendees in this category."]); }
 
-      // Add interpretation lines for this sheet
-    const total = memberList.length || 0;
-    const elevate = memberList.filter(m => m.finalTags?.ageCategory === 'Elevate').length;
-    const b1g = memberList.filter(m => m.finalTags?.ageCategory === 'B1G').length;
-    const male = memberList.filter(m => m.gender === 'Male').length;
-    const female = memberList.filter(m => m.gender === 'Female').length;
-    const pct = (n) => total > 0 ? `${Math.round((n / total) * 100)}%` : '0%';
-    rows.push([]);
-    rows.push(['Interpretation:']);
-    rows.push([`Total: ${total} — Elevate ${elevate} (${pct(elevate)}), B1G ${b1g} (${pct(b1g)}). Gender: M ${male}, F ${female}.`]);
-
     const ws = XLSX.utils.aoa_to_sheet(rows);
     const range = XLSX.utils.decode_range(ws['!ref']);
     for (let R = range.s.r; R <= range.e.r; ++R) {
@@ -384,20 +359,10 @@ function exportToExcel() {
         else if (R === 7) ws[cellAddress].s = tableTitleStyle;
         else if (R === 8) ws[cellAddress].s = tableHeaderStyle;
         else if (R > 8 && R <= range.e.r - 3) ws[cellAddress].s = cellStyle;
-        else {
-          // Style interpretation rows slightly differently (italic, smaller)
-          ws[cellAddress].s = { font: { italic: true }, alignment: { wrapText: true, horizontal: 'left' } };
-        }
       }
     }
     // merge title and sheet title rows + interpretation rows so text spans full width
     const merges = [{ s: { r: 0, c: 0 }, e: { r: 0, c: colCount - 1 } }, { s: { r: 7, c: 0 }, e: { r: 7, c: colCount - 1 } }];
-    // interpretation rows are expected to be the last 3 pushed: empty, 'Interpretation:', <text>
-    const interpRowIndex = rows.length - 2; // index of 'Interpretation:'
-    if (interpRowIndex >= 0) {
-      merges.push({ s: { r: interpRowIndex, c: 0 }, e: { r: interpRowIndex, c: colCount - 1 } });
-      merges.push({ s: { r: interpRowIndex + 1, c: 0 }, e: { r: interpRowIndex + 1, c: colCount - 1 } });
-    }
     ws['!merges'] = merges;
     const colWidths = [];
     rows.forEach((row, rIdx) => {
@@ -645,14 +610,6 @@ try {
     firstTimers: (compFinal.previous || []).reduce((s,p) => s + (p.firstTimers||0), 0) 
   };
 
-  // Use the modal's attendee lists as the source of truth for current-event counts
-  const currentTotalFinal = (attendees && attendees.value) ? attendees.value.length : 0;
-  const currentElevateFinal = (attendees && attendees.value) ? (attendees.value.filter(m => m.finalTags?.ageCategory === 'Elevate').length) : 0;
-  const currentB1gFinal = (attendees && attendees.value) ? (attendees.value.filter(m => m.finalTags?.ageCategory === 'B1G').length) : 0;
-  const currentFirstTimersFinal = (attendees && attendees.value) ? (attendees.value.filter(m => m.finalTags?.isFirstTimer).length) : 0;
-  const currentVolunteersFinal = (attendees && attendees.value) ? (attendees.value.filter(m => m.finalTags?.isVolunteer).length) : 0;
-  const currentNameFinal = compFinal.current?.name || eventName.value || 'N/A';
-
   writeSectionHeader('Summary');
 
   // Human-readable summary paragraph (use the comparison payload's current event)
@@ -763,29 +720,6 @@ try {
       const prevAvg = (prevTotals.length) ? Math.round(prevSum / prevTotals.length) : 0;
       const currentTotal = comp.current?.total || 0;
       const delta = currentTotal - prevAvg;
-      const direction = delta > 0 ? 'increased' : (delta < 0 ? 'decreased' : 'no change');
-      const pctChange = (prevAvg && prevAvg !== 0) ? Math.round((delta / prevAvg) * 100) : null;
-
-      // Build a concise attendance totals summary listing previous events and their totals
-      const prevListText = prevTotals.length ? prevTotals.map(p => `${p.name} (${p.total})`).join(', ') : 'none';
-
-      let summaryText = `The current event: ${comp.current?.name || 'N/A'} had a total of (${currentTotal}) attendees. Previous events: ${prevListText} had ${prevAvg} participants on average.`;
-      if (pctChange !== null) {
-        const sign = pctChange > 0 ? '+' : '';
-        summaryText += ` This ${direction} by ${Math.abs(delta)} (${sign}${pctChange}%) compared with the previous average.`;
-      } else if (direction !== 'had no change') {
-        summaryText += ` This ${direction} by ${Math.abs(delta)} (unable to compute percent change because previous average is 0).`;
-      } else {
-        summaryText += ` There was no change compared with the previous average.`;
-      }
-
-      // Add a short sentence about Elevate/B1G/FirstTimers comparisons using combined previous counts
-      const prevCombined = { elevate: (comp.previous || []).reduce((s,p) => s + (p.elevate||0), 0), b1g: (comp.previous || []).reduce((s,p) => s + (p.b1g||0), 0), firstTimers: (comp.previous || []).reduce((s,p) => s + (p.firstTimers||0), 0) };
-      const elevText = `Elevate had ${comp.current?.elevate || 0} attendees compared to previous event averagee of ${prevAvg.elevate}.`;
-      const b1gText = `B1g had ${comp.current?.b1g || 0} attendees compared to previous event average of ${prevAvg.b1g}.`;
-      const ftText = `Lasty, there were  ${comp.current?.firstTimers || 0} first-time attendees in the current event.`;
-
-      writeParagraph(`${summaryText} ${elevText} ${b1gText} ${ftText}`);
 
       // Render only the Absence Monitoring card (keep Overview table above)
       try {
@@ -821,13 +755,6 @@ try {
             margin: { left: 15, right: 15 }
           })
           y = doc.lastAutoTable ? doc.lastAutoTable.finalY + 8 : y + 8
-
-          // If absenceCard has interpretation, keep it but adapt to averages
-          if (absenceCard.interpretation) {
-            // adapt interpretation to show averages
-            const interp = `Interpretation (avg): ${absenceCard.interpretation}`
-            writeParagraph(interp)
-          }
 
           // Add demographics averaged table (per-event averages for previous)
           // Helper to compute demographics for a given event id

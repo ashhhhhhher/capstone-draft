@@ -19,11 +19,7 @@ function toggleDropdown() {
 }
 
 function onProfileTriggerClick() {
-  if (authStore.userRole === 'admin') {
-    router.push('/profile')
-  } else {
-    toggleDropdown()
-  }
+  toggleDropdown()
 }
 
 function closeDropdown(event) {

@@ -157,11 +157,15 @@ async function handleSubmit() {
             <span>Wknd Service</span>
           </label>
           <label class="radio-label">
+            <input type="radio" v-model="eventType" value="b1g_event">
+            <span>B1G Service</span>
+          </label>
+          <label class="radio-label">
             <input type="radio" v-model="eventType" value="ccf_event">
             <span>CCF Event</span>
           </label>
         </div>
-        <small v-if="eventType === 'service'">Attendance will be recorded for this event.</small>
+        <small v-if="eventType === 'service' || eventType === 'b1g_event'">Attendance will be recorded for this event.</small>
         <small v-else>This is an informational event (no attendance).</small>
       </div>
       
