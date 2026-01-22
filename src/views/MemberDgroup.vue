@@ -2,20 +2,34 @@
 import { ref, computed, onMounted, reactive } from 'vue'
 import { useAuthStore } from '../stores/auth'
 import { useMembersStore } from '../stores/members'
-import { User, Users, ChevronRight, Plus, X, AlertCircle, ArrowLeft, UserMinus, HelpCircle, Pencil } from 'lucide-vue-next'
+import { useAttendanceStore } from '../stores/attendance' // Added
+import { 
+  User, Users, ChevronRight, Plus, X, AlertCircle, 
+  ArrowLeft, UserMinus, HelpCircle, Pencil, ClipboardCheck 
+} from 'lucide-vue-next'
 
 const authStore = useAuthStore()
 const membersStore = useMembersStore()
+const attendanceStore = useAttendanceStore() // Added
 
 const activeTab = ref('upline') 
 const showCreateModal = ref(false)
 const showPersonModal = ref(false)
 const showJoinByIdModal = ref(false)
 const showEditGroupModal = ref(false)
+const showAttendanceModal = ref(false) // Added
 
 // Join by ID logic
 const dgroupIdInput = ref('')
 const joinStatus = ref({ type: '', msg: '' })
+
+// Attendance Form Logic
+const attendanceForm = reactive({
+  date: new Date().toISOString().split('T')[0],
+  meetingName: '',
+  venue: '',
+  attendees: {} // MemberID: { name, isPresent }
+})
 
 // Edit Group Logic (Leader)
 const editGroupForm = reactive({
@@ -39,7 +53,6 @@ const myProfile = computed(() => authStore.userProfile)
 const isLeader = computed(() => myProfile.value?.finalTags?.isDgroupLeader)
 const myLeaderName = computed(() => myProfile.value?.dgroupLeader)
 
-// Seeker Logic: If not a leader, and no leader assigned, and NOT marked seeker yet
 const showSeekerQuestionnaire = computed(() => {
   if (!myProfile.value) return false
   const p = myProfile.value
@@ -68,6 +81,7 @@ const myDownlineGroups = computed(() => {
     
     groups.push({
       id: myProfile.value.dgroupId || 'g-default',
+      dgroupId: myProfile.value.dgroupId, // Added for attendance tracking
       name: myProfile.value.dgroupName || `${myProfile.value?.firstName}'s Dgroup`,
       members: members,
       lifeStage: myProfile.value?.finalTags?.ageCategory || 'Mixed',
@@ -99,6 +113,47 @@ function removeMember(member) {
   }
 }
 
+// --- Attendance Actions ---
+function openAttendanceModal() {
+  // Map current group members to the checklist
+  const checklist = {}
+  currentGroupMembers.value.forEach(m => {
+    checklist[m.id] = {
+      name: `${m.firstName} ${m.lastName}`,
+      isPresent: true 
+    }
+  })
+  attendanceForm.attendees = checklist
+  attendanceForm.meetingName = ''
+  attendanceForm.venue = ''
+  showAttendanceModal.value = true
+}
+
+async function submitAttendance() {
+  if (!attendanceForm.meetingName) return alert("Please enter the meeting topic.")
+  
+  const payload = {
+    dgroupId: selectedGroup.value.dgroupId,
+    meetingDate: attendanceForm.date,
+    meetingName: attendanceForm.meetingName,
+    venue: attendanceForm.venue,
+    attendees: attendanceForm.attendees,
+    locked: false 
+  }
+
+  try {
+    const res = await attendanceStore.logDgroupMeeting(payload)
+    if (res.status === 'success') {
+      alert("Attendance logged successfully!")
+      showAttendanceModal.value = false
+    } else {
+      alert(res.message)
+    }
+  } catch (e) {
+    alert("Error saving attendance.")
+  }
+}
+
 // --- Seeker Actions ---
 async function handleSeekerYes() {
   if (!myProfile.value) return
@@ -122,7 +177,6 @@ function handleSeekerNo() {
   alert("No problem! Enjoy the services and events.")
 }
 
-// --- Join By ID ---
 async function joinDgroupById() {
   joinStatus.value = { type: '', msg: '' }
   const idToFind = dgroupIdInput.value.trim();
@@ -132,7 +186,6 @@ async function joinDgroupById() {
     return;
   }
 
-  // Find the leader who owns this dgroupId
   const leader = membersStore.leaders.find(l => l.dgroupId === idToFind);
 
   if (!leader) {
@@ -140,7 +193,6 @@ async function joinDgroupById() {
     return;
   }
 
-  // Join Logic
   const leaderName = `${leader.firstName} ${leader.lastName}`;
   const updates = {
     dgroupLeader: leaderName,
@@ -165,7 +217,6 @@ async function joinDgroupById() {
   }
 }
 
-// --- Edit Group (Leader Only) ---
 function openEditGroupModal() {
   if (!myProfile.value) return
   editGroupForm.dgroupName = myProfile.value.dgroupName || ''
@@ -194,7 +245,6 @@ async function saveGroupDetails() {
 <template>
   <div class="dgroup-view">
     
-    <!-- SEEKER QUESTIONNAIRE (First Timers / Unassigned) -->
     <div v-if="showSeekerQuestionnaire" class="seeker-prompt">
       <div class="icon-circle">
         <HelpCircle :size="32" color="#1976D2" />
@@ -219,9 +269,6 @@ async function saveGroupDetails() {
     </div>
 
     <div v-else>
-      <!-- Normal Dgroup View -->
-      
-      <!-- Tab Switcher -->
       <div class="tabs" v-if="!selectedGroup">
         <button :class="{ active: activeTab === 'upline' }" @click="activeTab = 'upline'">
           My Dgroup (Upline)
@@ -231,7 +278,6 @@ async function saveGroupDetails() {
         </button>
       </div>
 
-      <!-- UPLINE VIEW -->
       <div v-if="activeTab === 'upline' && !selectedGroup" class="tab-content">
         <div 
           class="leader-card" 
@@ -272,10 +318,8 @@ async function saveGroupDetails() {
         </div>
       </div>
 
-      <!-- DOWNLINE VIEW (Leader Only) -->
       <div v-if="activeTab === 'downline'" class="tab-content">
         
-        <!-- 1. GROUPS GRID -->
         <div v-if="!selectedGroup">
           <div class="groups-header">
             <h3>Your Groups</h3>
@@ -297,7 +341,6 @@ async function saveGroupDetails() {
           </div>
         </div>
 
-        <!-- 2. GROUP DETAIL LIST VIEW -->
         <div v-else class="drill-down-view">
           <div class="drill-header">
             <button @click="closeGroupDetails" class="back-btn">
@@ -307,6 +350,9 @@ async function saveGroupDetails() {
               <h3>{{ selectedGroup.name }}</h3>
               <span class="subtitle">{{ currentGroupMembers.length }} / {{ selectedGroup.capacity }} Members</span>
             </div>
+            <button class="create-btn" @click="openAttendanceModal" style="margin-left: auto; background: #2E7D32; color: white;">
+              <ClipboardCheck :size="16" /> Log Meeting
+            </button>
           </div>
 
           <div class="members-list-full">
@@ -333,11 +379,48 @@ async function saveGroupDetails() {
             </div>
           </div>
         </div>
-
       </div>
     </div>
     
-    <!-- JOIN BY ID MODAL -->
+    <div v-if="showAttendanceModal" class="modal-overlay">
+      <div class="modal create-modal" style="max-width: 420px;">
+        <h3>Weekly Check-in</h3>
+        <p class="modal-desc">Record attendance for your group meeting.</p>
+
+        <div class="form-group">
+          <label>Meeting Topic / Lesson</label>
+          <input v-model="attendanceForm.meetingName" placeholder="e.g. Prayer & Fasting Part 1" />
+        </div>
+
+        <div class="form-row">
+          <div class="form-group half">
+            <label>Date</label>
+            <input type="date" v-model="attendanceForm.date" />
+          </div>
+          <div class="form-group half">
+            <label>Venue</label>
+            <input v-model="attendanceForm.venue" placeholder="Zoom/Cafe" />
+          </div>
+        </div>
+
+        <label style="font-size: 11px; font-weight: 700; color: #90A4AE; text-transform: uppercase; margin-bottom: 8px; display: block;">
+          Member Attendance
+        </label>
+        <div class="attendance-checklist" style="background: #F5F7FA; padding: 10px; border-radius: 12px; max-height: 200px; overflow-y: auto; border: 1px solid #ECEFF1;">
+          <div v-for="(data, id) in attendanceForm.attendees" :key="id" 
+               style="display: flex; align-items: center; padding: 10px 0; border-bottom: 1px solid #eee;">
+            <input type="checkbox" v-model="data.isPresent" :id="'att-'+id" style="width: 20px; height: 20px; margin-right: 12px; cursor: pointer;" />
+            <label :for="'att-'+id" style="font-size: 14px; color: #37474F; cursor: pointer; font-weight: 500;">{{ data.name }}</label>
+          </div>
+        </div>
+
+        <div class="actions">
+          <button @click="showAttendanceModal = false" class="cancel">Cancel</button>
+          <button @click="submitAttendance" class="confirm" style="background: #2E7D32;">Submit to DGM</button>
+        </div>
+      </div>
+    </div>
+
     <div v-if="showJoinByIdModal" class="modal-overlay" @click.self="showJoinByIdModal = false">
       <div class="modal create-modal">
         <h3>Join by Dgroup ID</h3>
@@ -359,7 +442,6 @@ async function saveGroupDetails() {
       </div>
     </div>
 
-    <!-- EDIT GROUP MODAL (Leader) -->
     <div v-if="showEditGroupModal" class="modal-overlay">
       <div class="modal create-modal">
         <h3>Edit Group Details</h3>
@@ -386,7 +468,6 @@ async function saveGroupDetails() {
       </div>
     </div>
 
-    <!-- Person Profile Modal -->
     <div v-if="showPersonModal && selectedPerson" class="modal-overlay person-overlay" @click.self="showPersonModal = false">
       <div class="modal profile-modal">
         <button class="close-icon-btn" @click="showPersonModal = false"><X :size="24" /></button>
@@ -424,7 +505,6 @@ async function saveGroupDetails() {
 .tabs button { flex: 1; padding: 10px; border: none; background: transparent; border-radius: 8px; font-weight: 600; color: #546E7A; cursor: pointer; transition: all 0.2s; }
 .tabs button.active { background: white; color: #1976D2; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
 
-/* Leader Card */
 .leader-card { background: white; padding: 20px; border-radius: 16px; display: flex; align-items: center; gap: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); margin-bottom: 24px; transition: transform 0.2s; }
 .leader-card.clickable { cursor: pointer; }
 .leader-card.clickable:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
@@ -434,7 +514,6 @@ async function saveGroupDetails() {
 .leader-info .label { font-size: 11px; text-transform: uppercase; color: #78909C; font-weight: 700; }
 .leader-info h3 { margin: 4px 0 0 0; font-size: 18px; color: #263238; }
 
-/* Member List Style */
 .members-list h4 { color: #546E7A; margin-bottom: 12px; }
 .member-row { background: white; padding: 12px; border-bottom: 1px solid #ECEFF1; display: flex; align-items: center; gap: 12px; transition: background 0.2s; }
 .member-row:first-of-type { border-radius: 12px 12px 0 0; }
@@ -447,12 +526,10 @@ async function saveGroupDetails() {
 .member-name-col .name { font-weight: 600; color: #37474F; font-size: 14px; }
 .member-name-col .status-sub { font-size: 11px; color: #90A4AE; text-transform: capitalize; }
 
-/* remove button */
 .icon-btn { background: transparent; border: none; cursor: pointer; padding: 8px; border-radius: 8px; transition: background 0.2s; display: flex; align-items: center; justify-content: center; }
 .icon-btn.remove { color: #B0BEC5; }
 .icon-btn.remove:hover { background: #FFEBEE; color: #D32F2F; }
 
-/* Group Card */
 .groups-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
 .create-btn { background: #E3F2FD; color: #1976D2; border: none; padding: 8px 12px; border-radius: 8px; display: flex; align-items: center; gap: 4px; font-size: 13px; font-weight: 600; cursor: pointer; }
 
@@ -468,7 +545,6 @@ async function saveGroupDetails() {
 .drill-header h3 { margin: 0; font-size: 18px; color: #263238; }
 .drill-header .subtitle { font-size: 12px; color: #78909C; }
 
-/* Modals */
 .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 100; display: flex; align-items: center; justify-content: center; }
 .person-overlay { z-index: 200; }
 
@@ -480,17 +556,12 @@ async function saveGroupDetails() {
 .form-group input, .form-group select { width: 100%; padding: 10px; border: 1px solid #CFD8DC; border-radius: 8px; font-size: 14px; box-sizing: border-box; }
 .form-row { display: flex; gap: 12px; }
 .form-group.half { flex: 1; }
-.preview-section { margin-bottom: 20px; background: #F5F7FA; padding: 16px; border-radius: 12px; }
-.preview-label { font-size: 11px; text-transform: uppercase; color: #90A4AE; font-weight: 700; display: block; margin-bottom: 8px; }
-.preview-card { margin-bottom: 0; border: 1px solid #E0E0E0; box-shadow: 0 2px 5px rgba(0,0,0,0.05); pointer-events: none; }
 .actions { display: flex; gap: 10px; margin-top: 24px; }
 .actions button { flex: 1; padding: 12px; border-radius: 8px; border: none; font-weight: 600; cursor: pointer; }
 .confirm { background: #1976D2; color: white; }
 .cancel { background: #ECEFF1; color: #333; }
-.close-btn { background: none; border: none; font-size: 24px; cursor: pointer; }
 .empty-members { text-align: center; color: #B0BEC5; padding: 30px 20px; display: flex; flex-direction: column; align-items: center; gap: 10px; font-size: 13px; }
 
-/* Profile Modal */
 .profile-modal { text-align: center; padding-top: 40px; }
 .close-icon-btn { position: absolute; top: 16px; right: 16px; background: none; border: none; cursor: pointer; color: #90A4AE; }
 .profile-header { margin-bottom: 24px; display: flex; flex-direction: column; align-items: center; }
@@ -503,18 +574,8 @@ async function saveGroupDetails() {
 .detail-row .value { color: #37474F; font-size: 14px; font-weight: 600; }
 .link-color { color: #1976D2; text-decoration: underline; }
 
-/* Seeker Prompt Styles */
-.seeker-prompt {
-  background: white;
-  padding: 30px 20px;
-  border-radius: 16px;
-  text-align: center;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.05);
-  margin-top: 20px;
-}
-.icon-circle {
-  width: 60px; height: 60px; background: #E3F2FD; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 16px;
-}
+.seeker-prompt { background: white; padding: 30px 20px; border-radius: 16px; text-align: center; box-shadow: 0 4px 12px rgba(0,0,0,0.05); margin-top: 20px; }
+.icon-circle { width: 60px; height: 60px; background: #E3F2FD; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 16px; }
 .seeker-prompt h3 { margin: 0 0 8px; color: #1976D2; font-size: 20px; }
 .seeker-prompt p { color: #546E7A; margin: 0 0 24px; font-size: 14px; }
 .question-box { background: #F5F7FA; border-radius: 12px; padding: 20px; }

@@ -7,7 +7,8 @@ import {
   setDoc,
   getDoc,
   collectionGroup,
-  onSnapshot
+  onSnapshot,
+  serverTimestamp
 } from 'firebase/firestore'
 import { useAuthStore } from './auth'
 
@@ -39,6 +40,42 @@ export const useAttendanceStore = defineStore('attendance', () => {
   }
 
   // --- Actions ---
+
+  /**
+   * Log Weekly DGroup Meeting
+   * Path: branches/{branchId}/dgroupAttendance/{dgroupId_date}
+   */
+  async function logDgroupMeeting(meetingData) {
+    const authStore = useAuthStore()
+    if (!authStore.branchId) {
+      return { status: 'error', message: 'Branch ID missing' }
+    }
+
+    try {
+      // Document ID format: DG-ID_YYYY-MM-DD
+      const docId = `${meetingData.dgroupId}_${meetingData.meetingDate}`
+      
+      const meetingRef = doc(
+        db, 
+        'branches', 
+        authStore.branchId, 
+        'dgroupAttendance', 
+        docId
+      )
+
+      await setDoc(meetingRef, {
+        ...meetingData,
+        submittedAt: serverTimestamp(),
+        submittedBy: authStore.userProfile?.firstName + ' ' + authStore.userProfile?.lastName,
+        submittedById: authStore.userProfile?.id || 'unknown'
+      })
+
+      return { status: 'success', message: 'DGroup attendance recorded.' }
+    } catch (error) {
+      console.error("DGroup Log Error:", error)
+      return { status: 'error', message: error.message }
+    }
+  }
 
   /**
    * Fetch attendance for a specific event
@@ -172,6 +209,7 @@ export const useAttendanceStore = defineStore('attendance', () => {
     isLoading,
     fetchAttendanceForEvent,
     fetchAllAttendance,
-    markAttendance
+    markAttendance,
+    logDgroupMeeting // <--- Exporting the new action
   }
 })

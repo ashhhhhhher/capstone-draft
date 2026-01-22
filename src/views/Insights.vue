@@ -10,6 +10,7 @@ import Modal from '../components/dgmComponents/Modal.vue'
 import DgroupMatchingModal from '../components/dgmComponents/DgroupMatchingModal.vue'
 import AttendanceOverviewModal from '../components/dgmComponents/AttendanceOverviewModal.vue'
 import ExportButton from '../components/dgmComponents/ExportButton.vue'
+import DgroupWeeklyLogs from '../components/dgmComponents/DgroupWeeklyLogs.vue'
 
 // --- Store Setup ---
 const membersStore = useMembersStore()
@@ -355,6 +356,8 @@ function selectTab(name) {
       </div>
       </div>
       
+      <DgroupWeeklyLogs />
+
       <!-- 3. Volunteer Breakdown Section -->
       <div class="chart-card-full">
       <h3>Volunteer Ministry Breakdown (Total: {{ volunteerBreakdown.total }})</h3>
