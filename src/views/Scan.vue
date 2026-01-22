@@ -5,9 +5,11 @@ import { storeToRefs } from 'pinia'
 import { useMembersStore } from '../stores/members'
 import { useEventsStore } from '../stores/events'
 import { useAttendanceStore } from '../stores/attendance'
+import Modal from '../components/dgmComponents/Modal.vue'
 
 // --- Stores ---
-const { members } = storeToRefs(useMembersStore())
+const membersStore = useMembersStore()
+const { members } = storeToRefs(membersStore)
 const { currentEvent } = storeToRefs(useEventsStore())
 const attendanceStore = useAttendanceStore()
 
@@ -15,6 +17,14 @@ const attendanceStore = useAttendanceStore()
 const manualIdInput = ref('')
 const scanResult = ref({ status: null, message: '' })
 let scannerInstance = null
+
+// --- Volunteer Role Handling ---
+const showVolunteerPrompt = ref(false)
+const pendingMember = ref(null) // Member waiting for role selection
+const isProcessing = ref(false)
+
+// List of all standard ministries for selection
+const standardMinistries = ['Host Team', 'Live Prod', 'Exalt', 'Welcome', 'DGM']
 
 // ---Computed check for event type ---
 const isAttendanceEvent = computed(() => {
@@ -36,7 +46,6 @@ async function processMemberId(memberId) {
     return
   }
   
-  const currentEventId = currentEvent.value.id
   const member = members.value.find(m => m.id === trimmedId)
   
   if (!member) {
@@ -44,17 +53,38 @@ async function processMemberId(memberId) {
     return
   }
 
-  const result = await attendanceStore.markAttendance(trimmedId, currentEventId)
+  // --- DYNAMIC VOLUNTEER CHECK ---
+  // If member is a volunteer, pause and ask for role
+  if (member.finalTags && member.finalTags.isVolunteer) {
+    pendingMember.value = member
+    showVolunteerPrompt.value = true
+    if (scannerInstance) {
+       scannerInstance.pause(true) // Pause scanning while modal is open
+    }
+    return
+  }
+
+  // Otherwise, mark as regular (N/A)
+  await finalizeAttendance(member, 'N/A')
+}
+
+// --- Finalize Attendance ---
+async function finalizeAttendance(member, ministryRole) {
+  isProcessing.value = true
+  const currentEventId = currentEvent.value.id
+  
+  const result = await attendanceStore.markAttendance(member.id, currentEventId, ministryRole)
 
   if (result.status === 'success') {
+    const ministryMsg = ministryRole !== 'N/A' ? ` (Serving: ${ministryRole})` : ''
     scanResult.value = { 
       status: 'success', 
-      message: `Welcome, ${member.firstName} ${member.lastName}! Attendance recorded.` 
+      message: `Welcome, ${member.firstName}! Attendance recorded.${ministryMsg}` 
     }
   } else if (result.status === 'warning') {
     scanResult.value = { 
       status: 'warning', 
-      message: `${member.firstName} ${member.lastName} is already marked present.` 
+      message: `${member.firstName} is already marked present.` 
     }
   } else {
     scanResult.value = { 
@@ -63,15 +93,73 @@ async function processMemberId(memberId) {
     }
   }
   
+  // Cleanup
   manualIdInput.value = ''
+  pendingMember.value = null
+  showVolunteerPrompt.value = false
+  isProcessing.value = false
+
+  // Resume Scanner if paused
+  if (scannerInstance && scannerInstance.getState() === 3) { // 3 = PAUSED
+     scannerInstance.resume()
+  }
   
   setTimeout(() => {
     scanResult.value = { status: null, message: '' }
-  }, 5000)
+  }, 4000)
 }
+
+// --- Volunteer Modal Actions ---
+async function handleVolunteerSelection(ministry) {
+  if (!pendingMember.value) return
+  
+  // 1. Update Profile if this ministry is new for them
+  const member = pendingMember.value;
+  // Make sure volunteerMinistry array exists
+  const currentMinistries = member.finalTags.volunteerMinistry || [];
+  
+  if (!currentMinistries.includes(ministry)) {
+      // Create a copy of the array and add
+      const updatedMinistries = [...currentMinistries, ministry];
+      
+      const updatedMemberData = {
+          ...member,
+          finalTags: {
+              ...member.finalTags,
+              volunteerMinistry: updatedMinistries
+          }
+      };
+      
+      try {
+          await membersStore.updateMember(updatedMemberData);
+          console.log(`Updated ${member.firstName}'s profile with new ministry: ${ministry}`);
+      } catch (e) {
+          console.error("Failed to update member ministry tag during scan", e);
+      }
+  }
+
+  // 2. Mark Attendance
+  finalizeAttendance(pendingMember.value, ministry)
+}
+
+function handleRegularAttendance() {
+  if (!pendingMember.value) return
+  finalizeAttendance(pendingMember.value, 'N/A')
+}
+
+function cancelVolunteerPrompt() {
+  pendingMember.value = null
+  showVolunteerPrompt.value = false
+  if (scannerInstance && scannerInstance.getState() === 3) {
+     scannerInstance.resume()
+  }
+}
+
 
 // --- Scanner Functions ---
 function onScanSuccess(decodedText, decodedResult) {
+  // If modal is open, ignore scans (safety check)
+  if (showVolunteerPrompt.value) return 
   processMemberId(decodedText)
 }
 function onScanError(errorMessage) {
@@ -155,13 +243,45 @@ onUnmounted(() => {
           class="manual-input"
           placeholder="e.g., Q-100001"
           v-model="manualIdInput"
-          :disabled="!isAttendanceEvent"
+          :disabled="!isAttendanceEvent || showVolunteerPrompt"
         >
-        <button type="submit" class="submit-btn" :disabled="!isAttendanceEvent">
+        <button type="submit" class="submit-btn" :disabled="!isAttendanceEvent || showVolunteerPrompt">
           Submit ID
         </button>
       </form>
     </div>
+
+    <!-- VOLUNTEER SELECTION MODAL -->
+    <Modal v-if="showVolunteerPrompt" @close="cancelVolunteerPrompt">
+       <div class="volunteer-prompt">
+          <h3>Volunteer Detected</h3>
+          <p class="member-name">{{ pendingMember?.firstName }} {{ pendingMember?.lastName }}</p>
+          <p class="question">How are they attending today?</p>
+          
+          <div class="ministry-options">
+             <!-- Regular Attendance -->
+             <button class="role-btn regular" @click="handleRegularAttendance">
+               Attending as Regular
+             </button>
+             
+             <div class="divider-small">OR SERVING IN</div>
+
+             <!-- All Standard Ministry Options -->
+             <div class="ministry-grid">
+                <button 
+                  v-for="min in standardMinistries" 
+                  :key="min"
+                  class="role-btn ministry"
+                  @click="handleVolunteerSelection(min)"
+                >
+                  {{ min }}
+                </button>
+             </div>
+          </div>
+
+          <button class="cancel-link" @click="cancelVolunteerPrompt">Cancel Scan</button>
+       </div>
+    </Modal>
   </div>
 </template>
 
@@ -204,7 +324,6 @@ onUnmounted(() => {
   display: none;
 }
 
-/* Style for disabled scanner */
 .scanner-disabled {
   width: 100%;
   border-radius: 12px;
@@ -293,10 +412,82 @@ onUnmounted(() => {
   border-radius: 8px;
   cursor: pointer;
 }
-/*  Disabled state */
 .submit-btn:disabled, .manual-input:disabled {
   background-color: #90A4AE;
   cursor: not-allowed;
   opacity: 0.7;
+}
+
+/* --- Volunteer Prompt Modal --- */
+.volunteer-prompt {
+  text-align: center;
+  padding: 10px;
+}
+.volunteer-prompt h3 {
+  margin: 0;
+  color: #1565C0;
+  font-size: 20px;
+}
+.member-name {
+  font-size: 22px;
+  font-weight: 800;
+  margin: 8px 0;
+  color: #37474F;
+}
+.question {
+  color: #78909C;
+  margin-bottom: 24px;
+}
+
+.ministry-options {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.role-btn {
+  padding: 14px;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+  transition: transform 0.1s;
+}
+.role-btn:active { transform: scale(0.98); }
+
+.role-btn.regular {
+  background-color: #ECEFF1;
+  color: #455A64;
+  border: 1px solid #CFD8DC;
+}
+.role-btn.ministry {
+  background-color: #1976D2;
+  color: white;
+  box-shadow: 0 4px 10px rgba(25, 118, 210, 0.2);
+}
+
+.ministry-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.divider-small {
+  font-size: 12px;
+  color: #B0BEC5;
+  font-weight: 700;
+  margin: 8px 0;
+  letter-spacing: 1px;
+}
+
+.cancel-link {
+  background: none;
+  border: none;
+  color: #EF5350;
+  font-weight: 600;
+  margin-top: 24px;
+  cursor: pointer;
+  text-decoration: underline;
 }
 </style>
