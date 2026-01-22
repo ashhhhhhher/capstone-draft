@@ -1,6 +1,6 @@
 <script setup>
 import { ref, computed } from 'vue'
-import { Search, List, LayoutGrid, Archive, ChevronDown, ChevronRight } from 'lucide-vue-next'
+import { Search, List, LayoutGrid, Archive, ChevronDown, ChevronRight, Filter } from 'lucide-vue-next'
 import { storeToRefs } from 'pinia'
 import { useMembersStore } from '../stores/members'
 import { useAttendanceStore } from '../stores/attendance'
@@ -9,30 +9,31 @@ import MemberCard from '../components/dgmComponents/MemberCard.vue'
 import MemberDetailsModal from '../components/dgmComponents/MemberDetailsModal.vue'
 import Modal from '../components/dgmComponents/Modal.vue'
 import AbsenceMonitoring from '../components/dgmComponents/AbsenceMonitoring.vue' 
+import FilterModal from '../components/dgmComponents/FilterModal.vue' 
 
 // --- Store Setup ---
 const membersStore = useMembersStore()
 const { activeMembers, archivedMembers, leaders } = storeToRefs(membersStore)
 const attendanceStore = useAttendanceStore()
-const { currentEventAttendees, allAttendance } = storeToRefs(attendanceStore)
-const eventsStore = useEventsStore()
-const { allEvents } = storeToRefs(eventsStore)
+const { currentEventAttendees } = storeToRefs(attendanceStore)
 
 // --- Page State ---
 const viewMode = ref('list')
 const showArchived = ref(false) 
 const showMemberModal = ref(false)
+const showFilterModal = ref(false) // State for filter modal
 const selectedMember = ref(null)
 const expandedDgroups = ref([])
 const searchQuery = ref('') 
 const showAbsenceMonitoringModal = ref(false)
 
-// --- Inline Filters State ---
-const filterAge = ref([]) // ['Elevate', 'B1G']
-const filterCats = ref([]) // ['First Timer', 'Seeker', 'Regular', 'Dgroup Leader', 'Volunteer']
-const filterMinistries = ref([]) // ['Host Team', 'Live Prod', etc]
-
-const ministriesOptions = ['Host Team', 'Live Prod', 'Exalt', 'Welcome', 'DGM']
+// --- Filters State ---
+// Updated structure to support exclusions for 'type'
+const currentFilters = ref({
+  age: [],
+  type: { included: [], excluded: [] },
+  ministries: []
+})
 
 // --- Computed Properties ---
 const presentMemberIds = computed(() => {
@@ -53,30 +54,44 @@ const filteredMembers = computed(() => {
     )
   }
 
+  const f = currentFilters.value;
+
   // 2. Age Filter
-  if (filterAge.value.length > 0) {
-    list = list.filter(m => filterAge.value.includes(m.finalTags.ageCategory))
+  if (f.age.length > 0) {
+    list = list.filter(m => f.age.includes(m.finalTags.ageCategory));
   }
 
-  // 3. Category Filters
-  if (filterCats.value.length > 0) {
+  // 3. Type Filter (Inclusion)
+  // If 'included' array is not empty, member MUST match one of the included types
+  if (f.type.included.length > 0) {
     list = list.filter(m => {
-      // Check if member matches AT LEAST ONE of the selected categories
-      if (filterCats.value.includes('First Timer') && m.finalTags.isFirstTimer) return true;
-      if (filterCats.value.includes('Seeker') && m.finalTags.isSeeker) return true;
-      if (filterCats.value.includes('Regular') && m.finalTags.isRegular) return true;
-      if (filterCats.value.includes('Dgroup Leader') && m.finalTags.isDgroupLeader) return true;
-      if (filterCats.value.includes('Volunteer') && m.finalTags.isVolunteer) return true;
+      if (f.type.included.includes('First Timer') && m.finalTags.isFirstTimer) return true;
+      if (f.type.included.includes('Seeker') && m.finalTags.isSeeker) return true;
+      if (f.type.included.includes('Regular') && m.finalTags.isRegular) return true;
+      if (f.type.included.includes('Dgroup Leader') && m.finalTags.isDgroupLeader) return true;
+      if (f.type.included.includes('Volunteer') && m.finalTags.isVolunteer) return true;
       return false;
     });
   }
 
-  // 4. Ministry Filters (Only if Volunteer is selected implicitly or explicitly)
-  // Logic: If specific ministries are checked, only show volunteers with those ministries
-  if (filterMinistries.value.length > 0) {
+  // 4. Type Filter (Exclusion)
+  // If 'excluded' array is not empty, member MUST NOT match any of the excluded types
+  if (f.type.excluded.length > 0) {
+    list = list.filter(m => {
+      if (f.type.excluded.includes('First Timer') && m.finalTags.isFirstTimer) return false;
+      if (f.type.excluded.includes('Seeker') && m.finalTags.isSeeker) return false;
+      if (f.type.excluded.includes('Regular') && m.finalTags.isRegular) return false;
+      if (f.type.excluded.includes('Dgroup Leader') && m.finalTags.isDgroupLeader) return false;
+      if (f.type.excluded.includes('Volunteer') && m.finalTags.isVolunteer) return false;
+      return true;
+    });
+  }
+
+  // 5. Ministry Filters
+  if (f.ministries.length > 0) {
     list = list.filter(m => 
       m.finalTags.isVolunteer &&
-      m.finalTags.volunteerMinistry.some(v => filterMinistries.value.includes(v))
+      m.finalTags.volunteerMinistry.some(v => f.ministries.includes(v))
     )
   }
   
@@ -86,22 +101,14 @@ const filteredMembers = computed(() => {
   return list
 })
 
-// Split filtered list into Present and Absent for the columns (Only used for Active View)
-const presentList = computed(() => {
-  return filteredMembers.value.filter(m => presentMemberIds.value.has(m.id))
-})
-
-const absentList = computed(() => {
-  return filteredMembers.value.filter(m => !presentMemberIds.value.has(m.id))
-})
+// ... (Rest of splitting logic presentList/absentList/dgroups remains same) ...
+const presentList = computed(() => filteredMembers.value.filter(m => presentMemberIds.value.has(m.id)))
+const absentList = computed(() => filteredMembers.value.filter(m => !presentMemberIds.value.has(m.id)))
 
 // --- Grouping Logic for Dgroup View ---
 const sortedDgroups = computed(() => {
   const sourceList = showArchived.value ? archivedMembers.value : activeMembers.value;
-
   const groups = {}
-  
-  // Initialize groups from known Leaders
   leaders.value.forEach(leader => {
     const leaderFullName = `${leader.firstName} ${leader.lastName}`;
     groups[leaderFullName] = {
@@ -114,130 +121,51 @@ const sortedDgroups = computed(() => {
       isLeaderPresent: presentMemberIds.value.has(leader.id)
     }
   })
-  
-  // Handle Unassigned
-  groups['Unassigned'] = {
-    leaderName: 'Unassigned',
-    dgroupName: 'No Dgroup',
-    dgroupId: null,
-    leaderGender: 'Mixed',
-    capacity: 0,
-    members: [],
-    isLeaderPresent: false
-  }
+  groups['Unassigned'] = { leaderName: 'Unassigned', dgroupName: 'No Dgroup', dgroupId: null, leaderGender: 'Mixed', capacity: 0, members: [], isLeaderPresent: false }
 
-  // Distribute members
-  sourceList.forEach(member => {
+  // Apply search filtering to Dgroup view members too if needed, but usually Dgroup view shows structural
+  // If we want filtering to apply to Dgroup view, we iterate filteredMembers
+  // But Dgroup view usually shows structure. Let's use filteredMembers so filters apply.
+  filteredMembers.value.forEach(member => {
     const leaderName = member.dgroupLeader
     if (leaderName && groups.hasOwnProperty(leaderName)) {
       groups[leaderName].members.push(member)
     } else if (!leaderName) {
-      // Don't put leaders in unassigned if they lead their own group
       if (!member.finalTags.isDgroupLeader) {
          groups['Unassigned'].members.push(member)
       }
     }
   })
-  
-  if(groups['Unassigned'].members.length === 0) {
-    delete groups['Unassigned']
-  }
-  
+  if(groups['Unassigned'].members.length === 0) delete groups['Unassigned']
   return Object.values(groups);
 })
 
-// Split groups into two columns based on Leader Gender
-const maleGroups = computed(() => {
-  return sortedDgroups.value.filter(g => g.leaderGender === 'Male' && g.leaderName !== 'Unassigned')
-})
-
-const femaleGroups = computed(() => {
-  return sortedDgroups.value.filter(g => g.leaderGender === 'Female' && g.leaderName !== 'Unassigned')
-})
-
-const unassignedGroups = computed(() => {
-  return sortedDgroups.value.filter(g => g.leaderName === 'Unassigned')
-})
+const maleGroups = computed(() => sortedDgroups.value.filter(g => g.leaderGender === 'Male' && g.leaderName !== 'Unassigned'))
+const femaleGroups = computed(() => sortedDgroups.value.filter(g => g.leaderGender === 'Female' && g.leaderName !== 'Unassigned'))
+const unassignedGroups = computed(() => sortedDgroups.value.filter(g => g.leaderName === 'Unassigned'))
 
 // --- Functions ---
-function openMemberDetails(member) {
-  selectedMember.value = member
-  showMemberModal.value = true
+function openMemberDetails(member) { selectedMember.value = member; showMemberModal.value = true; }
+function handleSaveChanges(updatedMember) { membersStore.updateMember(updatedMember); showMemberModal.value = false; }
+function handleArchiveMember(memberId) { membersStore.archiveMember(memberId); showMemberModal.value = false; }
+function handleRestoreMember(memberId) { membersStore.restoreMember(memberId); showMemberModal.value = false; }
+function handleModalClose() { showMemberModal.value = false; }
+function toggleDgroup(leaderName) { const index = expandedDgroups.value.indexOf(leaderName); if (index > -1) expandedDgroups.value.splice(index, 1); else expandedDgroups.value.push(leaderName); }
+function getDgroupAttendance(leaderMembers) { 
+    let presentCount = 0; 
+    for (const member of leaderMembers) { if (presentMemberIds.value.has(member.id)) presentCount++; }
+    return `${presentCount}/${leaderMembers.length} Present`;
 }
+function openAbsenceMonitoring() { showAbsenceMonitoringModal.value = true; }
 
-function handleSaveChanges(updatedMember) {
-  membersStore.updateMember(updatedMember)
-  showMemberModal.value = false
-  searchQuery.value = '' 
-}
-
-function handleArchiveMember(memberId) {
-  membersStore.archiveMember(memberId)
-  showMemberModal.value = false 
-  searchQuery.value = ''
-}
-
-function handleRestoreMember(memberId) {
-  membersStore.restoreMember(memberId)
-  showMemberModal.value = false
-  searchQuery.value = ''
-}
-
-function handleModalClose() {
-    showMemberModal.value = false;
-    searchQuery.value = ''; 
-}
-
-function toggleDgroup(leaderName) {
-  const index = expandedDgroups.value.indexOf(leaderName)
-  if (index > -1) {
-    expandedDgroups.value.splice(index, 1)
-  } else {
-    expandedDgroups.value.push(leaderName)
-  }
-}
-
-function getDgroupAttendance(leaderMembers) {
-  let presentCount = 0
-  for (const member of leaderMembers) {
-    if (presentMemberIds.value.has(member.id)) {
-      presentCount++
-    }
-  }
-  const totalCount = leaderMembers.length
-  return `${presentCount}/${totalCount} Present`
-}
-
-function openAbsenceMonitoring() {
-  showAbsenceMonitoringModal.value = true
-}
-
-// --- Absence count ---
+// --- Absence count (logic kept same) ---
+// (Copy previous absence count logic or import util if extracted)
+const { allEvents } = storeToRefs(useEventsStore())
+const { allAttendance } = storeToRefs(attendanceStore)
 const todayISO = () => new Date().toISOString().split('T')[0]
-function getPastServices() {
-  const today = todayISO()
-  return allEvents.value
-    .filter(e => e.eventType === 'service' && e.date <= today)
-    .sort((a, b) => new Date(b.date) - new Date(a.date))
-}
-function computeConsecutiveAbsences(member, past) {
-  let count = 0
-  for (const ev of past) {
-    const attended = allAttendance.value
-      ? allAttendance.value.some(a => a.eventId === ev.id && a.memberId === member.id)
-      : false
-    if (!attended) count++
-    else break
-  }
-  return count
-}
-const absenceCount = computed(() => {
-  const past = getPastServices()
-  if (!past || past.length === 0) return 0
-  return activeMembers.value
-    .map(m => computeConsecutiveAbsences(m, past))
-    .filter(c => c >= 3).length
-})
+function getPastServices() { const today = todayISO(); return allEvents.value.filter(e => e.eventType === 'service' && e.date <= today).sort((a, b) => new Date(b.date) - new Date(a.date)); }
+function computeConsecutiveAbsences(member, past) { let count = 0; for (const ev of past) { const attended = allAttendance.value ? allAttendance.value.some(a => a.eventId === ev.id && a.memberId === member.id) : false; if (!attended) count++; else break; } return count; }
+const absenceCount = computed(() => { const past = getPastServices(); if (!past || past.length === 0) return 0; return activeMembers.value.map(m => computeConsecutiveAbsences(m, past)).filter(c => c >= 3).length; })
 
 </script>
 
@@ -245,20 +173,14 @@ const absenceCount = computed(() => {
   <div class="members-container">
     <div class="members-header">
       <h1>{{ showArchived ? 'Archived Members' : 'Members Directory' }}</h1>
-      
       <div class="header-actions">
         <button class="archive-toggle-btn" @click="showArchived = !showArchived">
           <Archive :size="18" />
           <span>{{ showArchived ? 'View Active' : 'View Archived' }}</span>
         </button>
-
         <button class="absence-btn" @click="openAbsenceMonitoring" title="Open Absence Monitoring">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-            <path d="M12 2v6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
-            <path d="M5 10h14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
-            <path d="M7 14h10" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
-            <path d="M9 18h6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
-          </svg>
+          <!-- Icon SVG kept same -->
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 2v6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M5 10h14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M7 14h10" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M9 18h6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
           <span>Absence Monitoring</span>
           <span v-if="absenceCount > 0" class="absence-notif">{{ absenceCount }}</span>
         </button>
@@ -268,561 +190,180 @@ const absenceCount = computed(() => {
     <div class="controls-wrapper">
       <div class="search-bar">
         <Search :size="20" class="search-icon" />
-        <input 
-          type="text" 
-          placeholder="Search by name or email..."
-          v-model="searchQuery"
-          autocomplete="off" 
-        >
+        <input type="text" placeholder="Search by name or email..." v-model="searchQuery" autocomplete="off">
       </div>
       
+      <!-- Filter Button -->
+      <button class="filter-btn" @click="showFilterModal = true">
+         <Filter :size="16" /> Filters
+      </button>
+
       <div class="view-toggle">
-        <button 
-          :class="{ active: viewMode === 'list' }" 
-          @click="viewMode = 'list'"
-        >
-          <List :size="16" /> List
-        </button>
-        <button 
-          :class="{ active: viewMode === 'dgroup' }"
-          @click="viewMode = 'dgroup'"
-        >
-          <LayoutGrid :size="16" /> Dgroup
-        </button>
+        <button :class="{ active: viewMode === 'list' }" @click="viewMode = 'list'"><List :size="16" /> List</button>
+        <button :class="{ active: viewMode === 'dgroup' }" @click="viewMode = 'dgroup'"><LayoutGrid :size="16" /> Dgroup</button>
       </div>
     </div>
     
-    <!-- INLINE FILTERS (Replacement for Modal) -->
-    <div class="inline-filters" v-if="viewMode === 'list'">
-      <div class="filter-row">
-        <span class="filter-label">Age:</span>
-        <label><input type="checkbox" value="Elevate" v-model="filterAge"> Elevate</label>
-        <label><input type="checkbox" value="B1G" v-model="filterAge"> B1G</label>
-      </div>
-
-      <div class="filter-row">
-        <span class="filter-label">Type:</span>
-        <label><input type="checkbox" value="First Timer" v-model="filterCats"> First Timer</label>
-        <label><input type="checkbox" value="Seeker" v-model="filterCats"> Seeker</label>
-        <label><input type="checkbox" value="Regular" v-model="filterCats"> Regular</label>
-        <label><input type="checkbox" value="Dgroup Leader" v-model="filterCats"> DL</label>
-        <label><input type="checkbox" value="Volunteer" v-model="filterCats"> Volunteer</label>
-      </div>
-
-      <!-- Ministry Checkboxes (Only show if Volunteer is selected) -->
-      <div class="filter-row ministries" v-if="filterCats.includes('Volunteer')">
-        <span class="filter-label">Ministry:</span>
-        <label v-for="m in ministriesOptions" :key="m">
-          <input type="checkbox" :value="m" v-model="filterMinistries"> {{ m }}
-        </label>
-      </div>
+    <!-- Filter Tags Display (Optional: Show what is active) -->
+    <div class="active-filters" v-if="currentFilters.type.excluded.length > 0">
+        <span class="exclude-tag" v-for="ex in currentFilters.type.excluded" :key="ex">
+            Exclude: {{ ex }}
+        </span>
     </div>
-    
+
     <!-- LIST VIEW -->
     <div class="member-list-view" v-if="viewMode === 'list'">
-      
-      <!-- 1. ARCHIVE VIEW (Simple List) -->
       <div v-if="showArchived" class="simple-list">
-        <MemberCard 
-          v-for="member in filteredMembers" 
-          :key="member.id"
-          :member="member"
-          :isPresent="presentMemberIds.has(member.id)"
-          @click="openMemberDetails(member)"
-        />
-        <div v-if="filteredMembers.length === 0" class="no-results">
-          No archived members found.
-        </div>
+        <MemberCard v-for="member in filteredMembers" :key="member.id" :member="member" :isPresent="presentMemberIds.has(member.id)" @click="openMemberDetails(member)" />
+        <div v-if="filteredMembers.length === 0" class="no-results">No archived members found.</div>
       </div>
-
-      <!-- 2. ACTIVE VIEW (Present / Absent Columns) -->
       <div v-else class="columns-grid">
-        <!-- Present Column -->
         <div class="column-block">
-          <h3 class="column-title present-header">
-            Present ({{ presentList.length }})
-          </h3>
+          <h3 class="column-title present-header">Present ({{ presentList.length }})</h3>
           <div class="list-content">
-            <MemberCard 
-              v-for="member in presentList" 
-              :key="member.id"
-              :member="member"
-              :isPresent="true"
-              @click="openMemberDetails(member)"
-            />
-            <div v-if="presentList.length === 0" class="empty-col">
-              No present members found.
-            </div>
+            <MemberCard v-for="member in presentList" :key="member.id" :member="member" :isPresent="true" @click="openMemberDetails(member)" />
+            <div v-if="presentList.length === 0" class="empty-col">No present members found.</div>
           </div>
         </div>
-
-        <!-- Absent Column -->
         <div class="column-block">
-          <h3 class="column-title absent-header">
-            Absent ({{ absentList.length }})
-          </h3>
+          <h3 class="column-title absent-header">Absent ({{ absentList.length }})</h3>
           <div class="list-content">
-            <MemberCard 
-              v-for="member in absentList" 
-              :key="member.id"
-              :member="member"
-              :isPresent="false"
-              @click="openMemberDetails(member)"
-            />
-            <div v-if="absentList.length === 0" class="empty-col">
-              No absent members found.
-            </div>
+            <MemberCard v-for="member in absentList" :key="member.id" :member="member" :isPresent="false" @click="openMemberDetails(member)" />
+            <div v-if="absentList.length === 0" class="empty-col">No absent members found.</div>
           </div>
         </div>
       </div>
-
     </div>
 
-    <!-- DGROUP VIEW (Split Columns) -->
+    <!-- DGROUP VIEW -->
     <div class="dgroup-view" v-if="viewMode === 'dgroup'">
-      
       <div class="columns-grid">
-        <!-- Male Column -->
         <div class="column-block">
           <h3 class="column-title male">Male Dgroups</h3>
           <div v-if="maleGroups.length === 0" class="empty-col">No Male Groups</div>
-          <div 
-            v-for="group in maleGroups" 
-            :key="group.leaderName" 
-            class="dgroup-card"
-            :class="{
-              'is-present': group.isLeaderPresent,
-              'is-absent': !group.isLeaderPresent
-            }"
-          >
+          <div v-for="group in maleGroups" :key="group.leaderName" class="dgroup-card" :class="{ 'is-present': group.isLeaderPresent, 'is-absent': !group.isLeaderPresent }">
             <div class="dgroup-header" @click="toggleDgroup(group.leaderName)">
               <div class="header-info">
                 <h3 class="dgroup-name">{{ group.dgroupName }}</h3>
                 <span class="leader-sub">Lead: {{ group.leaderName }}</span>
                 <span class="dgroup-id">ID: {{ group.dgroupId }}</span>
-                <div class="dgroup-stats">
-                  <span>{{ getDgroupAttendance(group.members) }}</span>
-                  <span class="divider-dot">•</span>
-                  <span>{{ group.members.length }} / {{ group.capacity }} Members</span>
-                </div>
+                <div class="dgroup-stats"><span>{{ getDgroupAttendance(group.members) }}</span><span class="divider-dot">•</span><span>{{ group.members.length }} / {{ group.capacity }} Members</span></div>
               </div>
-              <ChevronDown v-if="expandedDgroups.includes(group.leaderName)" :size="20" />
-              <ChevronRight v-else :size="20" />
+              <ChevronDown v-if="expandedDgroups.includes(group.leaderName)" :size="20" /><ChevronRight v-else :size="20" />
             </div>
-            
             <div v-if="expandedDgroups.includes(group.leaderName)" class="dgroup-member-list">
-              <MemberCard 
-                v-for="member in group.members" 
-                :key="member.id"
-                :member="member"
-                :isPresent="presentMemberIds.has(member.id)"
-                @click="openMemberDetails(member)"
-              />
-              <p v-if="group.members.length === 0" class="no-members-text">
-                No members assigned yet.
-              </p>
+              <MemberCard v-for="member in group.members" :key="member.id" :member="member" :isPresent="presentMemberIds.has(member.id)" @click="openMemberDetails(member)" />
+              <p v-if="group.members.length === 0" class="no-members-text">No members assigned yet.</p>
             </div>
           </div>
         </div>
-
-        <!-- Female Column -->
         <div class="column-block">
           <h3 class="column-title female">Female Dgroups</h3>
           <div v-if="femaleGroups.length === 0" class="empty-col">No Female Groups</div>
-          <div 
-            v-for="group in femaleGroups" 
-            :key="group.leaderName" 
-            class="dgroup-card"
-            :class="{
-              'is-present': group.isLeaderPresent,
-              'is-absent': !group.isLeaderPresent
-            }"
-          >
+          <div v-for="group in femaleGroups" :key="group.leaderName" class="dgroup-card" :class="{ 'is-present': group.isLeaderPresent, 'is-absent': !group.isLeaderPresent }">
             <div class="dgroup-header" @click="toggleDgroup(group.leaderName)">
               <div class="header-info">
                 <h3 class="dgroup-name">{{ group.dgroupName }}</h3>
                 <span class="leader-sub">Lead: {{ group.leaderName }}</span>
                 <span class="dgroup-id">ID: {{ group.dgroupId }}</span>
-                <div class="dgroup-stats">
-                  <span>{{ getDgroupAttendance(group.members) }}</span>
-                  <span class="divider-dot">•</span>
-                  <span>{{ group.members.length }} / {{ group.capacity }} Members</span>
-                </div>
+                <div class="dgroup-stats"><span>{{ getDgroupAttendance(group.members) }}</span><span class="divider-dot">•</span><span>{{ group.members.length }} / {{ group.capacity }} Members</span></div>
               </div>
-              <ChevronDown v-if="expandedDgroups.includes(group.leaderName)" :size="20" />
-              <ChevronRight v-else :size="20" />
+              <ChevronDown v-if="expandedDgroups.includes(group.leaderName)" :size="20" /><ChevronRight v-else :size="20" />
             </div>
-            
             <div v-if="expandedDgroups.includes(group.leaderName)" class="dgroup-member-list">
-              <MemberCard 
-                v-for="member in group.members" 
-                :key="member.id"
-                :member="member"
-                :isPresent="presentMemberIds.has(member.id)"
-                @click="openMemberDetails(member)"
-              />
-              <p v-if="group.members.length === 0" class="no-members-text">
-                No members assigned yet.
-              </p>
+              <MemberCard v-for="member in group.members" :key="member.id" :member="member" :isPresent="presentMemberIds.has(member.id)" @click="openMemberDetails(member)" />
+              <p v-if="group.members.length === 0" class="no-members-text">No members assigned yet.</p>
             </div>
           </div>
         </div>
       </div>
-
-      <!-- Unassigned (Full Width) -->
       <div v-if="unassignedGroups.length > 0" class="unassigned-block">
         <h3 class="column-title">Unassigned Members</h3>
-        <div 
-            v-for="group in unassignedGroups" 
-            :key="group.leaderName" 
-            class="dgroup-card unassigned-card"
-          >
+        <div v-for="group in unassignedGroups" :key="group.leaderName" class="dgroup-card unassigned-card">
             <div class="dgroup-header" @click="toggleDgroup(group.leaderName)">
-              <div class="header-info">
-                <h3 class="dgroup-name">Unassigned Members</h3>
-                <span class="dgroup-stats">
-                  {{ group.members.length }} Members needing a group
-                </span>
-              </div>
-              <ChevronDown v-if="expandedDgroups.includes(group.leaderName)" :size="20" />
-              <ChevronRight v-else :size="20" />
+              <div class="header-info"><h3 class="dgroup-name">Unassigned Members</h3><span class="dgroup-stats">{{ group.members.length }} Members needing a group</span></div>
+              <ChevronDown v-if="expandedDgroups.includes(group.leaderName)" :size="20" /><ChevronRight v-else :size="20" />
             </div>
-            
             <div v-if="expandedDgroups.includes(group.leaderName)" class="dgroup-member-list">
-              <MemberCard 
-                v-for="member in group.members" 
-                :key="member.id"
-                :member="member"
-                :isPresent="presentMemberIds.has(member.id)"
-                @click="openMemberDetails(member)"
-              />
+              <MemberCard v-for="member in group.members" :key="member.id" :member="member" :isPresent="presentMemberIds.has(member.id)" @click="openMemberDetails(member)" />
             </div>
-          </div>
+        </div>
       </div>
-
     </div>
-
   </div>
   
   <Modal v-if="showMemberModal" @close="handleModalClose"> 
-    <MemberDetailsModal 
-      v-if="selectedMember"
-      :member="selectedMember" 
-      @close="handleModalClose" 
-      @saveChanges="handleSaveChanges"
-      @archiveMember="handleArchiveMember"
-      @restoreMember="handleRestoreMember"
-    />
+    <MemberDetailsModal v-if="selectedMember" :member="selectedMember" @close="handleModalClose" @saveChanges="handleSaveChanges" @archiveMember="handleArchiveMember" @restoreMember="handleRestoreMember" />
   </Modal>
 
   <Modal v-if="showAbsenceMonitoringModal" @close="showAbsenceMonitoringModal = false" size="xl">
-    <div class="absence-modal-wrapper">
-      <header class="absence-modal-header">
-        <h3>Consecutive Absences</h3>
-        <p class="absence-subtext">Monitor members with 3, 4 and 5+ consecutive missed gatherings.</p>
-      </header>
-      <div class="absence-modal-body">
-        <AbsenceMonitoring />
-      </div>
-    </div>
+    <div class="absence-modal-wrapper"><header class="absence-modal-header"><h3>Consecutive Absences</h3><p class="absence-subtext">Monitor members with 3, 4 and 5+ consecutive missed gatherings.</p></header><div class="absence-modal-body"><AbsenceMonitoring /></div></div>
+  </Modal>
+
+  <!-- Filter Modal -->
+  <Modal v-if="showFilterModal" @close="showFilterModal = false">
+      <FilterModal 
+        v-model="currentFilters" 
+        @apply="showFilterModal = false" 
+      />
   </Modal>
 </template>
 
 <style scoped>
-.members-container {
-  padding: 20px;
-}
-.members-header {
-  margin-bottom: 20px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-.members-header h1 {
-  font-size: 28px;
-  font-weight: 700;
-  margin: 0;
-}
-.archive-toggle-btn {
-  background-color: #fff;
-  border: 1px solid #546E7A;
-  color: #546E7A;
-  padding: 8px 14px;
-  border-radius: 8px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 14px;
-  font-weight: 600;
-  transition: all 0.2s ease;
-}
-.archive-toggle-btn:hover {
-  background-color: #ECEFF1;
-}
-
-.header-actions {
-  display: flex;
-  gap: 10px;
-  align-items: center;
-}
-
-.absence-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  border-radius: 8px;
-  border: 1px solid rgba(21, 101, 192, 0.08);
-  background: #fff;
-  color: #0D47A1;
-  font-weight: 700;
-  cursor: pointer;
-  transition: box-shadow 0.12s ease, transform 0.12s ease;
-}
+/* Keeping previous styles + adding filter btn style */
+.members-container { padding: 20px; }
+.members-header { margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; }
+.members-header h1 { font-size: 28px; font-weight: 700; margin: 0; }
+.archive-toggle-btn { background-color: #fff; border: 1px solid #546E7A; color: #546E7A; padding: 8px 14px; border-radius: 8px; cursor: pointer; display: flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 600; transition: all 0.2s ease; }
+.archive-toggle-btn:hover { background-color: #ECEFF1; }
+.header-actions { display: flex; gap: 10px; align-items: center; }
+.absence-btn { display: inline-flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 8px; border: 1px solid rgba(21, 101, 192, 0.08); background: #fff; color: #0D47A1; font-weight: 700; cursor: pointer; transition: box-shadow 0.12s ease, transform 0.12s ease; position: relative; }
 .absence-btn svg { color: #D32F2F; }
-.absence-btn:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.06);
-}
+.absence-btn:hover { transform: translateY(-2px); box-shadow: 0 6px 18px rgba(0, 0, 0, 0.06); }
+.absence-notif { position: absolute; top: -6px; right: -6px; background: #D32F2F; color: #fff; font-size: 11px; width: 20px; height: 20px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 800; box-shadow: 0 4px 10px rgba(0,0,0,0.12); }
 
-.absence-btn { position: relative; }
-.absence-notif {
-  position: absolute;
-  top: -6px;
-  right: -6px;
-  background: #D32F2F;
-  color: #fff;
-  font-size: 11px;
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 800;
-  box-shadow: 0 4px 10px rgba(0,0,0,0.12);
-}
+.controls-wrapper { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; gap: 16px; }
+.search-bar { flex-grow: 1; position: relative; }
+.search-icon { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: #90A4AE; }
+.search-bar input { width: 100%; padding: 12px 12px 12px 44px; border-radius: 8px; border: 1px solid #B0BEC5; font-size: 16px; box-sizing: border-box; }
+.filter-btn { background: #fff; border: 1px solid #CFD8DC; padding: 10px 14px; border-radius: 8px; font-weight: 600; color: #546E7A; cursor: pointer; display: flex; align-items: center; gap: 6px; }
+.filter-btn:hover { background: #ECEFF1; }
+.view-toggle { display: flex; background-color: #CFD8DC; border-radius: 8px; padding: 4px; }
+.view-toggle button { background: none; border: none; padding: 6px 12px; border-radius: 6px; font-size: 14px; font-weight: 500; color: #546E7A; cursor: pointer; display: flex; align-items: center; gap: 6px; }
+.view-toggle button.active { background-color: #fff; color: #1976D2; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
 
-.controls-wrapper {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 16px;
-  gap: 16px;
-}
-.search-bar {
-  flex-grow: 1;
-  position: relative;
-}
-.search-icon {
-  position: absolute;
-  left: 14px;
-  top: 50%;
-  transform: translateY(-50%);
-  color: #90A4AE;
-}
-.search-bar input {
-  width: 100%;
-  padding: 12px 12px 12px 44px;
-  border-radius: 8px;
-  border: 1px solid #B0BEC5;
-  font-size: 16px;
-  box-sizing: border-box;
-}
-.view-toggle {
-  display: flex;
-  background-color: #CFD8DC;
-  border-radius: 8px;
-  padding: 4px;
-}
-.view-toggle button {
-  background: none;
-  border: none;
-  padding: 6px 12px;
-  border-radius: 6px;
-  font-size: 14px;
-  font-weight: 500;
-  color: #546E7A;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.view-toggle button.active {
-  background-color: #fff;
-  color: #1976D2;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-}
+/* Tag display for active filters */
+.active-filters { display: flex; gap: 8px; margin-bottom: 12px; }
+.exclude-tag { font-size: 11px; background: #FFEBEE; color: #C62828; border: 1px solid #FFCDD2; padding: 4px 8px; border-radius: 12px; font-weight: 600; }
 
-/* Inline Filters */
-.inline-filters {
-  background: #FFF;
-  border-radius: 12px;
-  padding: 16px;
-  margin-bottom: 24px;
-  border: 1px solid #ECEFF1;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-.filter-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 16px;
-}
-.filter-label {
-  font-weight: 700;
-  font-size: 14px;
-  color: #546E7A;
-  min-width: 60px;
-}
-.filter-row label {
-  font-size: 14px;
-  color: #37474F;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  cursor: pointer;
-}
-.filter-row.ministries {
-  padding-top: 8px;
-  border-top: 1px dashed #ECEFF1;
-}
-
-/* --- Common Grid Layout for Columns --- */
-.member-list-view, .dgroup-view {
-  display: flex;
-  flex-direction: column;
-  gap: 24px;
-}
-.columns-grid {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 20px;
-}
-@media (min-width: 900px) {
-  .columns-grid {
-    grid-template-columns: 1fr 1fr;
-    align-items: start;
-  }
-}
-
-.column-block {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-.column-title {
-  font-size: 16px;
-  text-transform: uppercase;
-  letter-spacing: 1px;
-  padding-bottom: 8px;
-  border-bottom: 2px solid #EEE;
-  margin: 0;
-}
+.member-list-view, .dgroup-view { display: flex; flex-direction: column; gap: 24px; }
+.columns-grid { display: grid; grid-template-columns: 1fr; gap: 20px; }
+@media (min-width: 900px) { .columns-grid { grid-template-columns: 1fr 1fr; align-items: start; } }
+.column-block { display: flex; flex-direction: column; gap: 16px; }
+.column-title { font-size: 16px; text-transform: uppercase; letter-spacing: 1px; padding-bottom: 8px; border-bottom: 2px solid #EEE; margin: 0; }
 .column-title.male { color: #1565C0; border-color: #1565C0; }
 .column-title.female { color: #E91E63; border-color: #E91E63; }
 .column-title.present-header { color: #2E7D32; border-color: #2E7D32; }
 .column-title.absent-header { color: #C62828; border-color: #C62828; }
+.list-content { display: flex; flex-direction: column; gap: 12px; }
+.simple-list { display: flex; flex-direction: column; gap: 12px; }
+.empty-col { text-align: center; color: #B0BEC5; font-style: italic; padding: 20px; background: #FAFAFA; border-radius: 12px; }
 
-.list-content {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-/* Simple list for archive */
-.simple-list {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.empty-col {
-  text-align: center;
-  color: #B0BEC5;
-  font-style: italic;
-  padding: 20px;
-  background: #FAFAFA;
-  border-radius: 12px;
-}
-
-/* Dgroup Specific Styles */
-.dgroup-card {
-  background-color: #fff;
-  border-radius: 12px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
-  border-left: 4px solid #CFD8DC;
-}
-.dgroup-card.is-present {
-  border-left-color: #4CAF50;
-}
-.dgroup-card.is-absent {
-  border-left-color: #F44336;
-}
-.unassigned-card {
-  border-left-color: #FFC107;
-}
-
-.dgroup-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  padding: 16px;
-  cursor: pointer;
-}
-.dgroup-header:hover {
-  background-color: #f9f9f9;
-}
-.dgroup-name {
-  margin: 0 0 4px 0;
-  font-size: 17px;
-  font-weight: 700;
-  color: #37474F;
-}
-.leader-sub {
-  display: block;
-  font-size: 13px;
-  color: #546E7A;
-  margin-bottom: 2px;
-}
-.dgroup-id {
-  display: block;
-  font-size: 11px;
-  color: #78909C;
-  font-family: monospace;
-  margin-bottom: 6px;
-}
-.dgroup-stats {
-  font-size: 12px;
-  color: #78909C;
-  font-weight: 600;
-  display: flex;
-  gap: 6px;
-}
+.dgroup-card { background-color: #fff; border-radius: 12px; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05); border-left: 4px solid #CFD8DC; }
+.dgroup-card.is-present { border-left-color: #4CAF50; }
+.dgroup-card.is-absent { border-left-color: #F44336; }
+.unassigned-card { border-left-color: #FFC107; }
+.dgroup-header { display: flex; justify-content: space-between; align-items: flex-start; padding: 16px; cursor: pointer; }
+.dgroup-header:hover { background-color: #f9f9f9; }
+.dgroup-name { margin: 0 0 4px 0; font-size: 17px; font-weight: 700; color: #37474F; }
+.leader-sub { display: block; font-size: 13px; color: #546E7A; margin-bottom: 2px; }
+.dgroup-id { display: block; font-size: 11px; color: #78909C; font-family: monospace; margin-bottom: 6px; }
+.dgroup-stats { font-size: 12px; color: #78909C; font-weight: 600; display: flex; gap: 6px; }
 .divider-dot { color: #B0BEC5; }
+.dgroup-member-list { display: flex; flex-direction: column; gap: 12px; padding: 0 16px 16px 16px; border-top: 1px solid #ECEFF1; }
+.no-members-text { font-size: 14px; color: #78909C; text-align: center; padding: 12px; }
+.unassigned-block { margin-top: 20px; }
 
-.dgroup-member-list {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding: 0 16px 16px 16px;
-  border-top: 1px solid #ECEFF1;
-}
-.no-members-text {
-  font-size: 14px;
-  color: #78909C;
-  text-align: center;
-  padding: 12px;
-}
-
-.unassigned-block {
-  margin-top: 20px;
-}
-
-/* Modal header/body inside Members view */
 .absence-modal-wrapper { display:flex; flex-direction:column; gap:12px; height:100%; }
 .absence-modal-header { padding: 8px 4px; border-bottom: 1px solid #F1F3F5; }
 .absence-modal-header h3 { margin:0; color:#D32F2F; font-size:18px; }
