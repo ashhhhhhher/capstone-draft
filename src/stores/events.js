@@ -1,6 +1,6 @@
 import { ref } from 'vue'
 import { defineStore } from 'pinia'
-import { db, storage } from '../firebase' // Add storage import
+import { db, storage } from '../firebase'
 import { 
   collection, 
   addDoc, 
@@ -10,9 +10,12 @@ import {
   doc,
   updateDoc,
   deleteDoc,
-  serverTimestamp
+  serverTimestamp,
+  getDocs,
+  where,
+  getDoc
 } from "firebase/firestore";
-import { ref as storageRef, deleteObject } from "firebase/storage"; // Add storage functions
+import { ref as storageRef, deleteObject } from "firebase/storage";
 import { useAuthStore } from './auth'; 
 
 export const useEventsStore = defineStore('events', {
@@ -22,7 +25,6 @@ export const useEventsStore = defineStore('events', {
     isLoading: true
   }),
   actions: {
-    // Helper to get the correct Firestore collection path
     getEventCollection() {
       const authStore = useAuthStore();
       if (!authStore.branchId) {
@@ -61,20 +63,14 @@ export const useEventsStore = defineStore('events', {
       }
     },
 
+    // --- END EVENT & VOLUNTEER REVOCATION LOGIC ---
     async endEvent(eventId) {
       try {
         const authStore = useAuthStore();
-        if (!authStore.branchId) {
-          const err = new Error('Missing branchId in auth store — cannot update event document.');
-          console.error(err);
-          throw err;
-        }
-        if (!eventId) {
-          const err = new Error('No eventId provided to endEvent.');
-          console.error(err);
-          throw err;
-        }
+        if (!authStore.branchId) throw new Error('Missing branchId.');
+        if (!eventId) throw new Error('No eventId provided.');
 
+        // 1. Mark event as ended
         const eventRef = doc(this.getEventCollection(), eventId);
         await updateDoc(eventRef, {
           ended: true,
@@ -82,33 +78,120 @@ export const useEventsStore = defineStore('events', {
           endedBy: authStore.user?.uid || null,
           endedReason: 'manual'
         });
-        console.log("Event ended: ", eventId);
+        
+        // 2. TRIGGER VOLUNTEER REVOCATION CHECK
+        await this.checkAndRevokeInactiveVolunteers(authStore.branchId);
+
+        console.log("Event ended successfully: ", eventId);
         return true;
       } catch (error) {
-        console.error("Error ending event (rethrowing): ", error);
+        console.error("Error ending event: ", error);
         throw error; 
       }
     },
 
+    async checkAndRevokeInactiveVolunteers(branchId) {
+      console.log("Starting Volunteer Revocation Check...");
+      
+      // A. Get last 5 'service' events (descending date)
+      // Note: We need to use the fetched allEvents state to ensure we get the correct sorted list
+      // Filter for ended events or events with dates in the past
+      const today = new Date().toISOString().split('T')[0];
+      
+      const last5Events = this.allEvents
+        .filter(e => e.eventType === 'service' && e.date <= today)
+        .sort((a, b) => new Date(b.date) - new Date(a.date)) // Newest first
+        .slice(0, 5);
+
+      if (last5Events.length < 5) {
+        console.log("Not enough past events to enforce revocation yet.");
+        return;
+      }
+
+      // B. Get all members who are currently tagged as Volunteers
+      const membersRef = collection(db, "branches", branchId, "members");
+      // Note: Firestore doesn't support deep query on object fields easily without index, 
+      // getting all active members is safer then filtering in JS for this batch operation
+      const membersSnap = await getDocs(query(membersRef, where("status", "!=", "archived")));
+      
+      const volunteers = [];
+      membersSnap.forEach(docSnap => {
+        const m = docSnap.data();
+        if (m.finalTags && m.finalTags.isVolunteer) {
+          volunteers.push(m);
+        }
+      });
+
+      console.log(`Checking ${volunteers.length} volunteers for inactivity...`);
+
+      // C. Check each volunteer
+      for (const vol of volunteers) {
+        let missedConsecutive = 0;
+
+        // Iterate through the last 5 events (Newest -> Oldest)
+        for (const ev of last5Events) {
+          // Check attendance doc for this event/member
+          const attendanceRef = doc(db, "branches", branchId, "events", ev.id, "attendance", vol.id);
+          const attSnap = await getDoc(attendanceRef);
+
+          let served = false;
+          if (attSnap.exists()) {
+            const data = attSnap.data();
+            // They served if ministry is defined and NOT 'N/A'
+            if (data.ministry && data.ministry !== 'N/A') {
+              served = true;
+            }
+          }
+
+          if (!served) {
+            missedConsecutive++;
+          } else {
+            // If they served in this event, the streak of inactivity is broken
+            break; 
+          }
+        }
+
+        // D. Revoke if missed 5 consecutive times
+        if (missedConsecutive >= 5) {
+          console.warn(`Revoking volunteer tag for ${vol.firstName} ${vol.lastName} (Missed 5 consecutive)`);
+          
+          const memberRef = doc(db, "branches", branchId, "members", vol.id);
+          
+          // Logic: 
+          // 1. Remove isVolunteer
+          // 2. Clear volunteerMinistry
+          // 3. If they are NOT a Dgroup Leader, set isRegular = true
+          // 4. If they ARE a Dgroup Leader, just leave isRegular = false (DL takes precedence)
+          
+          const updates = {
+            "finalTags.isVolunteer": false,
+            "finalTags.volunteerMinistry": []
+          };
+
+          if (!vol.finalTags.isDgroupLeader) {
+            updates["finalTags.isRegular"] = true;
+          }
+
+          await updateDoc(memberRef, updates);
+        }
+      }
+      console.log("Revocation check complete.");
+    },
+
     // --- NEW: CLEANUP LOGIC ---
     async cleanupOldEventImages() {
-      // Get today's date at midnight
       const today = new Date();
       today.setHours(0, 0, 0, 0);
       const todayStr = today.toISOString().split('T')[0];
 
-      // Filter for past events that still have a photoURL
       const pastEventsWithImages = this.allEvents.filter(e => {
         return e.date < todayStr && e.photoURL && e.photoURL.startsWith('https');
       });
 
       if (pastEventsWithImages.length === 0) return;
 
-      console.log(`Cleaning up images for ${pastEventsWithImages.length} past events...`);
-
       for (const event of pastEventsWithImages) {
         try {
-          // 1. Delete from Storage
           const imageRef = storageRef(storage, event.photoURL);
           try {
             await deleteObject(imageRef)
@@ -117,13 +200,8 @@ export const useEventsStore = defineStore('events', {
               console.error('Failed to delete image:', error)
             }
           }
-
-          
-          // 2. Update Firestore Doc to remove the URL
           const eventRef = doc(this.getEventCollection(), event.id);
           await updateDoc(eventRef, { photoURL: '' });
-          
-          console.log(`Deleted image for past event: ${event.name}`);
         } catch (error) {
           console.warn(`Failed to cleanup image for ${event.name}:`, error);
         }
@@ -160,8 +238,6 @@ export const useEventsStore = defineStore('events', {
         }
         
         this.isLoading = false;
-        
-        // Run cleanup whenever events are fetched/updated
         this.cleanupOldEventImages(); 
 
       }, (error) => {

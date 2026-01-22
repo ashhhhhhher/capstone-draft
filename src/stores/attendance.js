@@ -5,6 +5,7 @@ import {
   collection,
   doc,
   setDoc,
+  updateDoc,
   getDoc,
   collectionGroup,
   onSnapshot
@@ -127,8 +128,9 @@ export const useAttendanceStore = defineStore('attendance', () => {
 
   /**
    * Mark attendance safely (prevents duplicates)
+   * UPDATED: Accepts specific ministry role for this event
    */
-  async function markAttendance(memberId, eventId) {
+  async function markAttendance(memberId, eventId, ministry = 'N/A') {
     if (!memberId || !eventId) {
       return { status: 'error', message: 'Missing member or event ID' }
     }
@@ -152,10 +154,12 @@ export const useAttendanceStore = defineStore('attendance', () => {
         return { status: 'warning', message: 'Already marked present.' }
       }
 
-      // ✅ Create attendance record
+      // ✅ Create attendance record with Dynamic Ministry
+      // ministry defaults to 'N/A' (Regular attendance) if not provided
       await setDoc(attendanceRef, {
         timestamp: new Date(),
-        checkedInBy: authStore.user?.uid || null
+        checkedInBy: authStore.user?.uid || null,
+        ministry: ministry 
       })
 
       return { status: 'success', message: 'Attendance recorded.' }
@@ -166,12 +170,40 @@ export const useAttendanceStore = defineStore('attendance', () => {
     }
   }
 
+  /**
+   * Update an existing attendance record (e.g. to fix a mistake in ministry assignment)
+   */
+  async function updateAttendanceMinistry(memberId, eventId, newMinistry) {
+    if (!memberId || !eventId) return;
+    
+    const authStore = useAuthStore()
+    try {
+      const attendanceRef = doc(
+        db,
+        'branches',
+        authStore.branchId,
+        'events',
+        eventId,
+        'attendance',
+        memberId
+      )
+      
+      await updateDoc(attendanceRef, {
+        ministry: newMinistry
+      })
+      
+    } catch (error) {
+      console.error('Error updating attendance ministry:', error)
+    }
+  }
+
   return {
     currentEventAttendees,
     allAttendance,
     isLoading,
     fetchAttendanceForEvent,
     fetchAllAttendance,
-    markAttendance
+    markAttendance,
+    updateAttendanceMinistry
   }
 })
