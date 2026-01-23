@@ -1,3 +1,4 @@
+
 import { ref, computed } from 'vue'
 import { defineStore } from 'pinia'
 import { db } from '../firebase'
@@ -8,7 +9,8 @@ import {
   updateDoc, 
   deleteDoc, 
   onSnapshot,
-  query
+  query,
+  getDocs
 } from "firebase/firestore";
 import { useAuthStore } from './auth';
 
@@ -68,7 +70,7 @@ export const useMembersStore = defineStore('members', () => {
     const authStore = useAuthStore();
     memberData.authUid = null; 
     memberData.status = 'active'; 
-    memberData.monitoringState = { msgSentDate: null, leaderNotifiedDate: null }; // Init state
+    memberData.monitoringState = { msgSentDate: null, leaderNotifiedDate: null }; 
 
     try {
       const memberRef = doc(getMemberCollection(), memberData.id);
@@ -88,27 +90,75 @@ export const useMembersStore = defineStore('members', () => {
     }
   }
 
+  // --- UPDATED: Archive with Timestamp ---
   async function archiveMember(memberId) {
     try {
       const memberRef = doc(getMemberCollection(), memberId);
-      await updateDoc(memberRef, { status: 'archived' });
+      await updateDoc(memberRef, { 
+        status: 'archived',
+        archivedAt: new Date().toISOString() // Save current time
+      });
     } catch (error) {
       console.error("Error archiving member: ", error);
     }
   }
 
+  // --- UPDATED: Restore removes Timestamp ---
   async function restoreMember(memberId) {
     try {
       const memberRef = doc(getMemberCollection(), memberId);
-      await updateDoc(memberRef, { status: 'active' });
+      await updateDoc(memberRef, { 
+        status: 'active',
+        archivedAt: null 
+      });
     } catch (error) {
       console.error("Error restoring member: ", error);
     }
   }
 
-  // ---  Log Monitoring Actions ---
+  // --- NEW: Auto-Restore on Attendance (for Scan) ---
+  async function checkAndAutoRestore(memberId) {
+    const member = members.value.find(m => m.id === memberId);
+    // If found and currently archived, restore them immediately
+    if (member && member.status === 'archived') {
+      console.log(`Auto-restoring member ${memberId} due to attendance activity.`);
+      await restoreMember(memberId);
+      return true; // Indicates restoration happened
+    }
+    return false;
+  }
+
+  // --- NEW: Policy Enforcement (Auto-Delete > 1 Year) ---
+  async function purgeOldArchives() {
+    const oneYearAgo = new Date();
+    oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+    
+    // We filter from the local 'members' state first to minimize reads, 
+    // assuming fetchMembers() is already running.
+    const toDelete = members.value.filter(m => {
+      if (m.status !== 'archived' || !m.archivedAt) return false;
+      const archiveDate = new Date(m.archivedAt);
+      return archiveDate < oneYearAgo;
+    });
+
+    if (toDelete.length === 0) return;
+
+    console.log(`Found ${toDelete.length} members archived for > 1 year. Purging...`);
+
+    // Execute deletions
+    for (const m of toDelete) {
+      try {
+        const memberRef = doc(getMemberCollection(), m.id);
+        await deleteDoc(memberRef);
+        console.log(`Permanently deleted member: ${m.firstName} ${m.lastName} (ID: ${m.id})`);
+      } catch (error) {
+        console.error(`Failed to delete member ${m.id}:`, error);
+      }
+    }
+  }
+
+  // --- Log Monitoring Actions ---
   async function logMonitoringAction(memberId, actionType) {
-    // actionType = 'message' or 'notifyLeader'
     try {
       const memberRef = doc(getMemberCollection(), memberId);
       const updateData = {};
@@ -128,7 +178,9 @@ export const useMembersStore = defineStore('members', () => {
   return { 
     members, activeMembers, archivedMembers, isLoading,
     leaderNames, leaders, seekers,
-    fetchMembers, registerNewMember, updateMember, archiveMember, restoreMember,
+    fetchMembers, registerNewMember, updateMember, 
+    archiveMember, restoreMember, purgeOldArchives,
+    checkAndAutoRestore, // Export the new function
     logMonitoringAction 
   }
 })

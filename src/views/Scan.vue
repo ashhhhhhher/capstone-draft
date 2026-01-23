@@ -1,9 +1,9 @@
+
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { Html5QrcodeScanner } from 'html5-qrcode'
 import { storeToRefs } from 'pinia'
 import { useMembersStore } from '../stores/members'
-import { useAuthStore } from '../stores/auth'
 import { useEventsStore } from '../stores/events'
 import { useAttendanceStore } from '../stores/attendance'
 import Modal from '../components/dgmComponents/Modal.vue'
@@ -13,7 +13,6 @@ const membersStore = useMembersStore()
 const { members } = storeToRefs(membersStore)
 const { currentEvent } = storeToRefs(useEventsStore())
 const attendanceStore = useAttendanceStore()
-const authStore = useAuthStore()
 
 // --- Refs ---
 const manualIdInput = ref('')
@@ -30,6 +29,7 @@ const standardMinistries = ['Host Team', 'Live Prod', 'Exalt', 'Welcome', 'DGM']
 
 // ---Computed check for event type ---
 const isAttendanceEvent = computed(() => {
+  // Allow attendance for Service (WKND) and B1G events
   return currentEvent.value && (currentEvent.value.eventType === 'service' || currentEvent.value.eventType === 'b1g_event')
 })
 
@@ -37,12 +37,10 @@ const isAttendanceEvent = computed(() => {
 async function processMemberId(memberId) {
   const trimmedId = memberId.trim()
   
-  // 1. Check if an event is active
   if (!currentEvent.value) {
     scanResult.value = { status: 'error', message: 'No active event.' }
     return
   }
-  // 2. Check if this event type records attendance
   if (!isAttendanceEvent.value) {
     scanResult.value = { status: 'error', message: `Attendance is not recorded for this event type (${currentEvent.value.name}).` }
     return
@@ -55,14 +53,33 @@ async function processMemberId(memberId) {
     return
   }
 
-  // If this is a B1G event, only members whose ageCategory is 'B1G' may attend
-  if (currentEvent.value && currentEvent.value.eventType === 'b1g_event') {
-    const ageCat = member.finalTags?.ageCategory
-    if (ageCat !== 'B1G') {
-      const message = ageCat === 'Elevate' ? 'Member is not under B1G.' : 'Member is not eligible for B1G events.'
-      scanResult.value = { status: 'error', message }
-      return
+  // --- RESTRICTION CHECK: Elevate members cannot attend B1G events ---
+  if (currentEvent.value.eventType === 'b1g_event' && member.finalTags?.ageCategory === 'Elevate') {
+    scanResult.value = { 
+      status: 'error', 
+      message: `Restricted: Elevate members (${member.firstName}) cannot attend B1G events.` 
     }
+    
+    // Clear message after delay
+    setTimeout(() => {
+        if (scanResult.value.status === 'error') {
+            scanResult.value = { status: null, message: '' }
+        }
+    }, 4000)
+    return
+  }
+
+  // --- AUTO-RESTORE CHECK ---
+  // If member is currently archived, restore them immediately
+  if (member.status === 'archived') {
+      try {
+          await membersStore.checkAndAutoRestore(member.id);
+          // We don't return here; we continue to mark attendance
+          // But we should notify the user that restoration happened
+          // scanResult.value will be updated at the end, maybe we append message there
+      } catch (e) {
+          console.error("Auto-restore failed", e);
+      }
   }
 
   // --- DYNAMIC VOLUNTEER CHECK ---
@@ -84,15 +101,17 @@ async function processMemberId(memberId) {
 async function finalizeAttendance(member, ministryRole) {
   isProcessing.value = true
   const currentEventId = currentEvent.value.id
-  // prefer name from auth store (current logged-in user's profile), then member record
-  const name = authStore.userProfile?.displayName || member.displayName || `${member.firstName || ''} ${member.lastName || ''}`.trim() || 'Unknown'
-  const result = await attendanceStore.markAttendance(member.id, currentEventId, ministryRole, name)
+  
+  const result = await attendanceStore.markAttendance(member.id, currentEventId, ministryRole)
+
+  let successMsg = `Welcome, ${member.firstName}! Attendance recorded.`;
+  if (ministryRole !== 'N/A') successMsg += ` (Serving: ${ministryRole})`;
+  if (member.status === 'archived') successMsg += ` [Account Restored]`;
 
   if (result.status === 'success') {
-    const ministryMsg = ministryRole !== 'N/A' ? ` (Serving: ${ministryRole})` : ''
     scanResult.value = { 
       status: 'success', 
-      message: `Welcome, ${member.firstName}! Attendance recorded.${ministryMsg}` 
+      message: successMsg
     }
   } else if (result.status === 'warning') {
     scanResult.value = { 

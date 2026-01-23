@@ -1,5 +1,6 @@
+
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { Search, List, LayoutGrid, Archive, ChevronDown, ChevronRight, Filter } from 'lucide-vue-next'
 import { storeToRefs } from 'pinia'
 import { useMembersStore } from '../stores/members'
@@ -17,18 +18,24 @@ const { activeMembers, archivedMembers, leaders } = storeToRefs(membersStore)
 const attendanceStore = useAttendanceStore()
 const { currentEventAttendees } = storeToRefs(attendanceStore)
 
+// --- Lifecycle Hook: Enforce Archive Policy ---
+onMounted(() => {
+  // Check for old archives whenever the admin visits the members page
+  membersStore.purgeOldArchives();
+})
+
 // --- Page State ---
 const viewMode = ref('list')
 const showArchived = ref(false) 
 const showMemberModal = ref(false)
-const showFilterModal = ref(false) // State for filter modal
+const showFilterModal = ref(false) 
 const selectedMember = ref(null)
 const expandedDgroups = ref([])
 const searchQuery = ref('') 
 const showAbsenceMonitoringModal = ref(false)
 
 // --- Filters State ---
-// Updated structure to support exclusions for 'type'
+// Removed attendance from filters
 const currentFilters = ref({
   age: [],
   type: { included: [], excluded: [] },
@@ -62,7 +69,6 @@ const filteredMembers = computed(() => {
   }
 
   // 3. Type Filter (Inclusion)
-  // If 'included' array is not empty, member MUST match one of the included types
   if (f.type.included.length > 0) {
     list = list.filter(m => {
       if (f.type.included.includes('First Timer') && m.finalTags.isFirstTimer) return true;
@@ -75,7 +81,6 @@ const filteredMembers = computed(() => {
   }
 
   // 4. Type Filter (Exclusion)
-  // If 'excluded' array is not empty, member MUST NOT match any of the excluded types
   if (f.type.excluded.length > 0) {
     list = list.filter(m => {
       if (f.type.excluded.includes('First Timer') && m.finalTags.isFirstTimer) return false;
@@ -101,7 +106,7 @@ const filteredMembers = computed(() => {
   return list
 })
 
-// ... (Rest of splitting logic presentList/absentList/dgroups remains same) ...
+// Split filtered list into Present and Absent for the columns (Only used for Active View)
 const presentList = computed(() => filteredMembers.value.filter(m => presentMemberIds.value.has(m.id)))
 const absentList = computed(() => filteredMembers.value.filter(m => !presentMemberIds.value.has(m.id)))
 
@@ -123,9 +128,6 @@ const sortedDgroups = computed(() => {
   })
   groups['Unassigned'] = { leaderName: 'Unassigned', dgroupName: 'No Dgroup', dgroupId: null, leaderGender: 'Mixed', capacity: 0, members: [], isLeaderPresent: false }
 
-  // Apply search filtering to Dgroup view members too if needed, but usually Dgroup view shows structural
-  // If we want filtering to apply to Dgroup view, we iterate filteredMembers
-  // But Dgroup view usually shows structure. Let's use filteredMembers so filters apply.
   filteredMembers.value.forEach(member => {
     const leaderName = member.dgroupLeader
     if (leaderName && groups.hasOwnProperty(leaderName)) {
@@ -158,8 +160,7 @@ function getDgroupAttendance(leaderMembers) {
 }
 function openAbsenceMonitoring() { showAbsenceMonitoringModal.value = true; }
 
-// --- Absence count (logic kept same) ---
-// (Copy previous absence count logic or import util if extracted)
+// --- Absence count ---
 const { allEvents } = storeToRefs(useEventsStore())
 const { allAttendance } = storeToRefs(attendanceStore)
 const todayISO = () => new Date().toISOString().split('T')[0]
@@ -179,7 +180,6 @@ const absenceCount = computed(() => { const past = getPastServices(); if (!past 
           <span>{{ showArchived ? 'View Active' : 'View Archived' }}</span>
         </button>
         <button class="absence-btn" @click="openAbsenceMonitoring" title="Open Absence Monitoring">
-          <!-- Icon SVG kept same -->
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 2v6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M5 10h14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M7 14h10" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M9 18h6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
           <span>Absence Monitoring</span>
           <span v-if="absenceCount > 0" class="absence-notif">{{ absenceCount }}</span>
@@ -193,7 +193,6 @@ const absenceCount = computed(() => { const past = getPastServices(); if (!past 
         <input type="text" placeholder="Search by name or email..." v-model="searchQuery" autocomplete="off">
       </div>
       
-      <!-- Filter Button -->
       <button class="filter-btn" @click="showFilterModal = true">
          <Filter :size="16" /> Filters
       </button>
@@ -204,7 +203,6 @@ const absenceCount = computed(() => { const past = getPastServices(); if (!past 
       </div>
     </div>
     
-    <!-- Filter Tags Display (Optional: Show what is active) -->
     <div class="active-filters" v-if="currentFilters.type.excluded.length > 0">
         <span class="exclude-tag" v-for="ex in currentFilters.type.excluded" :key="ex">
             Exclude: {{ ex }}
@@ -300,7 +298,6 @@ const absenceCount = computed(() => { const past = getPastServices(); if (!past 
     <div class="absence-modal-wrapper"><header class="absence-modal-header"><h3>Consecutive Absences</h3><p class="absence-subtext">Monitor members with 3, 4 and 5+ consecutive missed gatherings.</p></header><div class="absence-modal-body"><AbsenceMonitoring /></div></div>
   </Modal>
 
-  <!-- Filter Modal -->
   <Modal v-if="showFilterModal" @close="showFilterModal = false">
       <FilterModal 
         v-model="currentFilters" 
