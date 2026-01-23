@@ -2,7 +2,7 @@
 import { ref, computed, onMounted, reactive } from 'vue'
 import { useAuthStore } from '../stores/auth'
 import { useMembersStore } from '../stores/members'
-import { useAttendanceStore } from '../stores/attendance' // Added
+import { useAttendanceStore } from '../stores/attendance'
 import { 
   User, Users, ChevronRight, Plus, X, AlertCircle, 
   ArrowLeft, UserMinus, HelpCircle, Pencil, ClipboardCheck 
@@ -10,14 +10,14 @@ import {
 
 const authStore = useAuthStore()
 const membersStore = useMembersStore()
-const attendanceStore = useAttendanceStore() // Added
+const attendanceStore = useAttendanceStore()
 
 const activeTab = ref('upline') 
 const showCreateModal = ref(false)
 const showPersonModal = ref(false)
 const showJoinByIdModal = ref(false)
 const showEditGroupModal = ref(false)
-const showAttendanceModal = ref(false) // Added
+const showAttendanceModal = ref(false)
 
 // Join by ID logic
 const dgroupIdInput = ref('')
@@ -28,7 +28,10 @@ const attendanceForm = reactive({
   date: new Date().toISOString().split('T')[0],
   meetingName: '',
   venue: '',
-  attendees: {} // MemberID: { name, isPresent }
+  conversations: 0,
+  evangelized: 0,
+  guests: 0,
+  attendees: {} 
 })
 
 // Edit Group Logic (Leader)
@@ -38,10 +41,8 @@ const editGroupForm = reactive({
   dgroupId: ''
 })
 
-// Drill-down state 
 const selectedGroup = ref(null) 
 const currentGroupMembers = ref([])
-
 const selectedPerson = ref(null) 
 const mockGroups = ref([])
 
@@ -81,7 +82,7 @@ const myDownlineGroups = computed(() => {
     
     groups.push({
       id: myProfile.value.dgroupId || 'g-default',
-      dgroupId: myProfile.value.dgroupId, // Added for attendance tracking
+      dgroupId: myProfile.value.dgroupId,
       name: myProfile.value.dgroupName || `${myProfile.value?.firstName}'s Dgroup`,
       members: members,
       lifeStage: myProfile.value?.finalTags?.ageCategory || 'Mixed',
@@ -113,31 +114,50 @@ function removeMember(member) {
   }
 }
 
-// --- Attendance Actions ---
-function openAttendanceModal() {
-  // Map current group members to the checklist
+// --- FIXED ATTENDANCE ACTIONS ---
+
+async function openAttendanceModal() {
+  const today = new Date().toISOString().split('T')[0];
+  
+  // Fetch service scans from database
+  let serviceScans = [];
+  try {
+    serviceScans = await attendanceStore.getAttendanceByDate(today);
+  } catch (e) {
+    console.error("Failed to fetch service scans:", e);
+  }
+
   const checklist = {}
+  
   currentGroupMembers.value.forEach(m => {
+    // Cross-reference with today's service scans
+    const hasScanned = serviceScans.some(scan => scan.memberId === m.id);
+
+    let autoTag = m.finalTags?.isDgroupLeader ? 'DL' : 'DM';
+
     checklist[m.id] = {
       name: `${m.firstName} ${m.lastName}`,
-      isPresent: true 
+      isPresent: hasScanned, // Automatically check if they scanned
+      scanned: hasScanned,   // Used for the UI badge
+      tag: autoTag 
     }
   })
+  
   attendanceForm.attendees = checklist
-  attendanceForm.meetingName = ''
-  attendanceForm.venue = ''
   showAttendanceModal.value = true
 }
 
 async function submitAttendance() {
-  if (!attendanceForm.meetingName) return alert("Please enter the meeting topic.")
+  // If you don't have a 'Meeting Name' input in your HTML, remove this check:
+  // if (!attendanceForm.meetingName) return alert("Please enter the meeting topic.")
   
   const payload = {
-    dgroupId: selectedGroup.value.dgroupId,
+    dgroupId: selectedGroup.value.dgroupId || selectedGroup.value.id,
     meetingDate: attendanceForm.date,
-    meetingName: attendanceForm.meetingName,
-    venue: attendanceForm.venue,
     attendees: attendanceForm.attendees,
+    conversations: attendanceForm.conversations || 0,
+    evangelized: attendanceForm.evangelized || 0,
+    guests: attendanceForm.guests || 0,
     locked: false 
   }
 
@@ -146,15 +166,21 @@ async function submitAttendance() {
     if (res.status === 'success') {
       alert("Attendance logged successfully!")
       showAttendanceModal.value = false
+      // Reset stats
+      attendanceForm.conversations = 0
+      attendanceForm.evangelized = 0
+      attendanceForm.guests = 0
     } else {
       alert(res.message)
     }
   } catch (e) {
+    console.error("Save Error:", e)
     alert("Error saving attendance.")
   }
 }
 
-// --- Seeker Actions ---
+// --- Seeker & Join Actions ---
+
 async function handleSeekerYes() {
   if (!myProfile.value) return
   const updates = {
@@ -166,53 +192,32 @@ async function handleSeekerYes() {
   }
   try {
     await authStore.updateExtendedProfile(updates)
-    alert("You have been marked as a Seeker. A leader will reach out to you soon!")
+    alert("You have been marked as a Seeker!")
   } catch (e) {
     console.error(e)
-    alert("Failed to update status.")
   }
-}
-
-function handleSeekerNo() {
-  alert("No problem! Enjoy the services and events.")
 }
 
 async function joinDgroupById() {
   joinStatus.value = { type: '', msg: '' }
   const idToFind = dgroupIdInput.value.trim();
-  
-  if (!idToFind) {
-    joinStatus.value = { type: 'error', msg: 'Please enter a Dgroup ID' }
-    return;
-  }
+  if (!idToFind) return;
 
   const leader = membersStore.leaders.find(l => l.dgroupId === idToFind);
-
   if (!leader) {
     joinStatus.value = { type: 'error', msg: 'Dgroup ID not found.' }
     return;
   }
 
   const leaderName = `${leader.firstName} ${leader.lastName}`;
-  const updates = {
-    dgroupLeader: leaderName,
-    finalTags: {
-      ...myProfile.value.finalTags,
-      isSeeker: false,
-      isFirstTimer: false,
-      isRegular: true
-    }
-  }
-
   try {
-    await authStore.updateExtendedProfile(updates)
-    joinStatus.value = { type: 'success', msg: `Successfully joined ${leaderName}'s group!` }
-    setTimeout(() => {
-        showJoinByIdModal.value = false;
-        dgroupIdInput.value = '';
-    }, 1500);
+    await authStore.updateExtendedProfile({
+      dgroupLeader: leaderName,
+      finalTags: { ...myProfile.value.finalTags, isSeeker: false, isRegular: true }
+    })
+    joinStatus.value = { type: 'success', msg: `Joined ${leaderName}'s group!` }
+    setTimeout(() => { showJoinByIdModal.value = false }, 1500);
   } catch (e) {
-    console.error(e)
     joinStatus.value = { type: 'error', msg: 'Failed to join group.' }
   }
 }
@@ -226,8 +231,6 @@ function openEditGroupModal() {
 }
 
 async function saveGroupDetails() {
-  if (!editGroupForm.dgroupName) return alert("Group name is required")
-  
   try {
     await authStore.updateExtendedProfile({
       dgroupName: editGroupForm.dgroupName,
@@ -236,7 +239,6 @@ async function saveGroupDetails() {
     showEditGroupModal.value = false
     alert("Group details updated!")
   } catch (e) {
-    console.error(e)
     alert("Failed to save changes.")
   }
 }
@@ -367,15 +369,9 @@ async function saveGroupDetails() {
                 <span class="name">{{ m.firstName }} {{ m.lastName }}</span>
                 <span class="status-sub">{{ m.status }}</span>
               </div>
-              
               <button class="icon-btn remove" @click.stop="removeMember(m)" title="Remove Member">
                 <UserMinus :size="18" />
               </button>
-            </div>
-
-            <div v-if="currentGroupMembers.length === 0" class="empty-members">
-              <AlertCircle :size="32" color="#B0BEC5" />
-              <p>No members in this group yet.</p>
             </div>
           </div>
         </div>
@@ -383,40 +379,49 @@ async function saveGroupDetails() {
     </div>
     
     <div v-if="showAttendanceModal" class="modal-overlay">
-      <div class="modal create-modal" style="max-width: 420px;">
-        <h3>Weekly Check-in</h3>
-        <p class="modal-desc">Record attendance for your group meeting.</p>
+      <div class="modal create-modal attendance-scroll-modal">
+        <h3>Weekly Dgroup Report</h3>
+        <p class="modal-desc">Service scans from today are automatically checked.</p>
 
-        <div class="form-group">
-          <label>Meeting Topic / Lesson</label>
-          <input v-model="attendanceForm.meetingName" placeholder="e.g. Prayer & Fasting Part 1" />
+        <label class="section-label">Members & Status</label>
+        <div class="attendance-checklist-updated">
+          <div v-for="(data, id) in attendanceForm.attendees" :key="id" class="attendance-item">
+            <input type="checkbox" v-model="data.isPresent" />
+            
+            <div class="member-info-stack" style="flex: 1; margin-left: 8px;">
+              <span class="member-name" :style="{ fontWeight: data.scanned ? '800' : '500' }">{{ data.name }}</span>
+              <div v-if="data.scanned" style="color: #2E7D32; font-size: 10px; display: flex; align-items: center; gap: 2px;">
+                <ClipboardCheck :size="10" /> VERIFIED SCAN
+              </div>
+            </div>
+            
+            <select v-model="data.tag" class="status-select" :disabled="!data.isPresent">
+              <option value="DL">DL</option>
+              <option value="DM">DM</option>
+              <option value="NW">NW</option>
+              <option value="NEW">NEW</option>
+            </select>
+          </div>
         </div>
 
-        <div class="form-row">
-          <div class="form-group half">
-            <label>Date</label>
-            <input type="date" v-model="attendanceForm.date" />
+        <div class="group-stats">
+          <div class="stat-input">
+            <label>Conv. (C)</label>
+            <input type="number" v-model="attendanceForm.conversations" min="0" />
           </div>
-          <div class="form-group half">
-            <label>Venue</label>
-            <input v-model="attendanceForm.venue" placeholder="Zoom/Cafe" />
+          <div class="stat-input">
+            <label>Evang. (E)</label>
+            <input type="number" v-model="attendanceForm.evangelized" min="0" />
           </div>
-        </div>
-
-        <label style="font-size: 11px; font-weight: 700; color: #90A4AE; text-transform: uppercase; margin-bottom: 8px; display: block;">
-          Member Attendance
-        </label>
-        <div class="attendance-checklist" style="background: #F5F7FA; padding: 10px; border-radius: 12px; max-height: 200px; overflow-y: auto; border: 1px solid #ECEFF1;">
-          <div v-for="(data, id) in attendanceForm.attendees" :key="id" 
-               style="display: flex; align-items: center; padding: 10px 0; border-bottom: 1px solid #eee;">
-            <input type="checkbox" v-model="data.isPresent" :id="'att-'+id" style="width: 20px; height: 20px; margin-right: 12px; cursor: pointer;" />
-            <label :for="'att-'+id" style="font-size: 14px; color: #37474F; cursor: pointer; font-weight: 500;">{{ data.name }}</label>
+          <div class="stat-input">
+            <label>Guests (G)</label>
+            <input type="number" v-model="attendanceForm.guests" min="0" />
           </div>
         </div>
 
         <div class="actions">
           <button @click="showAttendanceModal = false" class="cancel">Cancel</button>
-          <button @click="submitAttendance" class="confirm" style="background: #2E7D32;">Submit to DGM</button>
+          <button @click="submitAttendance" class="confirm">Submit Report</button>
         </div>
       </div>
     </div>
@@ -425,16 +430,11 @@ async function saveGroupDetails() {
       <div class="modal create-modal">
         <h3>Join by Dgroup ID</h3>
         <p class="modal-desc">Ask your leader for their Dgroup ID code.</p>
-        
         <div class="form-group">
           <label>Dgroup ID</label>
           <input v-model="dgroupIdInput" placeholder="e.g. DG-26-1234" />
         </div>
-        
-        <div v-if="joinStatus.msg" class="status-msg" :class="joinStatus.type">
-          {{ joinStatus.msg }}
-        </div>
-
+        <div v-if="joinStatus.msg" class="status-msg" :class="joinStatus.type">{{ joinStatus.msg }}</div>
         <div class="actions">
           <button @click="showJoinByIdModal = false" class="cancel">Cancel</button>
           <button @click="joinDgroupById" class="confirm">Join Group</button>
@@ -445,22 +445,14 @@ async function saveGroupDetails() {
     <div v-if="showEditGroupModal" class="modal-overlay">
       <div class="modal create-modal">
         <h3>Edit Group Details</h3>
-        
         <div class="form-group">
           <label>Group Name</label>
           <input v-model="editGroupForm.dgroupName" />
         </div>
-
         <div class="form-group">
           <label>Capacity</label>
-          <input type="number" v-model="editGroupForm.capacity" min="1" />
+          <input type="number" v-model="editGroupForm.capacity" />
         </div>
-        
-        <div class="form-group">
-          <label>Dgroup ID (Read Only)</label>
-          <input :value="editGroupForm.dgroupId" disabled class="disabled-input" />
-        </div>
-
         <div class="actions">
           <button @click="showEditGroupModal = false" class="cancel">Cancel</button>
           <button @click="saveGroupDetails" class="confirm">Save Changes</button>
@@ -471,26 +463,14 @@ async function saveGroupDetails() {
     <div v-if="showPersonModal && selectedPerson" class="modal-overlay person-overlay" @click.self="showPersonModal = false">
       <div class="modal profile-modal">
         <button class="close-icon-btn" @click="showPersonModal = false"><X :size="24" /></button>
-        
         <div class="profile-header">
           <div class="profile-avatar-lg">{{ selectedPerson.firstName.charAt(0) }}</div>
           <h3>{{ selectedPerson.firstName }} {{ selectedPerson.lastName }}</h3>
           <span class="role-badge">{{ selectedPerson.finalTags?.isDgroupLeader ? 'Leader' : 'Member' }}</span>
         </div>
-
         <div class="profile-details">
-          <div class="detail-row">
-            <span class="label">Life Stage</span>
-            <span class="value">{{ selectedPerson.finalTags?.ageCategory || 'N/A' }}</span>
-          </div>
-          <div class="detail-row">
-            <span class="label">Birthday</span>
-            <span class="value">{{ selectedPerson.birthday || 'N/A' }}</span>
-          </div>
-          <div class="detail-row">
-            <span class="label">Facebook</span>
-            <span class="value link-color">{{ selectedPerson.fbAccount || 'Not Linked' }}</span>
-          </div>
+          <div class="detail-row"><span class="label">Life Stage</span><span class="value">{{ selectedPerson.finalTags?.ageCategory || 'N/A' }}</span></div>
+          <div class="detail-row"><span class="label">Facebook</span><span class="value link-color">{{ selectedPerson.fbAccount || 'Not Linked' }}</span></div>
         </div>
       </div>
     </div>
@@ -591,4 +571,55 @@ async function saveGroupDetails() {
 .status-msg.error { background: #FFEBEE; color: #D32F2F; }
 .status-msg.success { background: #E8F5E9; color: #2E7D32; }
 .disabled-input { background: #e0e0e0; color: #757575; border-color: #bdbdbd; cursor: not-allowed; }
+
+/* Existing Attendance Edits */
+.attendance-item { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid #ECEFF1; }
+.attendance-item .member-name { flex: 1; font-weight: 600; color: #37474F; font-size: 14px; }
+.status-select { padding: 4px 8px; border-radius: 6px; border: 1px solid #CFD8DC; font-size: 12px; font-weight: 700; color: #1976D2; background: white; }
+.status-select:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.group-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 20px; background: #F5F7FA; padding: 12px; border-radius: 12px; border: 1px solid #ECEFF1; }
+.stat-input { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.stat-input label { font-size: 10px; font-weight: 800; color: #78909C; text-transform: uppercase; text-align: center; }
+.stat-input input { width: 100%; text-align: center; padding: 8px; border: 1px solid #CFD8DC; border-radius: 8px; font-size: 15px; font-weight: 700; }
+
+/* NEW REFINED ATTENDANCE CSS */
+.attendance-scroll-modal { 
+  max-height: 90vh; 
+  display: flex; 
+  flex-direction: column; 
+  overflow: hidden; 
+}
+
+.attendance-checklist-updated { 
+  flex: 1; 
+  overflow-y: auto; 
+  margin: 10px 0; 
+  padding-right: 4px; 
+}
+
+.section-label { 
+  display: block; 
+  font-size: 11px; 
+  font-weight: 800; 
+  color: #90A4AE; 
+  text-transform: uppercase; 
+  margin: 15px 0 5px; 
+  border-bottom: 1px solid #ECEFF1; 
+  padding-bottom: 4px; 
+}
+
+.member-info-stack { 
+  display: flex; 
+  flex-direction: column; 
+}
+
+.attendance-checklist-updated::-webkit-scrollbar { 
+  width: 4px; 
+}
+
+.attendance-checklist-updated::-webkit-scrollbar-thumb { 
+  background: #CFD8DC; 
+  border-radius: 10px; 
+}
 </style>
