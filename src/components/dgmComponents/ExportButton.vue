@@ -25,10 +25,15 @@ const props = defineProps({
     type: Object,
     required: false
   }
+  ,
+  eventsList: {
+    type: Array,
+    required: false
+  }
 })
 
 // expose prop values in template more ergonomically
-const { exportType, pageExportData, singleEvent } = props
+const { exportType, pageExportData, singleEvent, eventsList } = props
 
 // --- Store Connections ---
 const membersStore = useMembersStore()
@@ -341,7 +346,12 @@ function exportMembersPDF() {
 //  3. EVENTS EXPORT LOGIC
 function getEventsData(specificEvent = null) {
   // if a specific event is passed, export only that event
-  const services = specificEvent ? [specificEvent] : ((allEvents.value || []).filter(e => e.eventType === 'service').sort((a, b) => new Date(b.date) - new Date(a.date)));
+  // if `eventsList` prop is provided (custom list from parent), use that list instead
+  let services = []
+  if (specificEvent) services = [specificEvent]
+  else if (props && props.eventsList && Array.isArray(props.eventsList) && props.eventsList.length) services = props.eventsList
+  else if (eventsList && Array.isArray(eventsList) && eventsList.length) services = eventsList
+  else services = (allEvents.value || []).filter(e => e.eventType === 'service').sort((a, b) => new Date(b.date) - new Date(a.date))
   if (!services || services.length === 0) return [];
 
   return services.map(event => {

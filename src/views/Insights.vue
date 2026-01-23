@@ -11,6 +11,7 @@ import DgroupMatchingModal from '../components/dgmComponents/DgroupMatchingModal
 import AttendanceOverviewModal from '../components/dgmComponents/AttendanceOverviewModal.vue'
 import ExportButton from '../components/dgmComponents/ExportButton.vue'
 import DgroupWeeklyLogs from '../components/dgmComponents/DgroupWeeklyLogs.vue'
+import B1GInsights from '../components/dgmComponents/B1GInsights.vue'
 
 // --- Store Setup ---
 const membersStore = useMembersStore()
@@ -338,6 +339,9 @@ const historicalAttendanceData = computed(() => {
             <button class="close-btn" @click="showFullVolunteerList = false">Close</button>
         </div>
     </Modal>
+
+    <B1GInsights />
+    
   </div>
 </template>
 
