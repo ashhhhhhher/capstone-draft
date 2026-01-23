@@ -3,7 +3,7 @@ import { defineStore } from 'pinia'
 import { db, storage } from '../firebase'
 import { 
   collection, 
-  addDoc, 
+  setDoc, 
   onSnapshot, 
   query, 
   orderBy,
@@ -33,13 +33,43 @@ export const useEventsStore = defineStore('events', {
       }
       return collection(db, "branches", authStore.branchId, "events");
     },
-    
+
     async createEvent(eventData) {
       try {
-        await addDoc(this.getEventCollection(), eventData);
-        console.log("Event created");
+        const authStore = useAuthStore()
+        if (!authStore.branchId) throw new Error('Missing branchId')
+
+        // 1. Decide prefix
+        let prefix = 'EVENT'
+
+        if (eventData.eventType === 'service') {
+          prefix = 'WKND'
+        } else if (eventData.eventType === 'b1g_event') {
+          prefix = 'B1G'
+        } else if (eventData.eventType === 'ccf_event') {
+          prefix = 'CCFE'
+        }
+
+       // Remove dashes from date (YYYYMMDD)
+        const cleanDate = eventData.date.replace(/-/g, '')
+
+        // Add short random suffix
+        const randomSuffix = Math.random().toString(36).substring(2, 6).toUpperCase()
+
+        const eventId = `${prefix}_${cleanDate}_${randomSuffix}`
+
+
+        const eventRef = doc(this.getEventCollection(), eventId)
+
+        await setDoc(eventRef, {
+          ...eventData,
+          id: eventId // optional but useful
+        })
+
+        console.log('Event created with ID:', eventId)
+
       } catch (error) {
-        console.error("Error creating event: ", error);
+        console.error('Error creating event:', error)
       }
     },
     
