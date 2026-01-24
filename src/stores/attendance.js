@@ -71,6 +71,87 @@ export const useAttendanceStore = defineStore('attendance', () => {
     }
   }
 
+  function fetchAttendanceForEvent(eventId) {
+    if (!eventId) {
+      currentEventAttendees.value = []
+      return
+    }
+
+    isLoading.value = true
+
+    const attendanceCol = getEventAttendanceCollection(eventId)
+    if (!attendanceCol) return
+
+    onSnapshot(
+      attendanceCol,
+      (snapshot) => {
+        const attendees = []
+        snapshot.forEach((docSnap) => {
+          attendees.push({
+            memberId: docSnap.id,
+            ...docSnap.data()
+          })
+        })
+        currentEventAttendees.value = attendees
+        isLoading.value = false
+      },
+      (error) => {
+        console.error('Attendance fetch error:', error)
+        isLoading.value = false
+      }
+    )
+  }
+
+  /**
+   * Fetch all attendance records for the current branch using a collectionGroup
+   * Listens to all subcollections named 'attendance' and filters by branchId
+   */
+  function fetchAllAttendance() {
+    const authStore = useAuthStore()
+
+    if (!authStore.branchId) {
+      allAttendance.value = []
+      return Promise.resolve(allAttendance.value)
+    }
+
+    // avoid creating multiple listeners
+    if (allAttendanceUnsub) return Promise.resolve(allAttendance.value)
+
+    isLoading.value = true
+
+    return new Promise((resolve, reject) => {
+      allAttendanceUnsub = onSnapshot(
+        collectionGroup(db, 'attendance'),
+        (snapshot) => {
+          const records = []
+          snapshot.forEach((docSnap) => {
+            // path: branches/{branchId}/events/{eventId}/attendance/{memberId}
+            const pathParts = docSnap.ref.path.split('/')
+            // basic guard for expected structure
+            if (pathParts.length >= 6 && pathParts[0] === 'branches') {
+              const branchId = pathParts[1]
+              const eventId = pathParts[3]
+              if (branchId !== authStore.branchId) return
+
+              records.push({
+                eventId,
+                memberId: docSnap.id,
+                ...docSnap.data()
+              })
+            }
+          })
+          allAttendance.value = records
+          isLoading.value = false
+          resolve(allAttendance.value)
+        },
+        (error) => {
+          console.error('All attendance fetch error:', error)
+          isLoading.value = false
+          reject(error)
+        }
+      )
+    })
+  }
   /**
    * Log Weekly DGroup Meeting
    */
@@ -144,16 +225,6 @@ export const useAttendanceStore = defineStore('attendance', () => {
     })
   }
 
-  function fetchAttendanceForEvent(eventId) {
-    if (!eventId) return (currentEventAttendees.value = [])
-    const attendanceCol = getEventAttendanceCollection(eventId)
-    if (!attendanceCol) return
-
-    onSnapshot(attendanceCol, (snapshot) => {
-      currentEventAttendees.value = snapshot.docs.map(d => ({ memberId: d.id, ...d.data() }))
-    })
-  }
-
   async function updateAttendanceMinistry(memberId, eventId, newMinistry) {
     const authStore = useAuthStore()
     const attendanceRef = doc(db, 'branches', authStore.branchId, 'events', eventId, 'attendance', memberId)
@@ -166,6 +237,7 @@ export const useAttendanceStore = defineStore('attendance', () => {
     dgroupMeetings,
     isLoading,
     fetchAttendanceForEvent,
+    fetchAllAttendance,
     fetchDgroupMeetings,
     getAttendanceByDate, 
     markAttendance,
