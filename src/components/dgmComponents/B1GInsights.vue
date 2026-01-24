@@ -80,7 +80,7 @@ const chartOptions = { responsive: true, maintainAspectRatio: false, plugins: { 
 <template>
   <div class="b1g-card">
     <div class="b1g-header" @click="open = !open">
-      <div class="title">B1G Services meetings</div>
+      <div class="title">B1G Services</div>
       <button class="toggle-btn" :aria-expanded="open">{{ open ? 'Hide' : 'Show' }}</button>
     </div>
 

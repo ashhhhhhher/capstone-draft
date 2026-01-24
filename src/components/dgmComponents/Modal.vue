@@ -74,13 +74,15 @@ const modalSizeClass = computed(() => {
   overflow: auto; /* allow the slotted content to scroll */
 }
 
+
 .modal-content.modal-default {
-  width: 90%;
-  max-width: 500px;
+  width: 100%;
+  max-width: 960px;
+  box-sizing: border-box;
 }
+
 .modal-content.modal-xl {
-  width: 95%;
-  max-width: 1100px; /* a bit wider for the absence modal */
+  max-width: 1100px; /* or whatever XL means */
 }
 
 /* Make sure close button is always above slotted content */
