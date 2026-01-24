@@ -12,6 +12,7 @@ import AttendanceOverviewModal from '../components/dgmComponents/AttendanceOverv
 import ExportButton from '../components/dgmComponents/ExportButton.vue'
 import DgroupWeeklyLogs from '../components/dgmComponents/DgroupWeeklyLogs.vue'
 import B1GInsights from '../components/dgmComponents/B1GInsights.vue'
+import HistoricalAttendance from '../components/dgmComponents/HistoricalAttendance.vue'
 
 // --- Store Setup ---
 const membersStore = useMembersStore()
@@ -25,12 +26,7 @@ const showAttendanceOverview = ref(false)
 const showFullVolunteerList = ref(false)
 
 // --- Chart Options ---
-const historicalChartOptions = ref({
-  responsive: true,
-  maintainAspectRatio: false,
-  plugins: { legend: { display: false }, datalabels: { display: false } },
-  scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } }
-})
+// Historical attendance moved to `HistoricalAttendance.vue`
 
 const doughnutChartOptions = ref({
   responsive: true,
@@ -199,27 +195,7 @@ const volunteerTrackingReport = computed(() => {
 // Top 5 for dashboard view
 const topVolunteers = computed(() => volunteerTrackingReport.value.slice(0, 5))
 
-// --- Date range picker state (new) ---
-const todayStr = new Date().toISOString().split('T')[0]
-const defaultFrom = (() => { const d = new Date(); d.setDate(d.getDate() - 30); return d.toISOString().split('T')[0] })()
-const fromDate = ref(defaultFrom)
-const toDate = ref(todayStr)
-
-const historicalAttendanceData = computed(() => {
-  if (!fromDate.value || !toDate.value) return { labels: [], datasets: [{ label: 'Total Attendance', backgroundColor: '#1E88E5', data: [] }] }
-  if (new Date(fromDate.value) > new Date(toDate.value)) return { labels: [], datasets: [{ label: 'Total Attendance', backgroundColor: '#1E88E5', data: [] }] }
-
-  const eventsInRange = allEvents.value
-    .filter(e => e.eventType === 'service' && e.date >= fromDate.value && e.date <= toDate.value)
-    .sort((a, b) => new Date(a.date) - new Date(b.date))
-
-  if (!eventsInRange.length) return { labels: [], datasets: [{ label: 'Total Attendance', backgroundColor: '#1E88E5', data: [] }] }
-
-  const labels = eventsInRange.map(ev => `${ev.name} (${ev.date})`)
-  const data = eventsInRange.map(ev => allAttendance.value.filter(att => att.eventId === ev.id).length)
-
-  return { labels, datasets: [{ label: 'Total Attendance', backgroundColor: '#1E88E5', data }] }
-})
+// historical attendance UI/component handled by `HistoricalAttendance.vue`
 </script>
 
 <template>
@@ -294,19 +270,8 @@ const historicalAttendanceData = computed(() => {
 
       <DgroupWeeklyLogs />
 
-      <!-- 4. Historical Attendance -->
-      <div class="chart-card-full">
-        <div class="section-title-with-button">
-          <h3>Historical Events Attendance</h3>
-          <div class="controls-inline">
-            <button class="view-overview-btn" @click="showAttendanceOverview = true">View History</button>
-            <label class="date-label">From<input type="date" v-model="fromDate" /></label>
-            <label class="date-label">To<input type="date" v-model="toDate" :max="(new Date()).toISOString().split('T')[0]" /></label>
-            <ExportButton exportType="events" />
-          </div>
-        </div>
-        <div class="chart-wrapper" style="height: 350px;"><BarChart v-if="historicalAttendanceData.labels.length > 0" :chartData="historicalAttendanceData" :chartOptions="historicalChartOptions" /><p v-else class="no-data-text">No event data in the selected date range.</p></div>
-      </div>
+      <!-- 4. Historical Attendance (moved to component) -->
+      <HistoricalAttendance />
 
     <!-- Modals -->
     <Modal v-if="showDgroupModal" @close="showDgroupModal = false" size="xl"><DgroupMatchingModal @close="showDgroupModal = false" /></Modal>

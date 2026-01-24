@@ -1,8 +1,6 @@
 <script setup>
 import { ref, computed, watch } from 'vue'
 import * as XLSX from 'xlsx-js-style'
-import jsPDF from 'jspdf'
-import autoTable from 'jspdf-autotable'
 import { storeToRefs } from 'pinia'
 import buildComparisonPayload from '../utils/eventComparisonExport'
 import { useMembersStore } from '../stores/members'
