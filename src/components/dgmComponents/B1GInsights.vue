@@ -103,16 +103,28 @@ const chartOptions = { responsive: true, maintainAspectRatio: false, plugins: { 
           <div class="kpi-value">{{ averageB1gAttendance }}</div>
           <div class="kpi-sub">Average per event (selected range)</div>
         </div>
+       
       </div>
 
       <div class="charts-row">
         <div class="chart-panel">
-          <div class="section-title-with-button" style="align-items:center; margin-bottom:8px;">
-            <h4 style="margin:0">Historical Attendance</h4>
-            <div style="display:flex; gap:8px; align-items:center">
+           <hr />
+          <div class="section-title-with-button" style="align-items:flex-start; margin-bottom:8px;">
+            <div style="display:flex; flex-direction:column; gap:6px;">
+              <h4 style="margin:0">Historical Attendance</h4>
+              <div class="date-text">Select a date range to view historical B1G attendance</div>
+            </div>
+
+            <div class="header-actions" style="display:flex; gap:8px; align-items:center;">
+              <button class="view-overview-btn" @click="open = true">View Details</button>
+              <ExportButton exportType="events" :eventsList="b1gEventsInRange" />
+            </div>
+          </div>
+
+          <div class="date-controls" style="margin-bottom:10px;">
+            <div class="controls-inline">
               <label class="date-label">From<input type="date" v-model="fromDate" /></label>
               <label class="date-label">To<input type="date" v-model="toDate" :max="todayStr" /></label>
-              <ExportButton exportType="events" :eventsList="b1gEventsInRange" />
             </div>
           </div>
           <div class="chart-wrapper"><BarChart v-if="historicalChartData.labels.length" :chartData="historicalChartData" :chartOptions="chartOptions" /><p v-else class="no-data">No B1G events found for selected range.</p></div>
@@ -125,6 +137,12 @@ const chartOptions = { responsive: true, maintainAspectRatio: false, plugins: { 
 <style scoped>
 .b1g-card { background: #fff; border-radius: 12px; padding: 0; box-shadow: 0 4px 12px rgba(0,0,0,0.05); margin-bottom: 20px; overflow: hidden; }
 .b1g-header { display:flex; justify-content:space-between; align-items:center; padding:16px 20px; cursor:pointer; border-bottom:1px solid #ECEFF1; }
+hr {
+  border: none;
+  border-top: 1px solid #e5e7eb;
+  margin: 16px 0;
+}
+
 .b1g-header .title { font-size:16px; font-weight:600; color:#0D47A1 }
 .toggle-btn { background:#1976D2; color:white; border:none; padding:8px 12px; border-radius:8px; font-weight:600; cursor:pointer }
 .b1g-body { padding:16px 20px }
@@ -134,6 +152,20 @@ const chartOptions = { responsive: true, maintainAspectRatio: false, plugins: { 
 .kpi-value { font-size:22px; font-weight:700; color:#0D47A1 }
 .kpi-sub { font-size:12px; color:#78909C; margin-top:6px }
 .section-title-with-button { display:flex; justify-content:space-between; align-items: center }
+.view-overview-btn {
+  padding: 8px 12px;
+  background: #1976D2;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.date-text {
+  font-size: 13px;
+  color: #546E7A;
+  margin-left: 2px;
+}
 .date-label { display:inline-flex; flex-direction:column; font-size:12px; color:#546E7A }
 .date-label input[type="date"] { margin-top:4px; padding:6px 8px; border-radius:8px; border:1px solid #E0E0E0; background:white }
 .charts-row { display:block }
