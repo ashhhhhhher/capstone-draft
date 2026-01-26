@@ -74,10 +74,11 @@ const router = createRouter({
       component: () => import('../views/Scan.vue'),
       meta: { requiresAuth: true, role: 'admin' }
     },
+    // REPLACED REGISTER WITH DGROUPS
     {
-      path: '/register',
-      name: 'register',
-      component: () => import('../views/Register.vue'),
+      path: '/dgroups',
+      name: 'dgroups',
+      component: () => import('../views/Dgroups.vue'),
       meta: { requiresAuth: true, role: 'admin' }
     },
     {

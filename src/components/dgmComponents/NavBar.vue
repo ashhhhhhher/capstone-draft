@@ -1,6 +1,6 @@
 <script setup>
 import { RouterLink } from 'vue-router'
-import { Home, Users, PlusSquare, BarChart2, QrCode } from 'lucide-vue-next'
+import { Home, Users, LayoutGrid, BarChart2, QrCode } from 'lucide-vue-next'
 </script>
 
 <template>
@@ -18,10 +18,12 @@ import { Home, Users, PlusSquare, BarChart2, QrCode } from 'lucide-vue-next'
       <QrCode :size="32" />
     </RouterLink>
 
-    <RouterLink to="/register" class="nav-link">
-      <PlusSquare />
-      <span>Register</span>
+    <!-- Replaced Register with DGroups -->
+    <RouterLink to="/dgroups" class="nav-link">
+      <LayoutGrid />
+      <span>DGroups</span>
     </RouterLink>
+    
     <RouterLink to="/insights" class="nav-link">
       <BarChart2 />
       <span>Insights</span>
