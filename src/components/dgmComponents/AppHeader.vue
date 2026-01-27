@@ -30,6 +30,7 @@ function closeDropdown(event) {
 
 async function handleLogout() {
   try {
+    notificationsStore.clearLocalNotifications()
     await authStore.logout()
     router.push('/login')
   } catch (error) {
@@ -64,6 +65,16 @@ const memberDisplayRole = computed(() => {
 
 onMounted(() => {
   document.addEventListener('click', closeDropdown)
+  
+  // Initialize listeners based on Role
+  if (authStore.userRole === 'admin') {
+    // Admin specific listeners
+    notificationsStore.cleanupOldNotifications()
+    notificationsStore.initSeekerListener()
+  } else if (authStore.user) {
+    // Member/Leader specific listeners
+    notificationsStore.initMemberListeners(authStore.user.uid)
+  }
 })
 
 onUnmounted(() => {
@@ -79,7 +90,22 @@ function toggleNotifications() {
 
 function openNotificationFocus(focusKey) {
   showNotifications.value = false
-  router.push({ path: '/members', query: { focus: focusKey } })
+  
+  if (focusKey === 'matching') {
+    // Admin: Redirect to DGroups matching tab
+    router.push({ path: '/dgroups', query: { tab: 'matching' } })
+  } else if (focusKey === 'memberDgroup') {
+    // Member: Redirect to their Dgroup view
+    router.push({ name: 'memberDgroup' })
+  } else if (focusKey === 'memberAttendance') {
+    // Member: Redirect to their Attendance view
+    router.push({ name: 'memberAttendance' })
+  } else {
+    // Default fallback
+    if (authStore.userRole === 'admin') {
+       router.push({ path: '/members', query: { focus: focusKey } })
+    }
+  }
 }
 </script>
 
@@ -127,9 +153,9 @@ function openNotificationFocus(focusKey) {
                 <div v-for="n in notificationsStore.localNotifications" :key="n.id" class="notif-card">
                   <div class="notif-header">{{ n.header }}</div>
                   <div class="notif-body">{{ n.body }}</div>
-                  <div class="notif-action">
+                  <div class="notif-action" v-if="n.focus">
                     <button class="notif-cta" @click="openNotificationFocus(n.focus)">
-                      Tap to review these members →
+                      Tap to view →
                     </button>
                   </div>
                 </div>
@@ -412,16 +438,30 @@ function openNotificationFocus(focusKey) {
   padding: 16px;
 }
 
+.empty-notif {
+  color: #90A4AE;
+  text-align: center;
+  margin-top: 20px;
+}
+
 .notif-card {
   border: 1px solid #ECEFF1;
   border-radius: 10px;
   padding: 12px;
   box-shadow: 0 4px 12px rgba(0,0,0,0.04);
+  margin-bottom: 8px;
 }
 
 .notif-header {
   font-weight: 700;
   color: #b71c1c;
+  margin-bottom: 4px;
+}
+
+.notif-body {
+  font-size: 13px;
+  color: #546E7A;
+  margin-bottom: 8px;
 }
 
 .notif-cta {
@@ -430,6 +470,8 @@ function openNotificationFocus(focusKey) {
   color: #1976D2;
   font-weight: 700;
   cursor: pointer;
+  font-size: 12px;
+  padding: 0;
 }
 
 .panel-footer {
