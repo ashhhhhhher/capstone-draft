@@ -18,12 +18,13 @@ import {
 import DgroupWeeklyLogs from '../components/dgmComponents/DgroupWeeklyLogs.vue'
 import DgroupMatchingSection from '../components/dgmComponents/DgroupMatchingSection.vue'
 import DGroupEditModal from '../components/dgmComponents/DGroupEditModal.vue'
+import MemberDetailsModal from '../components/dgmComponents/MemberDetailsModal.vue' // Added import
 import Modal from '../components/dgmComponents/Modal.vue'
 import MemberCard from '../components/dgmComponents/MemberCard.vue'
 
 // --- Stores ---
 const membersStore = useMembersStore()
-const { activeMembers, leaders } = storeToRefs(membersStore)
+const { activeMembers, leaders, seekers } = storeToRefs(membersStore)
 const attendanceStore = useAttendanceStore()
 const { currentEventAttendees } = storeToRefs(attendanceStore)
 
@@ -33,6 +34,10 @@ const searchQuery = ref('')
 const expandedDgroups = ref([])
 const showEditModal = ref(false)
 const selectedDgroupForEdit = ref(null)
+
+// Member Details Modal State
+const showMemberModal = ref(false)
+const selectedMember = ref(null)
 
 // --- Computed: Present Members Set ---
 const presentMemberIds = computed(() => {
@@ -52,11 +57,10 @@ const filteredMembers = computed(() => {
   return list
 })
 
-// --- Computed: Grouping Logic (Reused from Members.vue) ---
+// --- Computed: Grouping Logic ---
 const sortedDgroups = computed(() => {
   const groups = {}
   
-  // Initialize groups for all leaders
   leaders.value.forEach(leader => {
     const leaderFullName = `${leader.firstName} ${leader.lastName}`
     groups[leaderFullName] = {
@@ -71,7 +75,6 @@ const sortedDgroups = computed(() => {
     }
   })
 
-  // Group members
   filteredMembers.value.forEach(member => {
     const leaderName = member.dgroupLeader
     if (leaderName && groups.hasOwnProperty(leaderName)) {
@@ -84,6 +87,9 @@ const sortedDgroups = computed(() => {
 
 const maleGroups = computed(() => sortedDgroups.value.filter(g => g.leaderGender === 'Male'))
 const femaleGroups = computed(() => sortedDgroups.value.filter(g => g.leaderGender === 'Female'))
+
+// --- Computed: Unmatched Seekers Count for Badge ---
+const unmatchedSeekersCount = computed(() => seekers.value.length)
 
 // --- Functions ---
 function toggleDgroup(leaderName) {
@@ -104,11 +110,9 @@ function handleEditClose() {
 
 function copyId(id) {
   if (!id || id === 'No ID') return
-  // Modern way to copy
   navigator.clipboard.writeText(id).then(() => {
     alert('Dgroup ID copied!')
   }).catch(() => {
-    // Fallback if needed
     const el = document.createElement('textarea');
     el.value = id;
     document.body.appendChild(el);
@@ -117,6 +121,32 @@ function copyId(id) {
     document.body.removeChild(el);
     alert('Dgroup ID copied!')
   });
+}
+
+// Member Details Functions
+function openMemberDetails(member) {
+  selectedMember.value = member
+  showMemberModal.value = true
+}
+
+function handleMemberModalClose() {
+  showMemberModal.value = false
+  selectedMember.value = null
+}
+
+function handleSaveChanges(updatedMember) {
+  membersStore.updateMember(updatedMember)
+  showMemberModal.value = false
+}
+
+function handleArchiveMember(memberId) {
+  membersStore.archiveMember(memberId)
+  showMemberModal.value = false
+}
+
+function handleRestoreMember(memberId) {
+  membersStore.restoreMember(memberId)
+  showMemberModal.value = false
 }
 </script>
 
@@ -145,6 +175,9 @@ function copyId(id) {
         @click="currentTab = 'matching'"
       >
         <Sparkles :size="18" /> Matching
+        <span v-if="unmatchedSeekersCount > 0" class="tab-notification-badge">
+          {{ unmatchedSeekersCount }}
+        </span>
       </button>
     </div>
 
@@ -176,7 +209,7 @@ function copyId(id) {
             <div class="card-header" @click.self="toggleDgroup(group.leaderName)">
               <div class="header-content" @click="toggleDgroup(group.leaderName)">
                 <div class="group-title">
-                  <h4>{{ group.leaderName }}</h4> <!-- LEADER NAME IS TITLE -->
+                  <h4>{{ group.leaderName }}</h4>
                 </div>
                 
                 <div class="id-row">
@@ -211,6 +244,7 @@ function copyId(id) {
                     :member="member" 
                     :isPresent="presentMemberIds.has(member.id)"
                     :hideDetails="true"
+                    @click="openMemberDetails(member)"
                   />
                </div>
             </div>
@@ -235,7 +269,7 @@ function copyId(id) {
             <div class="card-header" @click.self="toggleDgroup(group.leaderName)">
               <div class="header-content" @click="toggleDgroup(group.leaderName)">
                 <div class="group-title">
-                  <h4>{{ group.leaderName }}</h4> <!-- LEADER NAME IS TITLE -->
+                  <h4>{{ group.leaderName }}</h4>
                 </div>
                 
                 <div class="id-row">
@@ -270,6 +304,7 @@ function copyId(id) {
                     :member="member" 
                     :isPresent="presentMemberIds.has(member.id)"
                     :hideDetails="true"
+                    @click="openMemberDetails(member)"
                   />
                </div>
             </div>
@@ -288,7 +323,7 @@ function copyId(id) {
        <DgroupMatchingSection />
     </div>
 
-    <!-- Manage Modal -->
+    <!-- Manage DGroup Modal -->
     <Modal v-if="showEditModal" @close="handleEditClose">
        <DGroupEditModal 
           v-if="selectedDgroupForEdit" 
@@ -297,10 +332,23 @@ function copyId(id) {
        />
     </Modal>
 
+    <!-- Member Details Modal -->
+    <Modal v-if="showMemberModal" @close="handleMemberModalClose"> 
+      <MemberDetailsModal 
+        v-if="selectedMember" 
+        :member="selectedMember" 
+        @close="handleMemberModalClose" 
+        @saveChanges="handleSaveChanges" 
+        @archiveMember="handleArchiveMember" 
+        @restoreMember="handleRestoreMember" 
+      />
+    </Modal>
+
   </div>
 </template>
 
 <style scoped>
+/* Same styles as previous */
 .dgroups-view-container {
   padding: 20px;
   height: 100%;
@@ -331,6 +379,7 @@ function copyId(id) {
   cursor: pointer;
   transition: all 0.2s;
   white-space: nowrap;
+  position: relative; /* For badge positioning if needed */
 }
 
 .tab-btn:hover {
@@ -341,6 +390,22 @@ function copyId(id) {
 .tab-btn.active {
   color: #1976D2;
   border-bottom-color: #1976D2;
+}
+
+/* RED DOT BADGE FOR TABS */
+.tab-notification-badge {
+  background-color: #D32F2F;
+  color: white;
+  font-size: 10px;
+  font-weight: 700;
+  min-width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 6px;
+  padding: 0 4px;
 }
 
 /* --- TAB CONTENT --- */
