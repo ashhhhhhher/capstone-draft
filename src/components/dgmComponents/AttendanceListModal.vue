@@ -157,7 +157,13 @@ function exportToExcel() {
   const createMetadataRow = (leftText, rightText, totalCols) => {
     const row = new Array(totalCols).fill("");
     row[0] = leftText;
-    if (totalCols > 1) { row[totalCols - 1] = rightText; }
+    // Place the secondary metadata column under column C (index 2) when possible
+    if (totalCols > 2) {
+      row[2] = rightText;
+    } else if (totalCols > 1) {
+      // fallback to last column if fewer than 3 columns
+      row[totalCols - 1] = rightText;
+    }
     return row;
   };
 
@@ -168,25 +174,22 @@ function exportToExcel() {
       const compCurrent = payload?.current || {};
       const compPrevious = payload?.previous || [];
 
+      // Build rows using the same header/metadata structure as createSheet so styling is consistent
+      const totalCols = 8; // matches the comparison table columns
       const compRows = [];
       compRows.push(["CHRIST COMMISSION FOUNDATION INC."]);
       compRows.push(['']);
-      compRows.push(['Event Comparison (Current vs Previous 3)']);
+      compRows.push(createMetadataRow(`Name of Event: ${eventName.value}`, `Speaker: ${eventSpeaker.value || 'N/A'}`, totalCols));
+      compRows.push(createMetadataRow(`Venue: ${eventLocation.value || 'N/A'}`, `Series: ${eventSeries.value || 'N/A'}`, totalCols));
+      compRows.push(createMetadataRow(`Ministry: Elevate Baguio x B1G Baguio`, `Date: ${eventDate.value || 'N/A'}`, totalCols));
+      compRows.push(createMetadataRow(`Ministry in-charge: Elevate Baguio`, "", totalCols));
       compRows.push(['']);
+      compRows.push(['Summary']);
 
-      // Event Details block
+      // Summary / Overview block (maintain previous content below the title)
       const totalAttended = source.length;
       const totalRegistered = (members && members.value) ? members.value.length : 0;
       const attRate = totalRegistered > 0 ? Math.round((totalAttended / totalRegistered) * 100) : 0;
-      compRows.push(['Event Details']);
-      compRows.push(['Name of Event', eventName.value || 'N/A']);
-      compRows.push(['Date', eventDate.value || 'N/A']);
-      compRows.push(['Speaker', eventSpeaker.value || 'N/A']);
-      compRows.push(['Venue', eventLocation.value || 'N/A']);
-      compRows.push(['Series', eventSeries.value || 'N/A']);
-      compRows.push(['Total Attendees', String(totalAttended)]);
-      compRows.push(['Attendance Rate', `${attRate}%`]);
-      compRows.push(['']);
 
       // Summary (dynamic values)
       const prevTotals = (compPrevious || []).map(p => ({ name: p.name || 'Unknown', total: p.total || 0 }));
@@ -194,16 +197,6 @@ function exportToExcel() {
       const prevAvg = prevTotals.length ? Math.round(prevSum / prevTotals.length) : 0;
       const prevListText = prevTotals.length ? prevTotals.map(p => `${p.name} (${p.total})`).join(', ') : 'none';
       const prevCombined = { elevate: (compPrevious || []).reduce((s,p) => s + (p.elevate||0), 0), b1g: (compPrevious || []).reduce((s,p) => s + (p.b1g||0), 0), firstTimers: (compPrevious || []).reduce((s,p) => s + (p.firstTimers||0), 0) };
-      compRows.push(['Summary']);
-      compRows.push([`Event: ${compCurrent.name || 'N/A'}`]);
-      compRows.push([`Current attendees: ${compCurrent.total || 0}`]);
-      compRows.push([`Previous events: ${prevListText}`]);
-      compRows.push([`Previous average: ${prevAvg}`]);
-      compRows.push([`Elevate — Current: ${compCurrent.elevate || 0}; Previous combined: ${prevCombined.elevate}`]);
-      compRows.push([`B1G — Current: ${compCurrent.b1g || 0}; Previous combined: ${prevCombined.b1g}`]);
-      compRows.push([`First Timers — Current: ${compCurrent.firstTimers || 0}; Previous combined: ${prevCombined.firstTimers}`]);
-      compRows.push([`Attendance rate: ${attRate}%`]);
-      compRows.push(['']);
 
       // Event Comparison Overview table
       compRows.push(['Type','Event Name','Date','Total','Elevate','B1G','First Timers','Volunteers']);
@@ -223,9 +216,9 @@ function exportToExcel() {
       const activeCount = (activeMembers && activeMembers.value) ? activeMembers.value.length : (members && members.value ? members.value.length : 0);
       const currentAbsent = Math.max(0, activeCount - currentPresent);
       compRows.push(['Absence Monitoring']);
-      compRows.push(['Metric','Current','Previous (avg)']);
-      compRows.push(['Present (avg)', String(currentPresent), String(prevAvgTotal)]);
-      compRows.push(['Absent (avg)', String(currentAbsent), String(Math.max(0, activeCount - prevAvgTotal))]);
+      compRows.push(['Metric','Current','Average of Previous 3 Events']);
+      compRows.push(['Present', String(currentPresent), String(prevAvgTotal)]);
+      compRows.push(['Absent', String(currentAbsent), String(Math.max(0, activeCount - prevAvgTotal))]);
       compRows.push(['']);
 
       // Demographics averaged (current vs previous avg)
@@ -243,8 +236,8 @@ function exportToExcel() {
       const prevDemos = (compPrevious || []).map(p => p.id ? demographicsForEventId(p.id) : { males:0, females:0, elevate:0, b1g:0 });
       const avgPrevDemo = prevDemos.length ? prevDemos.reduce((acc, d) => ({ males: acc.males + d.males, females: acc.females + d.females, elevate: acc.elevate + d.elevate, b1g: acc.b1g + d.b1g }), { males:0, females:0, elevate:0, b1g:0 }) : { males:0, females:0, elevate:0, b1g:0 };
       const avgPrevDemoFinal = prevDemos.length ? { males: Math.round(avgPrevDemo.males / prevDemos.length), females: Math.round(avgPrevDemo.females / prevDemos.length), elevate: Math.round(avgPrevDemo.elevate / prevDemos.length), b1g: Math.round(avgPrevDemo.b1g / prevDemos.length) } : { males:0, females:0, elevate:0, b1g:0 };
-      compRows.push(['Demographics (Current vs Previous avg)']);
-      compRows.push(['Metric','Current','Previous (avg)']);
+      compRows.push(['Demographics (Current vs Average of Previous 3 Events)']);
+      compRows.push(['Metric','Current','Average of Previous 3 Events']);
       compRows.push(['Males', String(currentDemo.males), String(avgPrevDemoFinal.males)]);
       compRows.push(['Females', String(currentDemo.females), String(avgPrevDemoFinal.females)]);
       compRows.push(['Elevate', String(currentDemo.elevate), String(avgPrevDemoFinal.elevate)]);
@@ -292,45 +285,65 @@ function exportToExcel() {
         }
 
         for (let R = range.s.r; R <= range.e.r; ++R) {
+          // determine if the source row is blank to reduce visual border weight
+          const srcRow = compRows[R] || [];
+          const isBlankRow = srcRow.every(c => !c || String(c).trim() === '');
+          const firstCellText = srcRow && srcRow[0] ? String(srcRow[0]).trim() : '';
+
           for (let C = range.s.c; C <= range.e.c; ++C) {
             const cellAddr = XLSX.utils.encode_cell({ r: R, c: C });
             if (!ws[cellAddr]) continue;
-            const row0 = compRows[R] && compRows[R][0] ? String(compRows[R][0]) : '';
 
+            // Special-case: treat certain one-column titles as centered headers in column A only
+            if ((firstCellText === 'Absence Monitoring' || firstCellText.startsWith('Demographics')) ) {
+              if (C === range.s.c) {
+                // center the header in column A and use tableTitleStyle
+                ws[cellAddr].s = Object.assign({}, ws[cellAddr].s || {}, Object.assign({}, tableTitleStyle, { alignment: { horizontal: 'center', vertical: 'center' } }));
+              } else {
+                // make other cells on this row visually minimal (no heavy borders)
+                ws[cellAddr].s = Object.assign({}, ws[cellAddr].s || {}, { alignment: { vertical: 'center' } });
+              }
+              continue;
+            }
+
+            // Apply the exact same row-based styling as createSheet so borders/headers match
             if (R === 0) {
               ws[cellAddr].s = Object.assign({}, ws[cellAddr].s || {}, mainTitleStyle);
-              continue;
-            }
-
-            if (['Event Comparison (Current vs Previous 3)', 'Event Details', 'Summary', 'Absence Monitoring', 'Demographics (Current vs Previous avg)'].includes(row0) || (row0 && row0.endsWith('Card'))) {
+            } else if (R >= 2 && R <= 5) {
+              ws[cellAddr].s = Object.assign({}, ws[cellAddr].s || {}, { alignment: { wrapText: false } });
+            } else if (R === 7) {
               ws[cellAddr].s = Object.assign({}, ws[cellAddr].s || {}, tableTitleStyle);
-              continue;
-            }
-
-            if (Array.isArray(compRows[R]) && (compRows[R][0] === 'Type' || compRows[R][0] === 'Metric' || (compRows[R].length > 1 && String(compRows[R][0]).toLowerCase().includes('type')) || (compRows[R].some(v => String(v).toLowerCase && String(v).toLowerCase().includes('label'))))) {
+            } else if (R === 8) {
               ws[cellAddr].s = Object.assign({}, ws[cellAddr].s || {}, tableHeaderStyle);
-              continue;
+            } else if (R > 8 && R <= range.e.r - 3) {
+              // For blank rows, reduce border weight by not adding the cell border (visually thinner)
+              if (isBlankRow) {
+                ws[cellAddr].s = Object.assign({}, ws[cellAddr].s || {}, { alignment: { vertical: 'center' } });
+              } else {
+                ws[cellAddr].s = Object.assign({}, ws[cellAddr].s || {}, cellStyle);
+              }
+            } else {
+              // fallback: minimize border visibility on empty rows
+              if (isBlankRow) {
+                ws[cellAddr].s = Object.assign({}, ws[cellAddr].s || {}, { alignment: { vertical: 'center' } });
+              } else {
+                ws[cellAddr].s = Object.assign({}, ws[cellAddr].s || {}, cellStyle);
+              }
             }
-
-            if (compRows[R] && compRows[R][0] === 'Current') {
-              ws[cellAddr].s = Object.assign({}, ws[cellAddr].s || {}, { fill: { fgColor: { rgb: 'FFF3CD' } }, font: Object.assign({}, (ws[cellAddr].s && ws[cellAddr].s.font) || {}, { bold: true }), alignment: Object.assign({}, (ws[cellAddr].s && ws[cellAddr].s.alignment) || {}, { wrapText: true }) });
-              continue;
-            }
-
-            ws[cellAddr].s = Object.assign({}, ws[cellAddr].s || {}, cellStyle);
           }
         }
 
-        const merges = ws['!merges'] || [];
-        for (let R = range.s.r; R <= range.e.r; ++R) {
-          const row0 = compRows[R] && compRows[R][0] ? String(compRows[R][0]) : '';
-        }
+        // match createSheet's merges so the header title and sheet title span full width
+        const merges = [
+          { s: { r: 0, c: 0 }, e: { r: 0, c: totalCols - 1 } },
+          { s: { r: 7, c: 0 }, e: { r: 7, c: totalCols - 1 } }
+        ];
         ws['!merges'] = merges;
 
         ws['!cols'] = colWidths.map(w => ({ wch: w }));
       }
 
-      XLSX.utils.book_append_sheet(wb, ws, 'Event Comparison');
+      XLSX.utils.book_append_sheet(wb, ws, 'Summary');
     } catch (e) {
       console.warn('Comparison sheet build failed', e);
     }
@@ -353,6 +366,8 @@ function exportToExcel() {
     const ws = XLSX.utils.aoa_to_sheet(rows);
     const range = XLSX.utils.decode_range(ws['!ref']);
     for (let R = range.s.r; R <= range.e.r; ++R) {
+      const srcRow = rows[R] || [];
+      const isBlankRow = srcRow.every(c => !c || String(c).trim() === '');
       for (let C = range.s.c; C <= range.e.c; ++C) {
         const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
         if (!ws[cellAddress]) continue;
@@ -360,7 +375,13 @@ function exportToExcel() {
         else if (R >= 2 && R <= 5) ws[cellAddress].s = { alignment: { wrapText: false } };
         else if (R === 7) ws[cellAddress].s = tableTitleStyle;
         else if (R === 8) ws[cellAddress].s = tableHeaderStyle;
-        else if (R > 8 && R <= range.e.r - 3) ws[cellAddress].s = cellStyle;
+        else if (R > 8 && R <= range.e.r - 3) {
+          if (isBlankRow) {
+            ws[cellAddress].s = Object.assign({}, ws[cellAddress].s || {}, { alignment: { vertical: 'center' } });
+          } else {
+            ws[cellAddress].s = Object.assign({}, ws[cellAddress].s || {}, cellStyle);
+          }
+        }
       }
     }
     // merge title and sheet title rows + interpretation rows so text spans full width
@@ -380,8 +401,7 @@ function exportToExcel() {
   };
 
 
-  createSheet("First Timers", "ATTENDANCE SHEET - FIRST TIMERS", ["Name", "Gender", "Age", "Contact Number", "Fb/Messenger", "Email", "School/Occupation"], firstTimers, (m) => [`${m.lastName}, ${m.firstName}`, m.gender, m.age, m.contactNumber || '', m.fbAccount || '', m.email, m.school || '']);
-  // Prepend Event Comparison sheet (current vs previous 3) to workbook using helper
+  // Prepend Summary sheet (current vs previous 3) to workbook using helper
   try {
     const payload = buildComparisonPayload({ allEvents: allEvents.value || [], allAttendance: allAttendance.value || [], members: members.value || [], activeMembers: (activeMembers && activeMembers.value) ? activeMembers.value : (members && members.value) ? members.value : [], currentEventId: findCurrentEventId() })
     console.log('[AttendanceListModal] comparison payload for xlsx', payload && payload.cards ? payload.cards.map(c=>c.title) : 'no-cards')
@@ -412,6 +432,8 @@ function exportToExcel() {
     }
     createComparisonSheet(payload)
   } catch (e) { console.warn('Comparison sheet build failed', e) }
+
+  createSheet("First Timers", "ATTENDANCE SHEET - FIRST TIMERS", ["Name", "Gender", "Age", "Contact Number", "Fb/Messenger", "Email", "School/Occupation"], firstTimers, (m) => [`${m.lastName}, ${m.firstName}`, m.gender, m.age, m.contactNumber || '', m.fbAccount || '', m.email, m.school || '']);
   createSheet("Volunteers", "ATTENDANCE SHEET - VOLUNTEERS", ["Name", "Age", "Gender", "Ministry"], volunteers, (m) => [`${m.lastName}, ${m.firstName}`, m.age, m.gender, m.attendanceMinistry || (m.finalTags?.volunteerMinistry || []).join(', ') || '']);
   createSheet("DLeaders", "ATTENDANCE SHEET - DLEADERS", ["Name", "Age", "Gender", "Volunteer Ministry"], leaders, (m) => [`${m.lastName}, ${m.firstName}`, m.age, m.gender, m.attendanceMinistry || (m.finalTags?.volunteerMinistry || []).join(', ') || 'N/A']);
   createSheet("Elevate F", "ATTENDANCE SHEET - DGROUP MEMBERS (ELEVATE FEMALES)", ["Name", "Age", "DLeader Name"], elevateFemales, (m) => [`${m.lastName}, ${m.firstName}`, m.age, m.dgroupLeader || 'Unassigned']);
@@ -548,7 +570,7 @@ const writeParagraph = (text) => {
   writeSectionHeader("Event Details");
 
   doc.setFontSize(10).setTextColor(0);
-  doc.text(`Event: ${eventName.value}`, 15, y); y += 5;
+  doc.text(`Event Title: ${eventName.value}`, 15, y); y += 5;
   doc.text(`Date: ${eventDate.value}`, 15, y); y += 5;
   doc.text(`Speaker: ${eventSpeaker.value || 'N/A'}`, 120, y - 10);
   doc.text(`Venue: ${eventLocation.value || 'N/A'}`, 120, y - 5);
@@ -602,7 +624,7 @@ try {
       console.warn('Failed to override payloadFinal.current with modal attendees', err)
     }
 
-    const compFinal = { current: payloadFinal.current, previous: payloadFinal.previous };
+  const compFinal = { current: payloadFinal.current, previous: payloadFinal.previous };
   const prevTotalsFinal = (compFinal.previous || []).map(p => ({ name: p.name || 'Unknown', total: p.total || 0 }));
   const prevSumFinal = prevTotalsFinal.reduce((s, p) => s + (p.total || 0), 0);
   const prevAvgFinal = (prevTotalsFinal.length) ? Math.round(prevSumFinal / prevTotalsFinal.length) : 0;
@@ -617,9 +639,9 @@ try {
 
   // Human-readable summary paragraph (use the comparison payload's current event)
   writeParagraph(
-    `    This report provides an overview of attendance for the event "${eventName.value || 'N/A'}" compared to the previous events. A total of ${compFinal.current?.total || totalAttended} attendees participated in the current event, while previous events — ${prevListTextFinal} — averaged ${prevAvgFinal} participants. 
+    `    This report provides an overview of attendance for the event "${eventName.value || 'N/A'}" compared to the previous events. A total of ${compFinal.current?.total || totalAttended} attendees participated in the current event, while previous events — ${prevListTextFinal} — averaged ${prevAvgFinal} participants.
 
-    Looking at specific groups, the Elevate category had ${compFinal.current?.elevate || 0} attendees (previous combined: ${prevCombinedFinal.elevate}), the B1G group had ${compFinal.current?.b1g || 0} attendees (previous combined: ${prevCombinedFinal.b1g}), and First Timers totaled ${compFinal.current?.firstTimers || 0} (previous combined: ${prevCombinedFinal.firstTimers}). 
+    Looking at specific groups, the Elevate category had ${compFinal.current?.elevate || 0} attendees, the B1G group had ${compFinal.current?.b1g || 0} attendees. There were ${compFinal.current?.firstTimers || 0} First-timers.
 
     Overall, the attendance rate was ${rate}%.`
   );
@@ -743,10 +765,10 @@ try {
           const currentAbsent = (Array.isArray(activeMembers?.value) ? activeMembers.value.length : (members?.value ? members.value.length : 0)) - currentPresent
 
           // Build absence table showing averages instead of combined previous
-          const absenceHead = ['Metric', 'Current', 'Previous (avg)']
+          const absenceHead = ['Metric', 'Current', 'Average of Previous 3 Events']
           const absenceBody = [
-            ['Present (avg)', String(currentPresent), String(prevAvgTotal)],
-            ['Absent (avg)', String(currentAbsent >= 0 ? currentAbsent : 0), String(Math.max(0, (Array.isArray(activeMembers?.value) ? activeMembers.value.length : (members?.value ? members.value.length : 0)) - prevAvgTotal))]
+            ['Present', String(currentPresent), String(prevAvgTotal)],
+            ['Absent', String(currentAbsent >= 0 ? currentAbsent : 0), String(Math.max(0, (Array.isArray(activeMembers?.value) ? activeMembers.value.length : (members?.value ? members.value.length : 0)) - prevAvgTotal))]
           ]
 
           autoTable(doc, {
@@ -780,7 +802,7 @@ try {
           const avgPrevDemoFinal = prevDemos.length ? { males: Math.round(avgPrevDemo.males / prevDemos.length), females: Math.round(avgPrevDemo.females / prevDemos.length), elevate: Math.round(avgPrevDemo.elevate / prevDemos.length), b1g: Math.round(avgPrevDemo.b1g / prevDemos.length) } : { males:0, females:0, elevate:0, b1g:0 }
 
           // Render demographics avg table
-          const demoHead = ['Metric', 'Current', 'Previous (avg)']
+          const demoHead = ['Metric', 'Current', 'Average of Previous 3 Events']
           const demoBody = [
             ['Males', String(currentDemo.males), String(avgPrevDemoFinal.males)],
             ['Females', String(currentDemo.females), String(avgPrevDemoFinal.females)],
@@ -847,18 +869,6 @@ try {
     y = doc.lastAutoTable.finalY + 8;
 
     const total = list.length;
-    const elevate = list.filter(m => m.finalTags?.ageCategory === 'Elevate').length;
-    const b1g = list.filter(m => m.finalTags?.ageCategory === 'B1G').length;
-    const male = list.filter(m => m.gender === 'Male').length;
-    const female = list.filter(m => m.gender === 'Female').length;
-
-    const pct = (n) => total > 0 ? `${Math.round((n / total) * 100)}%` : '0%';
-
-    writeParagraph(
-      `${total} attendees are listed in this group. 
-      - Age groups include Elevate (${elevate}, ${pct(elevate)}) and B1G (${b1g}, ${pct(b1g)}). 
-      - Gender distribution shows ${male} male and ${female} female participants.`
-    );
   };
 
   // =========================================================================

@@ -39,81 +39,8 @@ export default function buildComparisonPayload({ allEvents = [], allAttendance =
   const previousSums = previous.map(summarize)
 
   // per-event list (current + previous)
-  const perList = [current].concat(previous).filter(Boolean)
-  const labels = perList.map(e => `${e.name} (${e.date})`)
-  const rawCounts = perList.map(e => attendeesForEvent(e).length)
-  const participationPercents = perList.map(e => attendanceRate(attendeesForEvent(e)))
-
   const cards = []
 
-  // Comparison summary
-  cards.push({
-    title: 'Comparison summary',
-    tableHeaders: ['Group','Events'],
-    tableRows: [[ 'Group A', `${current.name} (${current.date})` ], [ 'Group B', previous.map(p => `${p.name} (${p.date})`).join(' | ') || 'none' ]]
-  })
-
-  // Attendance totals chart
-  cards.push({
-    title: 'Attendance totals (per event)',
-    charts: [{ title: 'Attendance', labels, datasets: [{ label: 'Attendance %', data: participationPercents, raw: rawCounts }] }],
-    interpretation: `Current: ${current.name} (${current.date}) — ${currentSum.total}. Previous ${previous.length} events average: ${previousSums.length ? Math.round(previousSums.reduce((s,p)=>s+p.total,0)/previousSums.length) : 0}.`
-  })
-
-  // Participation
-  cards.push({ title: 'Participation % (per event)', charts: [{ title: 'Participation', labels, datasets: [{ label: 'Participation %', data: participationPercents, raw: rawCounts }] }], interpretation: 'Participation percentages with raw counts attached.' })
-
-  // Member distribution: compute simple counts for groups
-  function categoryCountsForEvents(list) {
-    const seen = new Map()
-    ;(list||[]).forEach(ev => {
-      attendeesForEvent(ev).forEach(a => {
-        const m = a.member
-        if (!m || !m.id) return
-        if (!seen.has(m.id)) seen.set(m.id, m)
-      })
-    })
-    const arr = Array.from(seen.values())
-    // Determine volunteers from attendance records across the supplied events
-    const volunteerMemberIds = new Set()
-    ;(list||[]).forEach(ev => {
-      const recs = (allAttendance || []).filter(a => a.eventId === ev.id)
-      recs.forEach(r => { if (r.ministry && r.ministry !== 'N/A' && r.memberId) volunteerMemberIds.add(r.memberId) })
-    })
-    return {
-      regulars: arr.filter(m => !m.finalTags?.isVolunteer && !m.finalTags?.isDgroupLeader && !m.finalTags?.isFirstTimer).length,
-      leaders: arr.filter(m => m.finalTags?.isDgroupLeader && !m.finalTags?.isVolunteer).length,
-      firstTimers: arr.filter(m => m.finalTags?.isFirstTimer).length,
-      volunteers: Array.from(volunteerMemberIds).filter(id => seen.has(id)).length,
-      total: arr.length
-    }
-  }
-
-  const baseCounts = categoryCountsForEvents([current])
-  const prevCounts = categoryCountsForEvents(previous)
-  cards.push({
-    title: 'Member Distribution',
-    charts: [
-      {
-        title: 'Group A',
-        labels: ['Regulars','Dgroup Leaders','First Timers'],
-        datasets: [{ label: current.name, data: [baseCounts.regulars, baseCounts.leaders, baseCounts.firstTimers], raw: [baseCounts.regulars, baseCounts.leaders, baseCounts.firstTimers] }]
-      },
-      {
-        title: 'Group B',
-        labels: ['Regulars','Dgroup Leaders','First Timers'],
-        datasets: [{ label: 'Previous', data: [prevCounts.regulars, prevCounts.leaders, prevCounts.firstTimers], raw: [prevCounts.regulars, prevCounts.leaders, prevCounts.firstTimers] }]
-      }
-    ],
-    interpretation: 'Distribution of member categories.'
-  })
-
-  // Member Category Distribution table
-  const rows = ['Regulars','Dgroup Leaders','First Timers','Volunteers'].map(label => {
-    const key = label === 'Regulars' ? 'regulars' : (label === 'Dgroup Leaders' ? 'leaders' : (label === 'First Timers' ? 'firstTimers' : 'volunteers'))
-    return [label, String(baseCounts[key] || 0), String(prevCounts[key] || 0)]
-  })
-  cards.push({ title: 'Member Category Distribution', tableHeaders: ['Category', current.name || 'Current', 'Previous (combined)'], tableRows: rows })
 
   // Demographics simple: male/female and age groups
   function demographicsForList(list) {
@@ -124,19 +51,5 @@ export default function buildComparisonPayload({ allEvents = [], allAttendance =
     const ageB1G = at.filter(m => m.finalTags?.ageCategory === 'B1G').length
     return { males, females, ageElevate, ageB1G }
   }
-  const baseDemo = demographicsForList([current])
-  const prevDemo = demographicsForList(previous)
-  cards.push({ title: 'Demographics comparison', charts: [{ title: 'Demographics', labels: ['Males','Females','Elevate','B1G'], datasets: [{ label: current.name, data: [baseDemo.males, baseDemo.females, baseDemo.ageElevate, baseDemo.ageB1G], raw: [baseDemo.males, baseDemo.females, baseDemo.ageElevate, baseDemo.ageB1G] }, { label: 'Previous (combined)', data: [prevDemo.males, prevDemo.females, prevDemo.ageElevate, prevDemo.ageB1G], raw: [prevDemo.males, prevDemo.females, prevDemo.ageElevate, prevDemo.ageB1G] }] }], interpretation: 'Compare gender and age-group breakdowns.' })
-
-  // Absence monitoring simple: present/absent counts
-  const totalMembers = Array.isArray(activeMembers) ? activeMembers.length : (Array.isArray(members) ? members.length : 0)
-  const presentCurrent = new Set(attendeesForEvent(current).map(a => a.member && a.member.id).filter(Boolean))
-  const presentPrev = new Set([].concat(...previous.map(ev => attendeesForEvent(ev).map(a => a.member && a.member.id))).filter(Boolean))
-  const presentCurrCount = presentCurrent.size
-  const presentPrevCount = presentPrev.size
-  const absentCurr = Math.max(0, totalMembers - presentCurrCount)
-  const absentPrev = Math.max(0, totalMembers - presentPrevCount)
-  cards.push({ title: 'Absence monitoring', tableHeaders: ['Metric', current.name || 'Current', 'Previous (combined)'], tableRows: [['Present (unique)', String(presentCurrCount), String(presentPrevCount)], ['Absent (unique)', String(absentCurr), String(absentPrev)]], interpretation: 'Unique present/absent counts for the current and previous combined events.' })
-
   return { cards, current: currentSum, previous: previousSums }
 }

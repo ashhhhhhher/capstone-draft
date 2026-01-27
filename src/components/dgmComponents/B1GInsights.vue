@@ -5,7 +5,6 @@ import { useMembersStore } from '../../stores/members'
 import { useEventsStore } from '../../stores/events'
 import { useAttendanceStore } from '../../stores/attendance'
 import BarChart from '../charts/BarChart.vue'
-import DoughnutChart from '../charts/DoughnutChart.vue'
 import ExportButton from './ExportButton.vue'
 
 // Collapse state
