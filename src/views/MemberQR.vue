@@ -20,7 +20,7 @@ const lifeStage = computed(() => memberProfile.value?.finalTags?.ageCategory || 
       </div>
 
       <div class="qr-wrapper">
-        <QrcodeVue :value="qrCodeValue" :size="240" level="H" />
+        <QrcodeVue :value="qrCodeValue" :size="260" level="H" />
       </div>
 
       <div class="member-details">

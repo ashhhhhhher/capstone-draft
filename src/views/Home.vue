@@ -57,22 +57,20 @@ const totalAttendance = computed(() => presentMembers.value.length)
 const dynamicStats = computed(() => {
   if (!members.value) return []; 
   
-  const dleaders = presentMembers.value.filter(m => m.finalTags.isDgroupLeader);
-  const firstTimers = presentMembers.value.filter(m => m.finalTags.isFirstTimer);
-  
-  // Active Volunteers: Members who are NOT DLs, NOT First Timers, and have a valid attendanceMinistry
-  const activeVolunteers = presentMembers.value.filter(m => 
-      !m.finalTags.isDgroupLeader && 
+    // Leaders: count only those present who did not serve as volunteers for this event
+    const dleaders = presentMembers.value.filter(m => m.finalTags.isDgroupLeader && (!m.attendanceMinistry || m.attendanceMinistry === 'N/A'));
+    const firstTimers = presentMembers.value.filter(m => m.finalTags.isFirstTimer);
+
+    // Active Volunteers: Members who have a valid attendanceMinistry for this event
+    // (this allows Dgroup Leaders who served in a volunteer role this event to show as Volunteers)
+    const activeVolunteers = presentMembers.value.filter(m => m.attendanceMinistry && m.attendanceMinistry !== 'N/A');
+
+    // Regulars: present members who are not first timers and did not serve in a volunteer ministry
+    const regulars = presentMembers.value.filter(m => 
       !m.finalTags.isFirstTimer && 
-      m.attendanceMinistry && m.attendanceMinistry !== 'N/A'
-  );
-  
-  // Regulars: Everyone else (Not DL, Not FT, Not Active Volunteer)
-  const regulars = presentMembers.value.filter(m => 
-      !m.finalTags.isDgroupLeader && 
-      !m.finalTags.isFirstTimer && 
-      (!m.attendanceMinistry || m.attendanceMinistry === 'N/A')
-  );
+      (!m.attendanceMinistry || m.attendanceMinistry === 'N/A') &&
+      !m.finalTags.isDgroupLeader
+    );
 
   return [
     { id: 1, title: "Regulars", count: regulars.length },
@@ -86,18 +84,14 @@ const filteredAttendees = computed(() => {
   const filter = selectedStatFilter.value
   
   // Reuse logic from dynamicStats for consistency
-  const dleaders = presentMembers.value.filter(m => m.finalTags.isDgroupLeader);
-  const firstTimers = presentMembers.value.filter(m => m.finalTags.isFirstTimer);
-  const activeVolunteers = presentMembers.value.filter(m => 
-      !m.finalTags.isDgroupLeader && 
-      !m.finalTags.isFirstTimer && 
-      m.attendanceMinistry && m.attendanceMinistry !== 'N/A'
-  );
-  const regulars = presentMembers.value.filter(m => 
-      !m.finalTags.isDgroupLeader && 
-      !m.finalTags.isFirstTimer && 
-      (!m.attendanceMinistry || m.attendanceMinistry === 'N/A')
-  );
+    const dleaders = presentMembers.value.filter(m => m.finalTags.isDgroupLeader && (!m.attendanceMinistry || m.attendanceMinistry === 'N/A'));
+    const firstTimers = presentMembers.value.filter(m => m.finalTags.isFirstTimer);
+    const activeVolunteers = presentMembers.value.filter(m => m.attendanceMinistry && m.attendanceMinistry !== 'N/A');
+    const regulars = presentMembers.value.filter(m =>
+      !m.finalTags.isFirstTimer &&
+      (!m.attendanceMinistry || m.attendanceMinistry === 'N/A') &&
+      !m.finalTags.isDgroupLeader
+    );
 
   if (filter === 'All') return presentMembers.value
   if (filter === 'Regulars') return regulars
@@ -109,10 +103,10 @@ const filteredAttendees = computed(() => {
 
 const formattedEventDate = computed(() => {
   if (!currentEvent.value || !currentEvent.value.date) return "No Date Set"
-  const options = { 
-    year: 'numeric', 
-    month: 'long', 
-    day: 'numeric' 
+  const options = {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric'
   }
   const date = new Date(currentEvent.value.date + 'T00:00:00')
   return date.toLocaleDateString('en-US', options)
@@ -122,9 +116,9 @@ const formattedEventDate = computed(() => {
 const upcomingEvents = computed(() => {
   const today = new Date();
   const todayStr = new Date(today.getTime() - (today.getTimezoneOffset() * 60000)).toISOString().split('T')[0];
-  
+
   return allEvents.value
-    .filter(e => e.date > todayStr) 
+    .filter(e => e.date > todayStr)
     .sort((a, b) => new Date(a.date) - new Date(b.date))
 })
 
@@ -249,7 +243,7 @@ function exportEventAttendance(event) {
     rows.push([`Date: ${event.date || 'N/A'}`])
     rows.push([""])
     // Extended Header for Ministry
-    const headers = ['Name', 'Age', 'Age Group', 'Gender', 'Contact #', 'Event Role / Ministry']
+    const headers = ['Name', 'Age', 'Age Group', 'Gender', 'Contact #', 'Event Role / Ministry', 'Is Volunteer']
     rows.push(headers)
 
     const memberList = (members && members.value) ? members.value : []
@@ -258,9 +252,12 @@ function exportEventAttendance(event) {
     const attendees = records.map(r => {
         const m = memberList.find(x => x.id === r.memberId)
         if (!m) return null
+        const ministry = r.ministry || 'N/A'
+        const isVolunteerForEvent = ministry !== 'N/A'
         return {
             ...m,
-            attendanceMinistry: r.ministry || 'N/A' // Capture ministry from attendance record
+            attendanceMinistry: ministry, // Capture ministry from attendance record
+            isVolunteerForEvent
         }
     }).filter(Boolean)
 
@@ -271,7 +268,8 @@ function exportEventAttendance(event) {
           m.finalTags?.ageCategory || '', 
           m.gender || '', 
           m.contactNumber || '',
-          m.attendanceMinistry // This might be 'N/A' or 'Welcome', etc.
+          m.attendanceMinistry, // This might be 'N/A' or 'Welcome', etc.
+          m.isVolunteerForEvent ? 'Yes' : 'No'
       ])
     })
 
@@ -281,11 +279,12 @@ function exportEventAttendance(event) {
     const b1g = attendees.filter(m => m.finalTags?.ageCategory === 'B1G').length
     const male = attendees.filter(m => m.gender === 'Male').length
     const female = attendees.filter(m => m.gender === 'Female').length
+    const volunteers = attendees.filter(m => m.isVolunteerForEvent).length
     const pct = (n) => total > 0 ? `${Math.round((n / total) * 100)}%` : '0%'
     
     rows.push([])
     rows.push(['Interpretation:'])
-    rows.push([`Total: ${total} — Elevate ${elevate} (${pct(elevate)}), B1G ${b1g} (${pct(b1g)}). Gender: M ${male}, F ${female}.`])
+    rows.push([`Total: ${total} — Volunteers ${volunteers} — Elevate ${elevate} (${pct(elevate)}), B1G ${b1g} (${pct(b1g)}). Gender: M ${male}, F ${female}.`])
 
     const wb = XLSX.utils.book_new()
     const ws = XLSX.utils.aoa_to_sheet(rows)
@@ -303,7 +302,7 @@ function exportEventAttendance(event) {
           else if (R > 4) ws[cell].s = { alignment: { vertical: 'center' } }
         }
       }
-      ws['!cols'] = [{ wch: 30 }, { wch: 10 }, { wch: 15 }, { wch: 12 }, { wch: 18 }, { wch: 25 }]
+      ws['!cols'] = [{ wch: 30 }, { wch: 10 }, { wch: 15 }, { wch: 12 }, { wch: 18 }, { wch: 25 }, { wch: 12 }]
     }
 
     XLSX.utils.book_append_sheet(wb, ws, `Attendance_${(event.date||'event')}`)
@@ -397,12 +396,6 @@ async function handleEndCurrentEvent() {
   }
 }
 
-/* --- Navigate to Insights with focus query --- */
-function goToMembers(focusKey) {
-  // close absence modal and route to Insights with a focus query param
-  showAbsenceModal.value = false
-  router.push({ path: '/members', query: { focus: focusKey } })
-}
 </script>
 
 <template>

@@ -30,7 +30,8 @@ export default function buildComparisonPayload({ allEvents = [], allAttendance =
       elevate: details.filter(m => m.finalTags?.ageCategory === 'Elevate' && !m.finalTags?.isFirstTimer).length,
       b1g: details.filter(m => m.finalTags?.ageCategory === 'B1G' && !m.finalTags?.isFirstTimer).length,
       firstTimers: details.filter(m => m.finalTags?.isFirstTimer).length,
-      volunteers: details.filter(m => m.finalTags?.isVolunteer).length
+      // Count volunteers by attendance record (ministry) so historical records remain accurate
+      volunteers: recs.filter(r => r.ministry && r.ministry !== 'N/A').length
     }
   }
 
@@ -73,7 +74,19 @@ export default function buildComparisonPayload({ allEvents = [], allAttendance =
       })
     })
     const arr = Array.from(seen.values())
-    return { regulars: arr.filter(m => m.finalTags?.isRegular).length, leaders: arr.filter(m => m.finalTags?.isDgroupLeader).length, firstTimers: arr.filter(m => m.finalTags?.isFirstTimer).length, volunteers: arr.filter(m => m.finalTags?.isVolunteer).length, total: arr.length }
+    // Determine volunteers from attendance records across the supplied events
+    const volunteerMemberIds = new Set()
+    ;(list||[]).forEach(ev => {
+      const recs = (allAttendance || []).filter(a => a.eventId === ev.id)
+      recs.forEach(r => { if (r.ministry && r.ministry !== 'N/A' && r.memberId) volunteerMemberIds.add(r.memberId) })
+    })
+    return {
+      regulars: arr.filter(m => !m.finalTags?.isVolunteer && !m.finalTags?.isDgroupLeader && !m.finalTags?.isFirstTimer).length,
+      leaders: arr.filter(m => m.finalTags?.isDgroupLeader && !m.finalTags?.isVolunteer).length,
+      firstTimers: arr.filter(m => m.finalTags?.isFirstTimer).length,
+      volunteers: Array.from(volunteerMemberIds).filter(id => seen.has(id)).length,
+      total: arr.length
+    }
   }
 
   const baseCounts = categoryCountsForEvents([current])

@@ -146,19 +146,25 @@ const totalServiceEventsCount = computed(() => {
 })
 
 const volunteerTrackingReport = computed(() => {
-    // 1. Get ALL profiles tagged as volunteers (including DLs who are volunteers)
-    // Note: We use activeMembers to exclude archived ones.
-    const allVolunteers = activeMembers.value.filter(m => m.finalTags.isVolunteer);
-    
+    // 1. Determine members who have volunteered historically (attendance records with ministry)
+    const volunteerIds = new Set(
+      (allAttendance.value || [])
+        .filter(att => att.ministry && att.ministry !== 'N/A')
+        .map(att => att.memberId)
+    )
+
+    // Include any currently-flagged volunteers too, but ensure historical volunteers are preserved
+    const allVolunteers = activeMembers.value.filter(m => volunteerIds.has(m.id) || m.finalTags.isVolunteer)
+
     // 2. Build stats for each
     const stats = allVolunteers.map(member => {
-        // Find attendance records for this member that are 'service' type events AND ministry != 'N/A'
-        // We filter attendance first by memberId
-        const memberAttendance = allAttendance.value.filter(att => 
-            att.memberId === member.id && 
-            att.ministry && 
-            att.ministry !== 'N/A'
-        );
+      // Find attendance records for this member that are 'service' type events AND ministry != 'N/A'
+      // We filter attendance first by memberId
+      const memberAttendance = allAttendance.value.filter(att =>
+        att.memberId === member.id &&
+        att.ministry &&
+        att.ministry !== 'N/A'
+      );
 
         // Filter out attendance for non-service events if strictly tracking service volunteering
         // Assuming 'allAttendance' has eventId, we check against allEvents

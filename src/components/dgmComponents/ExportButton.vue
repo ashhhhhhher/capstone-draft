@@ -41,7 +41,7 @@ const eventsStore = useEventsStore()
 const attendanceStore = useAttendanceStore()
 
 const { activeMembers } = storeToRefs(membersStore)
-const { allEvents } = storeToRefs(eventsStore)
+const { allEvents, currentEvent } = storeToRefs(eventsStore)
 const { allAttendance } = storeToRefs(attendanceStore)
 
 // --- UI State ---
@@ -56,10 +56,24 @@ function getSegmentedMembers() {
 
   const all = [...activeMembers.value].sort((a, b) => a.lastName.localeCompare(b.lastName));
 
-  const firstTimers = all.filter(m => m.finalTags?.isFirstTimer);
-  const leaders = all.filter(m => !m.finalTags?.isFirstTimer && m.finalTags?.isDgroupLeader);
-  const volunteers = all.filter(m => !m.finalTags?.isFirstTimer && !m.finalTags?.isDgroupLeader && m.finalTags?.isVolunteer);
-  const regulars = all.filter(m => !m.finalTags?.isFirstTimer && !m.finalTags?.isDgroupLeader && !m.finalTags?.isVolunteer && m.finalTags?.isRegular);
+  // Build a lookup of memberId -> ministry for the current event attendance so we can
+  // treat DLeaders who served as volunteers in this event as Volunteers in exports.
+  const ministryMap = {};
+  const curEvtId = currentEvent && currentEvent.value && currentEvent.value.id ? currentEvent.value.id : null;
+  if (curEvtId) {
+    (allAttendance.value || []).filter(a => a.eventId === curEvtId && a.ministry && a.ministry !== 'N/A').forEach(r => {
+      ministryMap[r.memberId] = r.ministry || 'N/A'
+    })
+  }
+
+  // PRIORITIZE Volunteer flag OR current-event serving role: if a member is currently a volunteer
+  // OR is serving in this event (ministryMap), they should appear under Volunteers.
+  const firstTimers = all.filter(m => m.finalTags?.isFirstTimer).map(m => ({ ...m, _servingMinistry: ministryMap[m.id] || null }));
+  const volunteers = all.filter(m => !m.finalTags?.isFirstTimer && (m.finalTags?.isVolunteer || !!ministryMap[m.id])).map(m => ({ ...m, _servingMinistry: ministryMap[m.id] || null }));
+  // Leaders who are NOT acting as volunteers for current event
+  const leaders = all.filter(m => !m.finalTags?.isFirstTimer && m.finalTags?.isDgroupLeader && !m.finalTags?.isVolunteer && !ministryMap[m.id]).map(m => ({ ...m, _servingMinistry: ministryMap[m.id] || null }));
+  // Regulars: not first-timer, not leader, not volunteer (including current-event serving)
+  const regulars = all.filter(m => !m.finalTags?.isFirstTimer && !m.finalTags?.isDgroupLeader && !m.finalTags?.isVolunteer && !ministryMap[m.id]).map(m => ({ ...m, _servingMinistry: ministryMap[m.id] || null }));
 
   return { firstTimers, leaders, volunteers, regulars, all };
 }
@@ -117,13 +131,13 @@ function exportMembersExcel() {
         name: 'Dgroup Leaders', 
         data: leaders, 
         headers: ['Name', 'Age', 'Age Group', 'Gender', 'Volunteer Ministry'],
-        map: m => [`${m.lastName}, ${m.firstName}`, m.age, m.finalTags?.ageCategory || '-', m.gender, m.finalTags?.volunteerMinistry?.join(', ') || 'N/A']
+        map: m => [`${m.lastName}, ${m.firstName}`, m.age, m.finalTags?.ageCategory || '-', m.gender, m.finalTags?.volunteerMinistry?.join(', ') || m._servingMinistry || 'N/A']
       },
       { 
         name: 'Volunteers', 
         data: volunteers, 
         headers: ['Name', 'Age', 'Age Group', 'Gender', 'Ministry'],
-        map: m => [`${m.lastName}, ${m.firstName}`, m.age, m.finalTags?.ageCategory || '-', m.gender, m.finalTags?.volunteerMinistry?.join(', ') || '']
+        map: m => [`${m.lastName}, ${m.firstName}`, m.age, m.finalTags?.ageCategory || '-', m.gender, m.finalTags?.volunteerMinistry?.join(', ') || m._servingMinistry || '']
       },
       { 
         name: 'Regular Members', 
@@ -358,12 +372,16 @@ function getEventsData(specificEvent = null) {
     const attendees = (allAttendance.value || []).filter(a => a.eventId === event.id);
     const attendeeDetails = (activeMembers.value || []).filter(m => attendees.some(a => a.memberId === m.id));
 
+    // Volunteers for an event should be derived from the attendance record (ministry field)
+    // so historical volunteer activity isn't lost when someone's profile flag changes later.
+    const volunteerCount = attendees.filter(a => a.ministry && a.ministry !== 'N/A').length;
+
     return {
       name: event.name, date: event.date, total: attendees.length,
       elevate: attendeeDetails.filter(m => m.finalTags?.ageCategory === 'Elevate' && !m.finalTags?.isFirstTimer).length,
       b1g: attendeeDetails.filter(m => m.finalTags?.ageCategory === 'B1G' && !m.finalTags?.isFirstTimer).length,
       firstTimers: attendeeDetails.filter(m => m.finalTags?.isFirstTimer).length,
-      volunteers: attendeeDetails.filter(m => m.finalTags?.isVolunteer).length
+      volunteers: volunteerCount
     };
   });
 }

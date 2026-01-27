@@ -28,7 +28,7 @@ async function processMemberId(memberId) {
   const trimmedId = memberId.trim()
   if (!currentEvent.value) return scanResult.value = { status: 'error', message: 'No active event.' }
   if (!isAttendanceEvent.value) return scanResult.value = { status: 'error', message: `No recording for ${currentEvent.value.name}.` }
-  
+
   const member = members.value.find(m => m.id === trimmedId)
   if (!member) return scanResult.value = { status: 'error', message: `ID "${trimmedId}" not found.` }
 
@@ -53,7 +53,7 @@ async function finalizeAttendance(member, ministryRole) {
   // AUTOMATION: Pass the member's specific tag (DL/DM) to the store
   // If they are a leader, we pass 'DL', otherwise default to 'DM'
   const tag = member.finalTags?.isDgroupLeader ? 'DL' : 'DM'
-  
+
   const result = await attendanceStore.markAttendance(member.id, currentEvent.value.id, ministryRole, tag)
 
   let successMsg = `Welcome, ${member.firstName}! Attendance recorded.`;
@@ -63,7 +63,7 @@ async function finalizeAttendance(member, ministryRole) {
   if (result.status === 'success') scanResult.value = { status: 'success', message: successMsg }
   else if (result.status === 'warning') scanResult.value = { status: 'warning', message: `${member.firstName} already marked.` }
   else scanResult.value = { status: 'error', message: `Error for ${member.firstName}.` }
-  
+
   manualIdInput.value = ''; pendingMember.value = null; showVolunteerPrompt.value = false; isProcessing.value = false;
   if (scannerInstance && scannerInstance.getState() === 3) scannerInstance.resume()
   setTimeout(() => scanResult.value = { status: null, message: '' }, 4000)
@@ -72,16 +72,35 @@ async function finalizeAttendance(member, ministryRole) {
 async function handleVolunteerSelection(ministry) {
   if (!pendingMember.value) return
   const member = pendingMember.value;
-  const currentMinistries = member.finalTags.volunteerMinistry || [];
-  if (!currentMinistries.includes(ministry)) {
-    try {
-      await membersStore.updateMember({ ...member, finalTags: { ...member.finalTags, volunteerMinistry: [...currentMinistries, ministry] }});
-    } catch (e) { console.error(e) }
-  }
+  // Ensure only one volunteer ministry is stored — replace any existing list
+  const updatedFinalTags = { ...member.finalTags, isVolunteer: true, volunteerMinistry: [ministry], isRegular: false };
+  const updatedMember = { ...member, finalTags: updatedFinalTags };
+  try {
+    // Persist the change and update the pending member to reflect the latest finalTags
+    await membersStore.updateMember(updatedMember);
+    pendingMember.value = updatedMember;
+  } catch (e) { console.error(e) }
+  // Use the updated pendingMember when finalizing attendance
   finalizeAttendance(pendingMember.value, ministry)
 }
 
-const handleRegularAttendance = () => finalizeAttendance(pendingMember.value, 'N/A')
+// When a member who is currently tagged as a volunteer is scanned butchosen as regular,
+// update their profile so exports will place them under Regulars going forward.
+async function handleRegularAttendance() {
+  if (!pendingMember.value) return
+  const member = pendingMember.value
+  // If they were previously flagged as a volunteer, flip that flag but DO NOT touch historical attendance records
+  if (member.finalTags?.isVolunteer) {
+    const updatedFinalTags = { ...member.finalTags, isVolunteer: false, volunteerMinistry: [], isRegular: true }
+    const updatedMember = { ...member, finalTags: updatedFinalTags }
+    try {
+      await membersStore.updateMember(updatedMember)
+      pendingMember.value = updatedMember
+    } catch (e) { console.error(e) }
+  }
+  // finalize attendance as regular
+  await finalizeAttendance(pendingMember.value, 'N/A')
+}
 const cancelVolunteerPrompt = () => { showVolunteerPrompt.value = false; if (scannerInstance?.getState() === 3) scannerInstance.resume() }
 const onScanSuccess = (text) => { if (!showVolunteerPrompt.value) processMemberId(text) }
 const onScanError = () => {}

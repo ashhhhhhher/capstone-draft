@@ -135,10 +135,12 @@ function sortByName(list) {
 function exportToExcel() {
   console.log('[AttendanceListModal] exportToExcel called', { eventName: eventName.value, attendees: (attendees && attendees.value) ? attendees.value.length : 0 })
   const source = attendees.value;
+  // Classify attendees using attendanceMinistry (per-event) first — this lets DLeaders who served as
+  // volunteers appear under Volunteers for this export. Fall back to profile flags if ministry is absent.
   const firstTimers = sortByName(source.filter(m => m.finalTags?.isFirstTimer));
-  const leaders = sortByName(source.filter(m => !m.finalTags?.isFirstTimer && m.finalTags?.isDgroupLeader));
-  const volunteers = sortByName(source.filter(m => !m.finalTags?.isFirstTimer && !m.finalTags?.isDgroupLeader && m.finalTags?.isVolunteer));
-  const regulars = source.filter(m => !m.finalTags?.isFirstTimer && !m.finalTags?.isDgroupLeader && !m.finalTags?.isVolunteer);
+  const volunteers = sortByName(source.filter(m => !m.finalTags?.isFirstTimer && (m.attendanceMinistry && m.attendanceMinistry !== 'N/A' || m.finalTags?.isVolunteer)));
+  const leaders = sortByName(source.filter(m => !m.finalTags?.isFirstTimer && m.finalTags?.isDgroupLeader && !(m.attendanceMinistry && m.attendanceMinistry !== 'N/A')));
+  const regulars = source.filter(m => !m.finalTags?.isFirstTimer && !m.finalTags?.isDgroupLeader && !(m.attendanceMinistry && m.attendanceMinistry !== 'N/A') && !m.finalTags?.isVolunteer);
   
   const elevateMales = sortByName(regulars.filter(m => m.gender === 'Male' && m.finalTags?.ageCategory === 'Elevate'));
   const elevateFemales = sortByName(regulars.filter(m => m.gender === 'Female' && m.finalTags?.ageCategory === 'Elevate'));
@@ -394,7 +396,8 @@ function exportToExcel() {
         elevate: source.filter(m => m.finalTags?.ageCategory === 'Elevate').length,
         b1g: source.filter(m => m.finalTags?.ageCategory === 'B1G').length,
         firstTimers: source.filter(m => m.finalTags?.isFirstTimer).length,
-        volunteers: source.filter(m => m.finalTags?.isVolunteer).length
+        // Count volunteers by attendanceMinistry OR profile flag so the export summary matches sheets
+        volunteers: source.filter(m => (m.attendanceMinistry && m.attendanceMinistry !== 'N/A') || m.finalTags?.isVolunteer).length
       }
       payload.current = Object.assign({}, payload.current || {}, currentAggregates)
       // Replace previous with the three events immediately before current (exclude current)
@@ -409,8 +412,8 @@ function exportToExcel() {
     }
     createComparisonSheet(payload)
   } catch (e) { console.warn('Comparison sheet build failed', e) }
-  createSheet("Volunteers", "ATTENDANCE SHEET - VOLUNTEERS", ["Name", "Age", "Gender", "Ministry"], volunteers, (m) => [`${m.lastName}, ${m.firstName}`, m.age, m.gender, (m.finalTags?.volunteerMinistry || []).join(', ')]);
-  createSheet("DLeaders", "ATTENDANCE SHEET - DLEADERS", ["Name", "Age", "Gender", "Volunteer Ministry"], leaders, (m) => [`${m.lastName}, ${m.firstName}`, m.age, m.gender, (m.finalTags?.volunteerMinistry || []).join(', ') || 'N/A']);
+  createSheet("Volunteers", "ATTENDANCE SHEET - VOLUNTEERS", ["Name", "Age", "Gender", "Ministry"], volunteers, (m) => [`${m.lastName}, ${m.firstName}`, m.age, m.gender, m.attendanceMinistry || (m.finalTags?.volunteerMinistry || []).join(', ') || '']);
+  createSheet("DLeaders", "ATTENDANCE SHEET - DLEADERS", ["Name", "Age", "Gender", "Volunteer Ministry"], leaders, (m) => [`${m.lastName}, ${m.firstName}`, m.age, m.gender, m.attendanceMinistry || (m.finalTags?.volunteerMinistry || []).join(', ') || 'N/A']);
   createSheet("Elevate F", "ATTENDANCE SHEET - DGROUP MEMBERS (ELEVATE FEMALES)", ["Name", "Age", "DLeader Name"], elevateFemales, (m) => [`${m.lastName}, ${m.firstName}`, m.age, m.dgroupLeader || 'Unassigned']);
   createSheet("Elevate M", "ATTENDANCE SHEET - DGROUP MEMBERS (ELEVATE MALES)", ["Name", "Age", "DLeader Name"], elevateMales, (m) => [`${m.lastName}, ${m.firstName}`, m.age, m.dgroupLeader || 'Unassigned']);
   createSheet("B1G F", "ATTENDANCE SHEET - DGROUP MEMBERS (B1G FEMALES)", ["Name", "Age", "DLeader Name"], b1gFemales, (m) => [`${m.lastName}, ${m.firstName}`, m.age, m.dgroupLeader || 'Unassigned']);
