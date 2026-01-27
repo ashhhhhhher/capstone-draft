@@ -80,7 +80,7 @@ const profileImageSrc = computed(() => {
   gap: 12px;
   cursor: pointer;
   transition: background-color 0.2s;
-  width: 100%;
+  width: 96%;
 }
 
 .member-card:hover {

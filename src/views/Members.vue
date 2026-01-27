@@ -173,6 +173,7 @@ const absenceCount = computed(() => { const past = getPastServices(); if (!past 
               :key="member.id" 
               :member="member" 
               :isPresent="true" 
+              :hideStatus="true"
               class="member-card-item is-present"
               @click="openMemberDetails(member)" 
             />
