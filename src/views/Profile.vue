@@ -1,9 +1,9 @@
 profile.vue
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { useAuthStore } from '../stores/auth'
-import { LogOut } from 'lucide-vue-next'
+import { LogOut, Camera, Save, Lock, Mail } from 'lucide-vue-next'
 import { useRouter } from 'vue-router'
 
 // --- Store Setup ---
@@ -29,6 +29,11 @@ onMounted(() => {
     displayName.value = authStore.user.displayName || ''
     email.value = authStore.user.email || ''
   }
+})
+
+const initial = computed(() => {
+  const name = displayName.value || authStore.user?.displayName || ''
+  return name ? name.charAt(0).toUpperCase() : 'U'
 })
 
 // --- Functions ---
@@ -97,210 +102,174 @@ async function handleLogout() {
 </script>
 
 <template>
-  <div class="profile-container">
-    <div class="profile-header">
-      <div class="profile-text">
-        <h1>Profile & Settings</h1>
-        <p>Manage your admin account details.</p>
-      </div>
-      <button @click="handleLogout" class="logout-btn">
-        <LogOut :size="18" />
-        <span>Logout</span>
-      </button>
-    </div>
+  <div class="profile-view">
 
-    <div class="settings-grid">
-      
-      <!-- Edit Profile Card -->
-      <div class="profile-card">
-        <h3>Edit Profile</h3>
-        <p class="subtitle">Update your username and login email.</p>
-        <form @submit.prevent="handleUpdateProfile">
-          <div class="form-group">
-            <label for="display-name">Username (Display Name)</label>
-            <input type="text" id="display-name" v-model="displayName">
+    <!-- Header Card -->
+    <header class="profile-header-card">
+      <div class="avatar-section">
+        <div class="info-section">
+          <h2 class="user-name">{{ displayName || authStore.user?.displayName || 'Admin' }}</h2>
+          <div class="meta-badges">
+            <span class="badge">DGM</span>
+            <span class="badge">{{ email }}</span>
           </div>
-          <div class="form-group">
-            <label for="email">Email Address</label>
-            <input type="email" id="email" v-model="email" required>
+        </div>
+      </div>
+      <div style="position:absolute; top:18px; right:18px;">
+        <button @click="handleLogout" class="logout-btn">
+          <LogOut :size="16" />
+        </button>
+      </div>
+    </header>
+
+    <!-- Edit Details -->
+    <div class="form-card">
+      <div class="form-row">
+        <div class="input-group full">
+          <label>Display Name</label>
+          <div class="input-wrapper">
+            <input v-model="displayName" placeholder="Full name" />
           </div>
-          
-          <hr class="divider">
-          
-          <div class="form-group">
-            <label for="profile-confirm-password">Enter Current Password to Save</label>
-            <input type="password" id="profile-confirm-password" v-model="profileConfirmPassword" required>
-          </div>
-          
-          <div v-if="profileMessage.text" 
-               class="message-box" 
-               :class="profileMessage.type === 'success' ? 'is-success' : 'is-error'">
-            {{ profileMessage.text }}
-          </div>
-          
-          <button type="submit" class="submit-btn">Save Profile</button>
-        </form>
+        </div>
       </div>
 
-      <!-- Change Password Card -->
-      <div class="profile-card">
-        <h3>Change Admin Password</h3>
-        <p class="subtitle">Update your account password.</p>
-        <form @submit.prevent="handleChangePassword" class="password-form">
-          <div class="form-group">
-            <label for="current-password">Current Password</label>
-            <input type="password" id="current-password" v-model="currentPassword" required>
+      <div class="form-row">
+        <div class="input-group full">
+          <label>Email Address</label>
+          <div class="input-wrapper">
+            <Mail :size="18" class="icon" />
+            <input v-model="email" type="email" />
           </div>
-          <div class="form-group">
-            <label for="new-password">New Password</label>
-            <input type="password" id="new-password" v-model="newPassword" required>
-          </div>
-          <div class="form-group">
-            <label for="confirm-password">Confirm New Password</label>
-            <input type="password" id="confirm-password" v-model="confirmPassword" required>
-          </div>
-          
-          <div v-if="passwordMessage.text" 
-               class="message-box" 
-               :class="passwordMessage.type === 'success' ? 'is-success' : 'is-error'">
-            {{ passwordMessage.text }}
-          </div>
-          
-          <button type="submit" class="submit-btn">Update Password</button>
-        </form>
+        </div>
       </div>
-      
+
+      <hr class="divider">
+
+      <div class="form-row">
+        <div class="input-group full">
+          <label>Confirm with Current Password</label>
+          <div class="input-wrapper">
+            <input type="password" v-model="profileConfirmPassword" placeholder="Current password" />
+          </div>
+        </div>
+      </div>
+
+      <div v-if="profileMessage.text" class="message-box" :class="profileMessage.type === 'success' ? 'is-success' : 'is-error'">{{ profileMessage.text }}</div>
+
+      <div class="action-footer">
+        <button class="save-btn" @click="handleUpdateProfile">
+          <Save :size="16" />
+          <span>Save Profile</span>
+        </button>
+      </div>
     </div>
+
+    <!-- Security / Password -->
+    <div class="form-card security">
+      <h3>Change Password</h3>
+      <div class="form-row">
+        <div class="input-group full">
+          <label>Current Password</label>
+          <div class="input-wrapper">
+            <Lock :size="18" class="icon" />
+            <input type="password" v-model="currentPassword" placeholder="Current password" />
+          </div>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="input-group">
+          <label>New Password</label>
+          <input type="password" v-model="newPassword" placeholder="New password" />
+        </div>
+        <div class="input-group">
+          <label>Confirm</label>
+          <input type="password" v-model="confirmPassword" placeholder="Retype new password" />
+        </div>
+      </div>
+
+      <div v-if="passwordMessage.text" class="message-box" :class="passwordMessage.type === 'success' ? 'is-success' : 'is-error'">{{ passwordMessage.text }}</div>
+
+      <div class="action-footer">
+        <button class="save-btn outline" @click="handleChangePassword">
+          Update Password
+        </button>
+      </div>
+    </div>
+
   </div>
 </template>
 
 <style scoped>
-.profile-container {
-  padding: 20px;
+.profile-view {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding-bottom: 40px;
 }
-.profile-header {
-  margin-bottom: 24px;
+
+/* HEADER CARD */
+.profile-header-card {
+  background: white;
+  border-radius: 16px;
+  padding: 22px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-}
-
-
-.profile-header h1 {
-  font-size: 28px;
-  font-weight: 700;
-  margin: 0;
-}
-.profile-header p {
-  font-size: 16px;
-  color: #546E7A;
-  margin-top: 4px;
-}
-
-.settings-grid {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 20px;
-}
-
-.logout-btn {
-  background: #ECEFF1;
-  color: #37474F;
-  border: none;
-  border-radius: 8px;
-  padding: 8px 12px;
-  font-size: 14px;
-  font-weight: 600;
-  display: inline-flex;
-  align-items: center;
   justify-content: center;
-  gap: 6px;
-  cursor: pointer;
-  transition: background-color 0.2s ease;
-  height: fit-content;
-  line-height: 1;
-}
-
-.logout-btn:hover {
-  background-color: #CFD8DC;
-}
-
-@media (min-width: 1024px) {
-  .settings-grid {
-    grid-template-columns: 1fr 1fr;
-    align-items: flex-start;
-  }
-}
-
-.profile-card {
-  background: #fff;
-  border-radius: 12px;
-  padding: 24px;
+  position: relative;
   box-shadow: 0 4px 12px rgba(0,0,0,0.05);
 }
-.profile-card h3 {
-  margin-top: 0;
-  margin-bottom: 8px;
-  font-size: 18px;
-  font-weight: 600;
-}
-.subtitle {
-  font-size: 14px;
-  color: #546E7A;
-  margin-top: 0;
-  margin-bottom: 20px;
-}
-.divider {
-  border: none;
-  border-top: 1px solid #ECEFF1;
-  margin: 20px 0;
+
+.avatar-section { display:flex; align-items:center; gap:16px }
+.avatar-container {
+  position: relative;
+  width: 88px;
+  height: 88px;
 }
 
-/* --- Password Form --- */
-.form-group {
-  margin-bottom: 16px;
-}
-.form-group label {
-  display: block;
-  margin-bottom: 8px;
-  font-weight: 500;
-  font-size: 14px;
-  color: #333;
-}
-.form-group input {
+.avatar-placeholder {
   width: 100%;
-  padding: 10px;
-  border: 1px solid #B0BEC5;
-  border-radius: 8px;
-  box-sizing: border-box;
-  font-size: 14px;
+  height: 100%;
+  background: #E3F2FD;
+  color: #1565C0;
+  font-size: 36px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  border: 4px solid white;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.08);
 }
-.message-box {
-  padding: 12px;
-  border-radius: 8px;
-  font-weight: 500;
-  text-align: center;
-  margin-top: 16px;
-  font-size: 14px;
-}
-.message-box.is-success {
-  background-color: #E8F5E9;
-  color: #2E7D32;
-}
-.message-box.is-error {
-  background-color: #FFEBEE;
-  color: #C62828;
-}
-.submit-btn {
-  width: 100%;
-  padding: 14px;
-  margin-top: 16px;
-  background-color: #1976D2;
-  color: white;
-  font-size: 16px;
-  font-weight: 600;
-  border: none;
-  border-radius: 8px;
-  cursor: pointer;
-}
+
+.user-name { margin: 0; font-size: 20px; color: #333 }
+.meta-badges { display:flex; gap:8px; margin-top:6px; }
+.badge { background:#F5F5F5; color:#616161; font-size:12px; padding:4px 10px; border-radius:12px; font-weight:600 }
+
+.logout-btn { background:#ECEFF1; border:none; padding:8px; border-radius:8px; cursor:pointer }
+
+/* FORM CARDS */
+.form-card { background:white; border-radius:16px; padding:20px; box-shadow:0 2px 8px rgba(0,0,0,0.04) }
+.form-card.security h3 { margin-top:0; margin-bottom:12px; font-size:16px; color:#D32F2F }
+
+.form-row { display:flex; gap:16px; margin-bottom:12px }
+.input-group { flex:1 }
+.input-group.full { width:100% }
+label { display:block; font-size:12px; font-weight:600; color:#546E7A; margin-bottom:6px }
+
+.input-wrapper { display:flex; align-items:center; position:relative }
+.icon {margin-left:12px; margin-right: 12px; color:#90A4AE }
+input { width:100%; padding:12px 12px 12px 12px; border:1px solid #CFD8DC; border-radius:8px; font-size:14px; box-sizing:border-box; flex: 1; }
+input:focus { border-color:#1976D2; outline:none }
+
+.divider { border:none; border-top:1px solid #ECEFF1; margin:12px 0 }
+
+.message-box { padding:12px; border-radius:8px; font-weight:500; text-align:center; margin-top:12px; font-size:14px }
+.message-box.is-success { background-color:#E8F5E9; color:#2E7D32 }
+.message-box.is-error { background-color:#FFEBEE; color:#C62828 }
+
+.action-footer { margin-top:16px; display:flex; justify-content:flex-end }
+.save-btn { background:#1976D2; color:white; border:none; padding:10px 18px; border-radius:8px; font-weight:600; font-size:14px; display:flex; align-items:center; gap:8px; cursor:pointer }
+.save-btn.outline { background:white; border:1px solid #D32F2F; color:#D32F2F }
+
+@media (max-width:600px) { .form-row { flex-direction:column } .profile-header-card { padding:18px } }
 </style>

@@ -172,7 +172,7 @@ function formatShortDate(dateStr) {
               <MapPin :size="18" class="icon" />
               <div class="detail-text">
                 <span class="label">Location</span>
-                <span class="val">{{ selectedEvent.eventLocation || 'Main Sanctuary' }}</span>
+                <span class="val">{{ selectedEvent.eventLocation || 'To be updated.' }}</span>
               </div>
             </div>
 
