@@ -15,17 +15,23 @@ const props = defineProps({
     required: true,
     validator: (value) => ['members', 'events', 'page'].includes(value)
   },
+  variant: {
+    type: String,
+    default: 'default', // 'default' or 'on-blue'
+  },
+  iconOnly: {
+    type: Boolean,
+    default: false
+  },
   // optional structured page data provided by parent for reliable exports
   pageExportData: {
     type: Object,
     required: false
-  }
-  ,
+  },
   singleEvent: {
     type: Object,
     required: false
-  }
-  ,
+  },
   eventsList: {
     type: Array,
     required: false
@@ -56,8 +62,6 @@ function getSegmentedMembers() {
 
   const all = [...activeMembers.value].sort((a, b) => a.lastName.localeCompare(b.lastName));
 
-  // Build a lookup of memberId -> ministry for the current event attendance so we can
-  // treat DLeaders who served as volunteers in this event as Volunteers in exports.
   const ministryMap = {};
   const curEvtId = currentEvent && currentEvent.value && currentEvent.value.id ? currentEvent.value.id : null;
   if (curEvtId) {
@@ -66,13 +70,9 @@ function getSegmentedMembers() {
     })
   }
 
-  // PRIORITIZE Volunteer flag OR current-event serving role: if a member is currently a volunteer
-  // OR is serving in this event (ministryMap), they should appear under Volunteers.
   const firstTimers = all.filter(m => m.finalTags?.isFirstTimer).map(m => ({ ...m, _servingMinistry: ministryMap[m.id] || null }));
   const volunteers = all.filter(m => !m.finalTags?.isFirstTimer && (m.finalTags?.isVolunteer || !!ministryMap[m.id])).map(m => ({ ...m, _servingMinistry: ministryMap[m.id] || null }));
-  // Leaders who are NOT acting as volunteers for current event
   const leaders = all.filter(m => !m.finalTags?.isFirstTimer && m.finalTags?.isDgroupLeader && !m.finalTags?.isVolunteer && !ministryMap[m.id]).map(m => ({ ...m, _servingMinistry: ministryMap[m.id] || null }));
-  // Regulars: not first-timer, not leader, not volunteer (including current-event serving)
   const regulars = all.filter(m => !m.finalTags?.isFirstTimer && !m.finalTags?.isDgroupLeader && !m.finalTags?.isVolunteer && !ministryMap[m.id]).map(m => ({ ...m, _servingMinistry: ministryMap[m.id] || null }));
 
   return { firstTimers, leaders, volunteers, regulars, all };
@@ -277,8 +277,6 @@ function exportMembersPDF() {
         margin: { left: 15, right: 15 }
       });
 
-      // After the table, add a short interpretation paragraph for this section
-      // Guard against undefined lastAutoTable (older versions or unexpected failures)
       if (doc.lastAutoTable && typeof doc.lastAutoTable.finalY === 'number') {
         y = doc.lastAutoTable.finalY + 6;
       } else {
@@ -299,7 +297,6 @@ function exportMembersPDF() {
           y += 5
         })
         y += 6
-        console.log(`[ExportButton] wrote interpretation for ${title}, next y=${y}`);
       } else {
         y += 9
       }
@@ -310,7 +307,6 @@ function exportMembersPDF() {
     renderSection("Volunteers", volunteers, ['Name', 'Age', 'Age Group', 'Gender', 'Ministry'], m => [`${m.lastName}, ${m.firstName}`, m.age, m.finalTags?.ageCategory || '-', m.gender, m.finalTags?.volunteerMinistry?.join(', ') || '']);
     renderSection("Regular Members", regulars, ['Name', 'Age', 'Age Group', 'Gender', 'Dgroup Leader'], m => [`${m.lastName}, ${m.firstName}`, m.age, m.finalTags?.ageCategory || '-', m.gender, m.dgroupLeader || 'Unassigned']);
 
-    // After all sections, include a concise report summary / interpretation for the whole report
     try {
       if (y > 240) { doc.addPage(); y = 20 }
       doc.setFontSize(12).setFont('helvetica','bold').text('Report Summary', 15, y)
@@ -332,7 +328,6 @@ function exportMembersPDF() {
       lines.push(`B1G members: ${b1gTotal} (${totalMembers?Math.round((b1gTotal/totalMembers)*100):0}%) — M:${globalStats.b1g.male} F:${globalStats.b1g.female}`)
 
       doc.setFontSize(10).setFont('helvetica','normal').setTextColor(60)
-      console.log('[ExportButton] writing summary block', { y, totalMembers, totalFirstTimers, totalLeaders, totalVols, elevateTotal, b1gTotal })
       lines.forEach(line => {
         if (y > 270) { doc.addPage(); y = 20 }
         const wrapped = doc.splitTextToSize(line, 170)
@@ -340,7 +335,6 @@ function exportMembersPDF() {
         y += 4
       })
 
-      // Final overall interpretation
       const overallInterp = `Interpretation: The membership pool shows ${elevateTotal} Elevate and ${b1gTotal} B1G members. First-timer proportion is ${totalMembers?Math.round((totalFirstTimers/totalMembers)*100):0}%, indicating ${ totalFirstTimers>0 ? 'some new engagement' : 'low new engagement' }.`
       if (y > 270) { doc.addPage(); y = 20 }
       const wrappedFinal = doc.splitTextToSize(overallInterp, 170)
@@ -359,8 +353,6 @@ function exportMembersPDF() {
 
 //  3. EVENTS EXPORT LOGIC
 function getEventsData(specificEvent = null) {
-  // if a specific event is passed, export only that event
-  // if `eventsList` prop is provided (custom list from parent), use that list instead
   let services = []
   if (specificEvent) services = [specificEvent]
   else if (props && props.eventsList && Array.isArray(props.eventsList) && props.eventsList.length) services = props.eventsList
@@ -372,8 +364,6 @@ function getEventsData(specificEvent = null) {
     const attendees = (allAttendance.value || []).filter(a => a.eventId === event.id);
     const attendeeDetails = (activeMembers.value || []).filter(m => attendees.some(a => a.memberId === m.id));
 
-    // Volunteers for an event should be derived from the attendance record (ministry field)
-    // so historical volunteer activity isn't lost when someone's profile flag changes later.
     const volunteerCount = attendees.filter(a => a.ministry && a.ministry !== 'N/A').length;
 
     return {
@@ -442,23 +432,18 @@ function exportEventsPDF() {
   }
 }
 
-// 4. PAGE (TSV) EXPORT - serializes visible cards under `.event-comparison-improved`
+// 4. PAGE (TSV) EXPORT
 async function exportPageXLSX() {
   try {
-    // support receiving a ref or a plain object
     const pdata = (pageExportData && pageExportData.value) ? pageExportData.value : (pageExportData || null)
     const cards = pdata && Array.isArray(pdata.cards) ? pdata.cards : null
-    console.log('[ExportButton] exportPageXLSX received pageExportData prop:', pageExportData)
-    console.log('[ExportButton] computed pdata:', pdata, 'cards length:', cards ? cards.length : 0)
 
-    // Try to use exceljs for richer styling and embedded images if available
     try {
       const ExcelJS = (await import('exceljs')).default || (await import('exceljs'))
       const wb = new ExcelJS.Workbook()
       wb.creator = 'App'
       wb.created = new Date()
 
-      // Add a cover sheet
       const cover = wb.addWorksheet('Summary')
       cover.mergeCells('A1', 'E1')
       cover.getCell('A1').value = "Event Comparison Export"
@@ -466,13 +451,11 @@ async function exportPageXLSX() {
       cover.getCell('A1').alignment = { vertical: 'middle', horizontal: 'left' }
       cover.getRow(2).values = ['Generated', new Date().toISOString()]
 
-      // Helper to add card as a worksheet
       const addCardSheet = (card, idx) => {
         const nameBase = card.title ? String(card.title).substring(0, 28) : `Card_${idx+1}`
         const sheetName = wb.getWorksheet(nameBase) ? `${nameBase}_${idx+1}` : nameBase
         const ws = wb.addWorksheet(sheetName)
         let row = 1
-        // Add a top header like other exports
         ws.mergeCells(row, 1, row, 6)
         ws.getCell(`A${row}`).value = 'CHRIST COMMISSION FOUNDATION INC.'
         ws.getCell(`A${row}`).font = { bold: true, size: 14 }
@@ -489,13 +472,11 @@ async function exportPageXLSX() {
         }
 
         if (card.tableHeaders && card.tableRows) {
-          // set headers
           ws.addRow([])
           const headerRow = ws.addRow(card.tableHeaders.map(h => String(h)))
           headerRow.font = { bold: true }
           headerRow.alignment = { horizontal: 'left' }
           headerRow.eachCell(c => { c.fill = { type: 'pattern', pattern:'solid', fgColor:{argb:'FF2196F3'} }; c.font = { color: { argb: 'FFFFFFFF' }, bold: true } })
-          // add data rows
           (card.tableRows || []).forEach(r => {
             if (Array.isArray(r)) ws.addRow(r)
             else if (r && typeof r === 'object') ws.addRow(Object.values(r))
@@ -528,15 +509,12 @@ async function exportPageXLSX() {
           })
           row = ws.lastRow.number + 1
         }
-
-        // simple column width adjustments
         ws.columns = ws.columns.map(c => ({ width: Math.max(15, (c.header && String(c.header).length) || 15) }))
       }
 
       if (cards && cards.length) {
         cards.forEach((c, i) => addCardSheet(c, i))
       } else {
-        // DOM fallback: build sheets from DOM cards
         const root = document.querySelector('.event-comparison-improved')
         if (!root) { alert('No comparison content found to export.'); return }
         const elems = Array.from(root.querySelectorAll('.card'))
@@ -557,35 +535,26 @@ async function exportPageXLSX() {
         })
       }
 
-      // Attempt to capture chart canvases and add to a dedicated 'Charts' sheet
       try {
         const canvases = Array.from(document.querySelectorAll('.event-comparison-improved canvas'))
-        console.log('[ExportButton] found canvases for embedding:', canvases.length)
         if (canvases.length) {
           const imgSheet = wb.addWorksheet('Charts')
           let row = 1
           for (let i = 0; i < canvases.length; i++) {
             try {
               const canvas = canvases[i]
-              // ensure canvas has content (width/height > 0)
-              if (!canvas.width || !canvas.height) { console.warn('[ExportButton] canvas has zero dimension, skipping', i); continue }
+              if (!canvas.width || !canvas.height) continue 
               const dataUrl = canvas.toDataURL('image/png')
-              if (!dataUrl || !dataUrl.startsWith('data:image/png')) { console.warn('[ExportButton] canvas.toDataURL returned invalid dataUrl', i); continue }
+              if (!dataUrl || !dataUrl.startsWith('data:image/png')) continue
               const base64 = dataUrl.split(',')[1]
               const imageId = wb.addImage({ base64, extension: 'png' })
               imgSheet.addImage(imageId, { tl: { col: 0, row: row - 1 }, ext: { width: 480, height: 240 } })
-              console.log('[ExportButton] embedded canvas', i, 'as imageId', imageId)
               row += 15
-            } catch (imgErr) {
-              console.warn('Could not capture chart canvas for Excel image embedding', imgErr)
-            }
+            } catch (imgErr) { }
           }
         }
-      } catch (imgCollectionErr) {
-        console.warn('Chart image collection failed', imgCollectionErr)
-      }
+      } catch (imgCollectionErr) { }
 
-      // write workbook to buffer and trigger download
       const buf = await wb.xlsx.writeBuffer()
       const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
       const fname = `page_export_${new Date().toISOString().split('T')[0]}.xlsx`
@@ -597,14 +566,10 @@ async function exportPageXLSX() {
       link.remove()
       return
     } catch (e) {
-      // exceljs unavailable or failed; fall back to xlsx-js-style implementation below
       console.warn('exceljs not available or failed — falling back to xlsx-js-style', e)
     }
 
-    // Fallback: build nicely formatted workbook with xlsx-js-style
     const wb = XLSX.utils.book_new()
-    const headerStyle = { font: { bold: true, color: { rgb: 'FFFFFFFF' } }, fill: { fgColor: { rgb: '2196F3' } }, alignment: { horizontal: 'center' } }
-
     const appendCardAsSheet = (card, idx) => {
       const rows = []
       if (card.title) rows.push([card.title])
@@ -638,7 +603,6 @@ async function exportPageXLSX() {
 
       const ws = XLSX.utils.aoa_to_sheet(rows)
       let name = card.title ? String(card.title).substring(0, 31) : `Card_${idx + 1}`
-      // ensure unique sheet name
       let uniq = name
       let counter = 1
       while (wb.SheetNames.includes(uniq)) { uniq = (name.substring(0, 28) || 'Card') + `_${counter++}` }
@@ -652,7 +616,7 @@ async function exportPageXLSX() {
       if (!root) { alert('No comparison content found to export.'); return }
       const elems = Array.from(root.querySelectorAll('.card'))
       elems.forEach((el, i) => {
-        const title = el.querySelector('h3')?.innerText?.trim() || el.querySelector('h4')?.innerText?.trim() || `Card_${i + 1}`
+        const title = el.querySelector('h3')?.innerText || el.querySelector('h4')?.innerText || `Card_${i + 1}`
         const desc = el.querySelector('.card-desc')?.innerText?.trim() || ''
         const card = { title, desc }
         const table = el.querySelector('table')
@@ -669,7 +633,6 @@ async function exportPageXLSX() {
     }
 
     if (!wb.SheetNames.length) {
-      console.warn('No sheets created for XLSX export (no card data)')
       alert('No exportable data found for the page.')
       return
     }
@@ -685,14 +648,10 @@ function exportPagePDF() {
   try {
     const pdata = (pageExportData && pageExportData.value) ? pageExportData.value : (pageExportData || null)
     const cards = pdata && Array.isArray(pdata.cards) ? pdata.cards : null
-    console.log('[ExportButton] exportPagePDF received pageExportData prop:', pageExportData)
-    console.log('[ExportButton] computed pdata:', pdata, 'cards length:', cards ? cards.length : 0)
     const doc = new jsPDF({ unit: 'mm', format: 'a4' })
-    // 1 inch margin -> 25.4 mm
     const margin = 25.4
     const pageWidth = doc.internal.pageSize.getWidth()
     const pageHeight = doc.internal.pageSize.getHeight()
-    // header area: avoid loading external images (can trigger CORS/file errors)
     doc.setFontSize(14).setFont('helvetica', 'bold').setTextColor(13,71,161)
     doc.text("CHRIST'S COMMISSION FELLOWSHIP", margin, margin)
     doc.setFontSize(10).setFont('helvetica','normal').setTextColor(100)
@@ -748,14 +707,12 @@ function exportPagePDF() {
       if (!cards.length) { alert('No card data available to export.'); return }
       cards.forEach(c => renderCard(c))
     } else {
-      // fallback: simple DOM fallback
       const root = document.querySelector('.event-comparison-improved')
       if (!root) { alert('No content to export.'); return }
       const elems = Array.from(root.querySelectorAll('.card'))
       elems.forEach(el => {
         const title = el.querySelector('h3')?.innerText || el.querySelector('h4')?.innerText || 'Card'
         const desc = el.querySelector('.card-desc')?.innerText || ''
-        // Attempt to capture any Chart.js data from canvases inside this card
         const charts = []
         try {
           const canvases = Array.from(el.querySelectorAll('canvas'))
@@ -769,9 +726,9 @@ function exportPagePDF() {
                 const chart = { title: (chartInstance.options && chartInstance.options.plugins && chartInstance.options.plugins.title && chartInstance.options.plugins.title.text) || '', labels: chartInstance.data.labels || [], datasets: (chartInstance.data.datasets || []).map(ds => ({ label: ds.label || '', raw: ds.data ? ds.data.slice() : (ds._data ? ds._data.slice() : []) })) }
                 charts.push(chart)
               }
-            } catch (cErr) { /* ignore per-canvas errors */ }
+            } catch (cErr) { }
           })
-        } catch (e) { /* no canvases or error */ }
+        } catch (e) { }
 
         renderCard({ title, desc, tableHeaders: null, tableRows: null, charts: charts.length ? charts : null, interpretation: el.querySelector('.interpretation')?.innerText || '' })
       })
@@ -787,7 +744,6 @@ function exportPagePDF() {
 // --- Main Handler ---
 function handleExport(type) {
   showMenu.value = false;
-  // Executing directly to ensure browser doesn't block downloads (sync context preferable)
   if (exportType === 'members') {
     if (type === 'excel') exportMembersExcel();
     else exportMembersPDF();
@@ -810,13 +766,21 @@ function handleExport(type) {
 <template>
   <div class="export-dropdown-wrapper">
     <div v-if="showMenu" class="menu-overlay" @click="showMenu = false" aria-hidden="true"></div>
-      <button class="export-trigger-btn" @click="showMenu = !showMenu" aria-haspopup="true" :aria-expanded="showMenu">
-      <Download :size="16" />
-      Export
-      <ChevronDown :size="14" />
-    </button>
+      
+      <!-- Button Variant Handling -->
+      <button 
+        class="export-trigger-btn" 
+        :class="{ 'on-blue': variant === 'on-blue', 'icon-only': iconOnly }"
+        @click="showMenu = !showMenu" 
+        aria-haspopup="true" 
+        :aria-expanded="showMenu"
+      >
+        <Download :size="iconOnly ? 18 : 16" />
+        <span v-if="!iconOnly">Export</span>
+        <ChevronDown v-if="!iconOnly" :size="14" />
+      </button>
+
       <div v-if="showMenu" class="export-menu" role="menu" aria-label="Export menu">
-        <!-- For page exports show only XLSX and PDF (no other generic items) -->
         <template v-if="exportType === 'page'">
           <button class="menu-item" @click="handleExport('excel')" role="menuitem" aria-label="Export page as XLSX">
             <div class="icon-box excel-icon"><Download :size="14" /></div>
@@ -827,7 +791,6 @@ function handleExport(type) {
             <span>Export page (PDF)</span>
           </button>
         </template>
-        <!-- For members/events keep the existing generic Excel/PDF actions -->
         <template v-else>
           <button class="menu-item" @click="handleExport('excel')" role="menuitem" aria-label="Export to Excel">
             <div class="icon-box excel-icon"><Download :size="14" /></div>
@@ -845,8 +808,48 @@ function handleExport(type) {
 <style scoped>
 .export-dropdown-wrapper { position: relative; display: inline-block; }
 .menu-overlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 90; background: transparent; cursor: default; }
-.export-trigger-btn { position: relative; z-index: 95; background-color: #fff; border: 1px solid #CFD8DC; color: #546E7A; padding: 6px 12px; border-radius: 6px; font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 6px; cursor: pointer; transition: all 0.2s; }
+
+/* Default Button */
+.export-trigger-btn { 
+  position: relative; 
+  z-index: 95; 
+  background-color: #fff; 
+  border: 1px solid #CFD8DC; 
+  color: #546E7A; 
+  padding: 6px 12px; 
+  border-radius: 6px; 
+  font-size: 13px; 
+  font-weight: 600; 
+  display: flex; 
+  align-items: center; 
+  gap: 6px; 
+  cursor: pointer; 
+  transition: all 0.2s; 
+}
 .export-trigger-btn:hover { background-color: #F5F5F5; color: #37474F; border-color: #B0BEC5; }
+
+/* Variant: On Blue Card */
+.export-trigger-btn.on-blue {
+    background-color: #FFFFFF;
+    border: none;
+    color: #37474F; /* Dark Slate to match screenshot text */
+    box-shadow: 0 2px 4px rgba(0,0,0,0.15); /* Subtle shadow for depth */
+}
+.export-trigger-btn.on-blue:hover {
+    background-color: #F5F5F5;
+    color: #263238;
+}
+
+/* Icon Only Mode */
+.export-trigger-btn.icon-only {
+    padding: 6px;
+    width: 32px;
+    height: 32px;
+    justify-content: center;
+    border-radius: 8px;
+    gap: 0;
+}
+
 .export-menu { position: absolute; top: 100%; right: 0; margin-top: 4px; background: white; border: 1px solid #ECEFF1; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); width: 160px; z-index: 100; overflow: hidden; padding: 4px; }
 .menu-item { display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 10px; border: none; background: none; text-align: left; font-size: 13px; color: #37474F; cursor: pointer; border-radius: 4px; transition: background 0.1s; }
 .menu-item:hover { background-color: #E3F2FD; color: #1565C0; }
