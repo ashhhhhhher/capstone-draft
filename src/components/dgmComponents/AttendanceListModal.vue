@@ -86,7 +86,11 @@ function aggregatesForEvent(event) {
     const elevate = memberList.filter(m => m.finalTags?.ageCategory === 'Elevate').length;
     const b1g = memberList.filter(m => m.finalTags?.ageCategory === 'B1G').length;
     const firstTimers = memberList.filter(m => m.finalTags?.isFirstTimer).length;
-    const volunteers = memberList.filter(m => m.finalTags?.isVolunteer).length;
+    // Determine volunteers for this specific event by checking the attendance records (recs)
+    const volunteers = memberList.filter(m => {
+      const rec = recs.find(r => r.memberId === m.id);
+      return rec && rec.ministry && rec.ministry !== 'N/A';
+    }).length;
     return { id: event.id, name: event.name || event.title || 'N/A', date: event.date || '', total, elevate, b1g, firstTimers, volunteers };
   } catch (err) {
     return { id: event.id || null, name: event.name || event.title || 'N/A', date: event.date || '', total: 0, elevate: 0, b1g: 0, firstTimers: 0, volunteers: 0 };
@@ -135,10 +139,16 @@ function sortByName(list) {
 function exportToExcel() {
   console.log('[AttendanceListModal] exportToExcel called', { eventName: eventName.value, attendees: (attendees && attendees.value) ? attendees.value.length : 0 })
   const source = attendees.value;
+  // Classify attendees using attendanceMinistry (per-event) first — this lets DLeaders who served as
+  // volunteers appear under Volunteers for this export. Fall back to profile flags if ministry is absent.
   const firstTimers = sortByName(source.filter(m => m.finalTags?.isFirstTimer));
-  const volunteers = sortByName(source.filter(m => !m.finalTags?.isFirstTimer && (m.attendanceMinistry && m.attendanceMinistry !== 'N/A' || m.finalTags?.isVolunteer)));
+  // Volunteers sheet: include only members who actually served in this event (attendanceMinistry set)
+  const volunteers = sortByName(source.filter(m => !m.finalTags?.isFirstTimer && (m.attendanceMinistry && m.attendanceMinistry !== 'N/A')));
+  // DLeaders sheet: include all dgroup leaders so leaders who served still appear on the DLeaders sheet
   const leaders = sortByName(source.filter(m => !m.finalTags?.isFirstTimer && m.finalTags?.isDgroupLeader));
-  const regulars = source.filter(m => !m.finalTags?.isFirstTimer && !m.finalTags?.isDgroupLeader && !(m.attendanceMinistry && m.attendanceMinistry !== 'N/A') && !m.finalTags?.isVolunteer);
+  // Regulars: attendees who did not serve in a volunteer ministry for this event.
+  // Include profile-tagged volunteers if they attended as regulars (no attendanceMinistry set).
+  const regulars = source.filter(m => !m.finalTags?.isFirstTimer && !m.finalTags?.isDgroupLeader && !(m.attendanceMinistry && m.attendanceMinistry !== 'N/A'));
   
   const elevateMales = sortByName(regulars.filter(m => m.gender === 'Male' && m.finalTags?.ageCategory === 'Elevate'));
   const elevateFemales = sortByName(regulars.filter(m => m.gender === 'Female' && m.finalTags?.ageCategory === 'Elevate'));
@@ -414,8 +424,8 @@ function exportToExcel() {
         elevate: source.filter(m => m.finalTags?.ageCategory === 'Elevate').length,
         b1g: source.filter(m => m.finalTags?.ageCategory === 'B1G').length,
         firstTimers: source.filter(m => m.finalTags?.isFirstTimer).length,
-        // Count volunteers by attendanceMinistry OR profile flag so the export summary matches sheets
-        volunteers: source.filter(m => (m.attendanceMinistry && m.attendanceMinistry !== 'N/A') || m.finalTags?.isVolunteer).length
+        // Count volunteers by attendanceMinistry only (members who actually served in this event)
+        volunteers: source.filter(m => (m.attendanceMinistry && m.attendanceMinistry !== 'N/A')).length
       }
       payload.current = Object.assign({}, payload.current || {}, currentAggregates)
       // Replace previous with the three events immediately before current (exclude current)
@@ -608,7 +618,8 @@ try {
         elevate: src.filter(m => m.finalTags?.ageCategory === 'Elevate').length,
         b1g: src.filter(m => m.finalTags?.ageCategory === 'B1G').length,
         firstTimers: src.filter(m => m.finalTags?.isFirstTimer).length,
-        volunteers: src.filter(m => m.finalTags?.isVolunteer).length
+        // Count volunteers as those who actually served in this event (attendanceMinistry set)
+        volunteers: src.filter(m => (m.attendanceMinistry && m.attendanceMinistry !== 'N/A')).length
       }
       payloadFinal.current = Object.assign({}, payloadFinal.current || {}, currentAggregates)
       // Replace previous with the three events immediately before current (exclude current)
@@ -674,7 +685,8 @@ try {
         elevate: src.filter(m => m.finalTags?.ageCategory === 'Elevate').length,
         b1g: src.filter(m => m.finalTags?.ageCategory === 'B1G').length,
         firstTimers: src.filter(m => m.finalTags?.isFirstTimer).length,
-        volunteers: src.filter(m => m.finalTags?.isVolunteer).length
+        // Count volunteers as those who actually served in this event (attendanceMinistry set)
+        volunteers: src.filter(m => (m.attendanceMinistry && m.attendanceMinistry !== 'N/A')).length
       }
       payload.current = Object.assign({}, payload.current || {}, currentAggregates)
       // Replace previous with the three events immediately before current (exclude current)
@@ -837,12 +849,15 @@ try {
 
   const firstTimers = sortByName(data.filter(m => m.finalTags?.isFirstTimer));
   const leaders = sortByName(data.filter(m => !m.finalTags?.isFirstTimer && m.finalTags?.isDgroupLeader));
-  const volunteers = sortByName(data.filter(m => !m.finalTags?.isFirstTimer && m.finalTags?.isVolunteer));
+  // For PDF: include only members who actually served in this event (attendanceMinistry set)
+  const volunteers = sortByName(data.filter(m => !m.finalTags?.isFirstTimer && (m.attendanceMinistry && m.attendanceMinistry !== 'N/A')));
 
+  // For PDF regulars: include attendees who did not serve (no attendanceMinistry),
+  // this will include profile-tagged volunteers who attended as regulars.
   const regulars = data.filter(m =>
     !m.finalTags?.isFirstTimer &&
     !m.finalTags?.isDgroupLeader &&
-    !m.finalTags?.isVolunteer
+    !(m.attendanceMinistry && m.attendanceMinistry !== 'N/A')
   );
 
   const b1gMale = sortByName(regulars.filter(m => m.finalTags?.ageCategory === 'B1G' && m.gender === 'Male'));
