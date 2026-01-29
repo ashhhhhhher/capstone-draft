@@ -13,7 +13,9 @@ import {
   serverTimestamp,
   query,
   where,
-  orderBy
+  orderBy,
+  limit,
+  deleteDoc
 } from 'firebase/firestore'
 import { useAuthStore } from './auth'
 import { useMembersStore } from './members'
@@ -25,8 +27,14 @@ export const useAttendanceStore = defineStore('attendance', () => {
   const allAttendance = ref([])
   const dgroupMeetings = ref([]) 
   const isLoading = ref(false)
+  
+  // New States
+  const speakersList = ref([]) // Master list for the dropdown
+  const currentGroupHasLogged = ref(false) // UI Locking state
+  
   let allAttendanceUnsub = null
   let dgroupMeetingsUnsub = null
+  let speakersUnsub = null
 
   // --- Helpers ---
   const getEventAttendanceCollection = (eventId) => {
@@ -38,8 +46,94 @@ export const useAttendanceStore = defineStore('attendance', () => {
   // --- Actions ---
 
   /**
-   * NEW/UPDATED: Fetch attendance records by date
-   * This is what the DGroup Weekly Log uses to auto-check members
+   * SPEAKER MANAGEMENT
+   */
+  function fetchSpeakers() {
+    const authStore = useAuthStore()
+    if (!authStore.branchId) return
+    if (speakersUnsub) speakersUnsub()
+
+    const speakersCol = collection(db, 'branches', authStore.branchId, 'speakers')
+    const q = query(speakersCol, orderBy('name', 'asc'))
+
+    speakersUnsub = onSnapshot(q, (snapshot) => {
+      speakersList.value = snapshot.docs.map(d => ({ id: d.id, ...d.data() }))
+    })
+  }
+
+  async function addNewSpeaker(name) {
+    const authStore = useAuthStore()
+    if (!authStore.branchId || !name) return
+    try {
+      const speakerRef = doc(collection(db, 'branches', authStore.branchId, 'speakers'))
+      await setDoc(speakerRef, { name: name.trim() })
+    } catch (error) {
+      console.error("Error saving new speaker:", error)
+    }
+  }
+
+  async function deleteSpeaker(id) {
+    const authStore = useAuthStore()
+    try {
+      await deleteDoc(doc(db, 'branches', authStore.branchId, 'speakers', id))
+    } catch (error) {
+      console.error("Error deleting speaker:", error)
+    }
+  }
+
+  /**
+   * WEEKLY LOCKING LOGIC
+   */
+  async function checkIfLogged(dgroupId, ministryWeekKey) {
+    const authStore = useAuthStore()
+    if (!authStore.branchId || !dgroupId) return false
+
+    try {
+      const q = query(
+        collection(db, 'branches', authStore.branchId, 'dgroupAttendance'),
+        where('dgroupId', '==', dgroupId),
+        where('ministryWeek', '==', ministryWeekKey),
+        limit(1)
+      )
+      const snapshot = await getDocs(q)
+      const exists = !snapshot.empty
+      currentGroupHasLogged.value = exists
+      return exists
+    } catch (error) {
+      console.error("Error checking weekly log status:", error)
+      return false
+    }
+  }
+
+  /**
+   * Log Weekly DGroup Meeting
+   */
+  async function logDgroupMeeting(meetingData) {
+    const authStore = useAuthStore()
+    if (!authStore.branchId) return { status: 'error', message: 'Branch ID missing' }
+
+    try {
+      // Use ministryWeek in ID to prevent accidental double-logging
+      const docId = `${meetingData.dgroupId}_${meetingData.ministryWeek || meetingData.meetingDate}`
+      const meetingRef = doc(db, 'branches', authStore.branchId, 'dgroupAttendance', docId)
+
+      await setDoc(meetingRef, {
+        ...meetingData,
+        submittedAt: serverTimestamp(),
+        submittedBy: `${authStore.userProfile?.firstName || ''} ${authStore.userProfile?.lastName || ''}`.trim(),
+        submittedById: authStore.userProfile?.id || 'unknown'
+      })
+
+      currentGroupHasLogged.value = true // Lock the UI immediately
+      return { status: 'success', message: 'DGroup attendance recorded.' }
+    } catch (error) {
+      console.error("DGroup Log Error:", error)
+      return { status: 'error', message: error.message }
+    }
+  }
+
+  /**
+   * Fetch attendance records by date
    */
   async function getAttendanceByDate(dateString) {
     const authStore = useAuthStore()
@@ -55,12 +149,10 @@ export const useAttendanceStore = defineStore('attendance', () => {
       const records = []
       
       snapshot.forEach(docSnap => {
-        const data = docSnap.data()
-        // Filter to ensure we only get records for this branch
         if (docSnap.ref.path.includes(`branches/${authStore.branchId}`)) {
           records.push({
             memberId: docSnap.id, 
-            ...data
+            ...docSnap.data()
           })
         }
       })
@@ -76,113 +168,57 @@ export const useAttendanceStore = defineStore('attendance', () => {
       currentEventAttendees.value = []
       return
     }
-
     isLoading.value = true
-
     const attendanceCol = getEventAttendanceCollection(eventId)
     if (!attendanceCol) return
 
-    onSnapshot(
-      attendanceCol,
-      (snapshot) => {
-        const attendees = []
-        snapshot.forEach((docSnap) => {
-          attendees.push({
-            memberId: docSnap.id,
-            ...docSnap.data()
-          })
-        })
-        currentEventAttendees.value = attendees
-        isLoading.value = false
-      },
-      (error) => {
-        console.error('Attendance fetch error:', error)
-        isLoading.value = false
-      }
-    )
+    onSnapshot(attendanceCol, (snapshot) => {
+      const attendees = []
+      snapshot.forEach((docSnap) => {
+        attendees.push({ memberId: docSnap.id, ...docSnap.data() })
+      })
+      currentEventAttendees.value = attendees
+      isLoading.value = false
+    }, (error) => {
+      console.error('Attendance fetch error:', error)
+      isLoading.value = false
+    })
   }
 
-  /**
-   * Fetch all attendance records for the current branch using a collectionGroup
-   * Listens to all subcollections named 'attendance' and filters by branchId
-   */
   function fetchAllAttendance() {
     const authStore = useAuthStore()
-
     if (!authStore.branchId) {
       allAttendance.value = []
       return Promise.resolve(allAttendance.value)
     }
-
-    // avoid creating multiple listeners
     if (allAttendanceUnsub) return Promise.resolve(allAttendance.value)
-
     isLoading.value = true
 
     return new Promise((resolve, reject) => {
-      allAttendanceUnsub = onSnapshot(
-        collectionGroup(db, 'attendance'),
-        (snapshot) => {
-          const records = []
-          snapshot.forEach((docSnap) => {
-            // path: branches/{branchId}/events/{eventId}/attendance/{memberId}
-            const pathParts = docSnap.ref.path.split('/')
-            // basic guard for expected structure
-            if (pathParts.length >= 6 && pathParts[0] === 'branches') {
-              const branchId = pathParts[1]
-              const eventId = pathParts[3]
-              if (branchId !== authStore.branchId) return
-
-              records.push({
-                eventId,
-                memberId: docSnap.id,
-                ...docSnap.data()
-              })
-            }
-          })
-          allAttendance.value = records
-          isLoading.value = false
-          resolve(allAttendance.value)
-        },
-        (error) => {
-          console.error('All attendance fetch error:', error)
-          isLoading.value = false
-          reject(error)
-        }
-      )
+      allAttendanceUnsub = onSnapshot(collectionGroup(db, 'attendance'), (snapshot) => {
+        const records = []
+        snapshot.forEach((docSnap) => {
+          const pathParts = docSnap.ref.path.split('/')
+          if (pathParts.length >= 6 && pathParts[0] === 'branches') {
+            const branchId = pathParts[1]
+            const eventId = pathParts[3]
+            if (branchId !== authStore.branchId) return
+            records.push({ eventId, memberId: docSnap.id, ...docSnap.data() })
+          }
+        })
+        allAttendance.value = records
+        isLoading.value = false
+        resolve(allAttendance.value)
+      }, (error) => {
+        console.error('All attendance fetch error:', error)
+        isLoading.value = false
+        reject(error)
+      })
     })
   }
-  /**
-   * Log Weekly DGroup Meeting
-   */
-  async function logDgroupMeeting(meetingData) {
-    const authStore = useAuthStore()
-    if (!authStore.branchId) return { status: 'error', message: 'Branch ID missing' }
 
-    try {
-      const docId = `${meetingData.dgroupId}_${meetingData.meetingDate}`
-      const meetingRef = doc(db, 'branches', authStore.branchId, 'dgroupAttendance', docId)
-
-      await setDoc(meetingRef, {
-        ...meetingData,
-        submittedAt: serverTimestamp(),
-        submittedBy: `${authStore.userProfile?.firstName || ''} ${authStore.userProfile?.lastName || ''}`.trim(),
-        submittedById: authStore.userProfile?.id || 'unknown'
-      })
-
-      return { status: 'success', message: 'DGroup attendance recorded.' }
-    } catch (error) {
-      console.error("DGroup Log Error:", error)
-      return { status: 'error', message: error.message }
-    }
-  }
-
-  /**
-   * Mark attendance safely (UPDATED with dateOnly for cross-event querying)
-   */
   async function markAttendance(memberId, eventId, ministry = 'N/A', memberTag = 'DM', name = null) {
     if (!memberId || !eventId) return { status: 'error', message: 'Missing member or event ID' }
-
     const authStore = useAuthStore()
     const today = new Date().toISOString().split('T')[0] 
 
@@ -200,13 +236,12 @@ export const useAttendanceStore = defineStore('attendance', () => {
 
       await setDoc(attendanceRef, {
         timestamp: serverTimestamp(),
-        dateOnly: today, // Crucial for auto-sync
+        dateOnly: today,
         memberTag: memberTag,
         name: resolvedName || 'Unknown',
         checkedInBy: authStore.user?.uid || null,
         ministry: ministry 
       })
-
       return { status: 'success', message: 'Attendance recorded.' }
     } catch (error) {
       console.error('Attendance write error:', error)
@@ -236,9 +271,15 @@ export const useAttendanceStore = defineStore('attendance', () => {
     allAttendance,
     dgroupMeetings,
     isLoading,
+    speakersList,
+    currentGroupHasLogged,
     fetchAttendanceForEvent,
     fetchAllAttendance,
     fetchDgroupMeetings,
+    fetchSpeakers,
+    addNewSpeaker,
+    deleteSpeaker,
+    checkIfLogged,
     getAttendanceByDate, 
     markAttendance,
     logDgroupMeeting,
