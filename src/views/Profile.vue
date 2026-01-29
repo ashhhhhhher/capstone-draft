@@ -32,7 +32,8 @@ onMounted(() => {
 })
 
 const initial = computed(() => {
-  const name = displayName.value || authStore.user?.displayName || ''
+  // Prefer persisted profile displayName first so unsaved edits don't immediately appear in the header/avatar
+  const name = authStore.userProfile?.displayName || authStore.user?.displayName || displayName.value || ''
   return name ? name.charAt(0).toUpperCase() : 'U'
 })
 
@@ -108,7 +109,7 @@ async function handleLogout() {
     <header class="profile-header-card">
       <div class="avatar-section">
         <div class="info-section">
-          <h2 class="user-name">{{ displayName || authStore.user?.displayName || 'Admin' }}</h2>
+          <h2 class="user-name">{{ authStore.userProfile?.displayName || authStore.user?.displayName || displayName || 'Admin' }}</h2>
           <div class="meta-badges">
             <span class="badge">DGM</span>
             <span class="badge">{{ email }}</span>
@@ -241,7 +242,7 @@ async function handleLogout() {
   box-shadow: 0 4px 10px rgba(0,0,0,0.08);
 }
 
-.user-name { margin: 0; font-size: 20px; color: #333 }
+.user-name { margin: 0; font-size: 20px; color: #333; justify-self: center; }
 .meta-badges { display:flex; gap:8px; margin-top:6px; }
 .badge { background:#F5F5F5; color:#616161; font-size:12px; padding:4px 10px; border-radius:12px; font-weight:600 }
 

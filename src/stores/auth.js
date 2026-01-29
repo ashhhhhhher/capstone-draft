@@ -7,6 +7,10 @@ import {
   onAuthStateChanged,
   createUserWithEmailAndPassword,
   updateProfile,
+  updateEmail,
+  reauthenticateWithCredential,
+  EmailAuthProvider,
+  updatePassword,
 } from "firebase/auth";
 import { 
   doc, 
@@ -246,6 +250,48 @@ export const useAuthStore = defineStore('auth', () => {
   console.warn("No profile found for user:", uid);
 }
 
+  // --- ADMIN PROFILE & PASSWORD UPDATES ---
+  async function updateAdminProfile(currentPassword, newDisplayName, newEmail) {
+    if (!auth.currentUser) throw new Error('No authenticated user')
+
+    // Reauthenticate
+    const credential = EmailAuthProvider.credential(auth.currentUser.email, currentPassword)
+    await reauthenticateWithCredential(auth.currentUser, credential)
+
+    // Update Firebase Auth profile (displayName / email)
+    if (newDisplayName && newDisplayName !== auth.currentUser.displayName) {
+      await updateProfile(auth.currentUser, { displayName: newDisplayName })
+    }
+    if (newEmail && newEmail !== auth.currentUser.email) {
+      await updateEmail(auth.currentUser, newEmail)
+    }
+
+    // Update Firestore admin doc (dgms)
+    const branch = branchId.value || 'baguio'
+    const dgmRef = doc(db, "branches", branch, "dgms", auth.currentUser.uid)
+    const updates = {}
+    if (newDisplayName) updates.displayName = newDisplayName
+    if (newEmail) updates.email = newEmail
+    if (Object.keys(updates).length) {
+      await updateDoc(dgmRef, updates)
+      // Refresh local profile
+      userProfile.value = { ...userProfile.value, ...updates }
+    }
+    // Also refresh the local user object
+    user.value = auth.currentUser
+  }
+
+  async function updateAdminPassword(currentPassword, newPassword) {
+    if (!auth.currentUser) throw new Error('No authenticated user')
+
+    // Reauthenticate
+    const credential = EmailAuthProvider.credential(auth.currentUser.email, currentPassword)
+    await reauthenticateWithCredential(auth.currentUser, credential)
+
+    // Update password
+    await updatePassword(auth.currentUser, newPassword)
+  }
+
 
   function toTitleCase(str) {
     if (!str) return '';
@@ -264,6 +310,8 @@ export const useAuthStore = defineStore('auth', () => {
     init,
     signup,
     updateExtendedProfile,
-    fetchMemberProfile
+    fetchMemberProfile,
+    updateAdminProfile,
+    updateAdminPassword
   }
 })
