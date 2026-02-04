@@ -7,6 +7,7 @@ import {
   User, Users, ChevronRight, Plus, X, AlertCircle, 
   ArrowLeft, UserMinus, HelpCircle, Pencil, ClipboardCheck 
 } from 'lucide-vue-next'
+import DgroupOverview from '../components/memberComponents/DgroupOverview.vue' 
 
 const authStore = useAuthStore()
 const membersStore = useMembersStore()
@@ -248,6 +249,7 @@ async function saveGroupDetails() {
   <div class="dgroup-view">
     
     <div v-if="showSeekerQuestionnaire" class="seeker-prompt">
+      <DgroupOverview />
       <div class="icon-circle">
         <HelpCircle :size="32" color="#1976D2" />
       </div>
@@ -480,20 +482,16 @@ async function saveGroupDetails() {
 
 <style scoped>
 .dgroup-view { padding-top: 10px; }
-
 .tabs { display: flex; background: #E3F2FD; padding: 4px; border-radius: 12px; margin-bottom: 20px; }
 .tabs button { flex: 1; padding: 10px; border: none; background: transparent; border-radius: 8px; font-weight: 600; color: #546E7A; cursor: pointer; transition: all 0.2s; }
 .tabs button.active { background: white; color: #1976D2; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
-
 .leader-card { background: white; padding: 20px; border-radius: 16px; display: flex; align-items: center; gap: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); margin-bottom: 24px; transition: transform 0.2s; }
 .leader-card.clickable { cursor: pointer; }
 .leader-card.clickable:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
 .missing-info-text { font-size: 11px; color: #B0BEC5; font-style: italic; }
-
 .avatar-ring { width: 60px; height: 60px; border-radius: 50%; border: 2px solid #1976D2; display: flex; align-items: center; justify-content: center; background: #E3F2FD; }
 .leader-info .label { font-size: 11px; text-transform: uppercase; color: #78909C; font-weight: 700; }
 .leader-info h3 { margin: 4px 0 0 0; font-size: 18px; color: #263238; }
-
 .members-list h4 { color: #546E7A; margin-bottom: 12px; }
 .member-row { background: white; padding: 12px; border-bottom: 1px solid #ECEFF1; display: flex; align-items: center; gap: 12px; transition: background 0.2s; }
 .member-row:first-of-type { border-radius: 12px 12px 0 0; }
@@ -505,31 +503,24 @@ async function saveGroupDetails() {
 .member-name-col { display: flex; flex-direction: column; flex: 1; }
 .member-name-col .name { font-weight: 600; color: #37474F; font-size: 14px; }
 .member-name-col .status-sub { font-size: 11px; color: #90A4AE; text-transform: capitalize; }
-
 .icon-btn { background: transparent; border: none; cursor: pointer; padding: 8px; border-radius: 8px; transition: background 0.2s; display: flex; align-items: center; justify-content: center; }
 .icon-btn.remove { color: #B0BEC5; }
 .icon-btn.remove:hover { background: #FFEBEE; color: #D32F2F; }
-
 .groups-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
 .create-btn { background: #E3F2FD; color: #1976D2; border: none; padding: 8px 12px; border-radius: 8px; display: flex; align-items: center; gap: 4px; font-size: 13px; font-weight: 600; cursor: pointer; }
-
 .group-card { background: white; padding: 16px; border-radius: 12px; display: flex; align-items: center; gap: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); margin-bottom: 12px; cursor: pointer; border: 1px solid transparent; transition: all 0.2s; }
 .group-icon { width: 48px; height: 48px; background: linear-gradient(135deg, #42A5F5, #1976D2); border-radius: 10px; display: flex; align-items: center; justify-content: center; }
 .group-info { flex: 1; }
 .group-info h4 { margin: 0 0 4px 0; color: #263238; font-size: 15px; }
 .group-info p { margin: 0; font-size: 12px; color: #78909C; }
-
 .drill-header { display: flex; align-items: center; gap: 16px; margin-bottom: 20px; }
 .back-btn { background: #ECEFF1; border: none; width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; color: #546E7A; transition: background 0.2s; }
 .back-btn:hover { background: #CFD8DC; }
 .drill-header h3 { margin: 0; font-size: 18px; color: #263238; }
 .drill-header .subtitle { font-size: 12px; color: #78909C; }
-
 .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 100; display: flex; align-items: center; justify-content: center; }
 .person-overlay { z-index: 200; }
-
 .modal { background: white; width: 90%; max-width: 400px; padding: 24px; border-radius: 16px; position: relative; }
-
 .create-modal { padding-top: 20px; }
 .form-group { margin-bottom: 16px; }
 .form-group label { display: block; font-size: 12px; font-weight: 600; color: #546E7A; margin-bottom: 6px; }
@@ -541,7 +532,6 @@ async function saveGroupDetails() {
 .confirm { background: #1976D2; color: white; }
 .cancel { background: #ECEFF1; color: #333; }
 .empty-members { text-align: center; color: #B0BEC5; padding: 30px 20px; display: flex; flex-direction: column; align-items: center; gap: 10px; font-size: 13px; }
-
 .profile-modal { text-align: center; padding-top: 40px; }
 .close-icon-btn { position: absolute; top: 16px; right: 16px; background: none; border: none; cursor: pointer; color: #90A4AE; }
 .profile-header { margin-bottom: 24px; display: flex; flex-direction: column; align-items: center; }
@@ -553,7 +543,6 @@ async function saveGroupDetails() {
 .detail-row .label { color: #78909C; font-size: 13px; font-weight: 500; }
 .detail-row .value { color: #37474F; font-size: 14px; font-weight: 600; }
 .link-color { color: #1976D2; text-decoration: underline; }
-
 .seeker-prompt { background: white; padding: 30px 20px; border-radius: 16px; text-align: center; box-shadow: 0 4px 12px rgba(0,0,0,0.05); margin-top: 20px; }
 .icon-circle { width: 60px; height: 60px; background: #E3F2FD; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 16px; }
 .seeker-prompt h3 { margin: 0 0 8px; color: #1976D2; font-size: 20px; }
@@ -565,61 +554,23 @@ async function saveGroupDetails() {
 .btn-action.primary { background: #1976D2; color: white; }
 .btn-action.secondary { background: white; border: 1px solid #CFD8DC; color: #37474F; }
 .btn-action.text-only { background: transparent; color: #78909C; margin-top: 4px; }
-
 .modal-desc { color: #546E7A; font-size: 14px; margin-bottom: 20px; margin-top: -10px; }
 .status-msg { margin-top: 10px; padding: 10px; border-radius: 8px; font-size: 13px; text-align: center; }
 .status-msg.error { background: #FFEBEE; color: #D32F2F; }
 .status-msg.success { background: #E8F5E9; color: #2E7D32; }
 .disabled-input { background: #e0e0e0; color: #757575; border-color: #bdbdbd; cursor: not-allowed; }
-
-/* Existing Attendance Edits */
 .attendance-item { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid #ECEFF1; }
 .attendance-item .member-name { flex: 1; font-weight: 600; color: #37474F; font-size: 14px; }
 .status-select { padding: 4px 8px; border-radius: 6px; border: 1px solid #CFD8DC; font-size: 12px; font-weight: 700; color: #1976D2; background: white; }
 .status-select:disabled { opacity: 0.5; cursor: not-allowed; }
-
 .group-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 20px; background: #F5F7FA; padding: 12px; border-radius: 12px; border: 1px solid #ECEFF1; }
 .stat-input { display: flex; flex-direction: column; align-items: center; gap: 4px; }
 .stat-input label { font-size: 10px; font-weight: 800; color: #78909C; text-transform: uppercase; text-align: center; }
 .stat-input input { width: 100%; text-align: center; padding: 8px; border: 1px solid #CFD8DC; border-radius: 8px; font-size: 15px; font-weight: 700; }
-
-/* NEW REFINED ATTENDANCE CSS */
-.attendance-scroll-modal { 
-  max-height: 90vh; 
-  display: flex; 
-  flex-direction: column; 
-  overflow: hidden; 
-}
-
-.attendance-checklist-updated { 
-  flex: 1; 
-  overflow-y: auto; 
-  margin: 10px 0; 
-  padding-right: 4px; 
-}
-
-.section-label { 
-  display: block; 
-  font-size: 11px; 
-  font-weight: 800; 
-  color: #90A4AE; 
-  text-transform: uppercase; 
-  margin: 15px 0 5px; 
-  border-bottom: 1px solid #ECEFF1; 
-  padding-bottom: 4px; 
-}
-
-.member-info-stack { 
-  display: flex; 
-  flex-direction: column; 
-}
-
-.attendance-checklist-updated::-webkit-scrollbar { 
-  width: 4px; 
-}
-
-.attendance-checklist-updated::-webkit-scrollbar-thumb { 
-  background: #CFD8DC; 
-  border-radius: 10px; 
-}
+.attendance-scroll-modal { max-height: 90vh; display: flex; flex-direction: column; overflow: hidden; }
+.attendance-checklist-updated { flex: 1; overflow-y: auto; margin: 10px 0; padding-right: 4px; }
+.section-label { display: block; font-size: 11px; font-weight: 800; color: #90A4AE; text-transform: uppercase; margin: 15px 0 5px; border-bottom: 1px solid #ECEFF1; padding-bottom: 4px; }
+.member-info-stack { display: flex; flex-direction: column; }
+.attendance-checklist-updated::-webkit-scrollbar { width: 4px; }
+.attendance-checklist-updated::-webkit-scrollbar-thumb { background: #CFD8DC; border-radius: 10px; }
 </style>

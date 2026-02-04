@@ -193,8 +193,6 @@ function formatShortDate(dateStr) {
 
 <style scoped>
 .home-view { display: flex; flex-direction: column; gap: 24px; }
-
-/* Quick Actions */
 .quick-actions { display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 12px; }
 .action-card { background: white; padding: 16px; border-radius: 16px; display: flex; flex-direction: column; align-items: center; gap: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); cursor: pointer; transition: transform 0.1s; }
 .action-card:active { transform: scale(0.98); }
@@ -202,128 +200,34 @@ function formatShortDate(dateStr) {
 .icon-bg.blue { background: #E3F2FD; }
 .icon-bg.orange { background: #FFF3E0; }
 .action-card span { font-size: 12px; font-weight: 600; color: #455A64; }
-
-/* Today Card */
-.today-card {
-  background: linear-gradient(135deg, #1565C0, #1976D2);
-  color: white;
-  border-radius: 20px;
-  box-shadow: 0 4px 15px rgba(25, 118, 210, 0.3);
-  position: relative;
-  overflow: hidden;
-  min-height: 140px;
-  background-size: cover;
-  background-position: center;
-  cursor: pointer;
-}
-.today-card.has-bg .today-overlay {
-  background: linear-gradient(to right, rgba(0,0,0,0.7), rgba(0,0,0,0.3));
-}
-.today-overlay {
-  padding: 20px;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-}
+.today-card { background: linear-gradient(135deg, #1565C0, #1976D2); color: white; border-radius: 20px; box-shadow: 0 4px 15px rgba(25, 118, 210, 0.3); position: relative; overflow: hidden; min-height: 140px; background-size: cover; background-position: center; cursor: pointer; }
+.today-card.has-bg .today-overlay { background: linear-gradient(to right, rgba(0,0,0,0.7), rgba(0,0,0,0.3)); }
+.today-overlay { padding: 20px; height: 100%; display: flex; flex-direction: column; justify-content: center; }
 .today-card.empty { background: white; color: #455A64; border: 1px solid #ECEFF1; box-shadow: none; padding: 20px; cursor: default; }
 .badge { background: rgba(255,255,255,0.2); font-size: 10px; font-weight: 700; padding: 4px 8px; border-radius: 4px; display: inline-block; margin-bottom: 8px; width: fit-content; }
 .today-card h3 { margin: 0 0 10px 0; font-size: 20px; }
 .event-meta { display: flex; gap: 15px; font-size: 13px; opacity: 0.9; }
 .meta-item { display: flex; align-items: center; gap: 6px; }
-
-/* UPCOMING EVENTS SCROLL CONTAINER */
 .section-header h3 { font-size: 18px; color: #37474F; margin: 0 0 12px 0; }
-.events-scroll-container {
-  display: flex;
-  flex-direction: column;
-  overflow-y: auto;
-  gap: 12px;
-  padding-bottom: 10px; /* Space for scrollbar */
-  -webkit-overflow-scrolling: touch;
-}
-
-@media (min-width: 900px) {
-  .upcoming { flex-direction: row; }
-}
-.upcoming-card-wrapper {
-  flex: 0 0 100%; /* Fixed width for cards */
-}
-.upcoming-card {
-  height: 120px;
-  border-radius: 16px;
-  background-color: #CFD8DC; /* Fallback color */
-  background-size: cover;
-  background-position: center;
-  position: relative;
-  overflow: hidden;
-  box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-  cursor: pointer;
-}
-.card-overlay {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  background: linear-gradient(to top, rgba(0,0,0,0.8), transparent);
-  padding: 12px;
-  color: white;
-  height: 50%;
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-end;
-}
+.events-scroll-container { display: flex; flex-direction: column; overflow-y: auto; gap: 12px; padding-bottom: 10px; -webkit-overflow-scrolling: touch; }
+@media (min-width: 900px) { .upcoming { flex-direction: row; } }
+.upcoming-card-wrapper { flex: 0 0 100%; }
+.upcoming-card { height: 120px; border-radius: 16px; background-color: #CFD8DC; background-size: cover; background-position: center; position: relative; overflow: hidden; box-shadow: 0 4px 8px rgba(0,0,0,0.1); cursor: pointer; }
+.card-overlay { position: absolute; bottom: 0; left: 0; right: 0; background: linear-gradient(to top, rgba(0,0,0,0.8), transparent); padding: 12px; color: white; height: 50%; display: flex; flex-direction: column; justify-content: flex-end; }
 .card-date { font-size: 10px; font-weight: 700; color: #64B5F6; text-transform: uppercase; display: block; margin-bottom: 2px; }
 .card-title { margin: 0 0 4px 0; font-size: 14px; line-height: 1.2; font-weight: 600; }
 .card-type { font-size: 10px; color: #B0BEC5; display: flex; align-items: center; gap: 4px; }
 .empty-text { color: #90A4AE; font-style: italic; font-size: 13px; }
-
-/* EVENT MODAL */
 .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 200; display: flex; align-items: center; justify-content: center; }
 .event-modal { background: white; width: 90%; max-width: 400px; border-radius: 20px; overflow: hidden; position: relative; max-height: 90vh; overflow-y: auto; }
-
-.modal-hero {
-  height: 180px;
-  background-color: #1565C0;
-  background-size: cover;
-  background-position: center;
-  position: relative;
-}
-.modal-hero.no-img {
-  background: linear-gradient(135deg, #1565C0, #1976D2);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.modal-hero.no-img::after {
-  content: "WKND";
-  font-weight: 900;
-  font-size: 40px;
-  color: rgba(255,255,255,0.2);
-}
-
-.close-icon-btn {
-  position: absolute;
-  top: 16px;
-  right: 16px;
-  background: rgba(0,0,0,0.3);
-  border: none;
-  border-radius: 50%;
-  width: 32px;
-  height: 32px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: white;
-  cursor: pointer;
-  backdrop-filter: blur(4px);
-}
-
+.modal-hero { height: 180px; background-color: #1565C0; background-size: cover; background-position: center; position: relative; }
+.modal-hero.no-img { background: linear-gradient(135deg, #1565C0, #1976D2); display: flex; align-items: center; justify-content: center; }
+.modal-hero.no-img::after { content: "WKND"; font-weight: 900; font-size: 40px; color: rgba(255,255,255,0.2); }
+.close-icon-btn { position: absolute; top: 16px; right: 16px; background: rgba(0,0,0,0.3); border: none; border-radius: 50%; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; color: white; cursor: pointer; backdrop-filter: blur(4px); }
 .modal-content { padding: 24px; }
 .modal-header-text { margin-bottom: 20px; }
 .modal-date { color: #1976D2; font-weight: 700; font-size: 12px; text-transform: uppercase; letter-spacing: 1px; }
 .modal-header-text h2 { margin: 4px 0 0 0; font-size: 24px; color: #263238; line-height: 1.2; }
-
 .modal-details { display: flex; flex-direction: column; gap: 16px; }
 .detail-row { display: flex; gap: 12px; align-items: flex-start; }
 .icon { color: #90A4AE; margin-top: 2px; flex-shrink: 0; }

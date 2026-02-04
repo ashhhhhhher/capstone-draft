@@ -538,7 +538,7 @@ async function handleEndCurrentEvent() {
 <style scoped>
 .dashboard-container { padding: 0 20px 20px 20px; max-width: 100%; box-sizing: border-box; display: flex; flex-direction: column; }
 .dashboard-header { margin-bottom: 20px; display: flex; gap: 16px; }
-.total-attendance-card { flex-grow: 1; background: white; border-radius: 12px; padding: 24px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05); cursor: hand; transition: all 0.2s ease; border: 2px solid transparent; text-align: center; }
+.total-attendance-card { flex-grow: 1; background: white; border-radius: 12px; padding: 24px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05); cursor: pointer; transition: all 0.2s ease; border: 2px solid transparent; text-align: center; }
 .total-attendance-card:hover { transform: translateY(-2px); box-shadow: 0 6px 16px rgba(0, 0, 0, 0.08); border-color: #1976D2; }
 .total-attendance { font-size: 20px; color: #37474F; }
 .total-attendance strong { color: #0D47A1; font-weight: 700; font-size: 24px; }
