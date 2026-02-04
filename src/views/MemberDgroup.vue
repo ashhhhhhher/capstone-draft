@@ -253,20 +253,20 @@ async function saveGroupDetails() {
       <div class="icon-circle">
         <HelpCircle :size="32" color="#1976D2" />
       </div>
-      <h3>Looking for a Dgroup?</h3>
+      <h3>Want to join a Dgroup?</h3>
       <p>It looks like you aren't part of a Discipleship Group yet.</p>
       
       <div class="question-box">
         <p class="question">How would you like to proceed?</p>
         <div class="seeker-actions">
           <button class="btn-action primary" @click="handleSeekerYes">
-            I'm looking for a group
+            I want to be part of a Dgroup
           </button>
           <button class="btn-action secondary" @click="showJoinByIdModal = true">
-            I have a Dgroup ID
+            Join by Dgroup ID
           </button>
           <button class="btn-action text-only" @click="handleSeekerNo">
-            Not right now
+        <!--Not right now-->
           </button>
         </div>
       </div>
