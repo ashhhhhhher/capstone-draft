@@ -4,6 +4,7 @@ import { RouterLink, useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { getAuth, sendEmailVerification, signOut } from "firebase/auth"
 import { Eye, EyeOff } from 'lucide-vue-next'
+import Modal from '../components/dgmComponents/Modal.vue'
 
 const authStore = useAuthStore()
 const router = useRouter()
@@ -21,6 +22,12 @@ const password = ref('')
 const confirmPassword = ref('')
 const selectedBranch = ref('baguio') 
 
+// Terms & Privacy state
+const agreed = ref(false)
+const showTermsModal = ref(false)
+const showPrivacyModal = ref(false)
+const tcError = ref('')
+
 // Personal Info
 const firstName = ref('')
 const lastName = ref('')
@@ -29,7 +36,13 @@ const gender = ref('')
 
 async function handleSignup() {
   errorMessage.value = ''
+  tcError.value = ''
   
+  if (!agreed.value) {
+    tcError.value = 'You must agree to the Terms and Conditions and Privacy Policy.'
+    return
+  }
+
   if (password.value !== confirmPassword.value) {
     errorMessage.value = "Passwords do not match."
     return
@@ -79,6 +92,10 @@ async function handleSignup() {
       errorMessage.value = 'An unexpected error occurred during signup.'
     }
   }
+}
+
+function clearTcError() {
+  if (tcError.value) tcError.value = ''
 }
 </script>
 
@@ -187,12 +204,137 @@ async function handleSignup() {
           <div v-if="errorMessage" class="message-box error">
             {{ errorMessage }}
           </div>
+                    <!-- Terms & Privacy Agreement (small text like login line) -->
+          <div class="form-group agree-block" style="margin-top:12px; text-align:left;">
+            <div class="agree-row">
+              <input type="checkbox" id="agreeTc" v-model="agreed" @change="clearTcError" />
+              <label for="agreeTc" class="agree-label">I agree to the <a href="#" @click.prevent="showTermsModal = true">Terms and Conditions</a> and <a href="#" @click.prevent="showPrivacyModal = true">Privacy Policy</a></label>
+            </div>
+            <div v-if="tcError" class="message-box error" style="margin-top:10px;">{{ tcError }}</div>
+          </div>
 
-          <button type="submit" class="signup-btn" :disabled="authStore.isLoading">
+          <button type="submit" class="signup-btn" :disabled="authStore.isLoading || !agreed">
             {{ authStore.isLoading ? 'Creating Account...' : 'Sign Up' }}
           </button>
         </form>
         <p class="login-link">Already have an account? <RouterLink to="/login">Login</RouterLink></p>
+        
+        <!-- Terms Modal -->
+        <Modal v-if="showTermsModal" @close="showTermsModal = false" size="xl">
+          <div style="padding:8px 4px;">
+            <h3>Terms and Conditions</h3>
+            <div style="margin-top:8px; color:#546E7A; text-align:left;">
+              <p><strong>Qonnect</strong></p>
+              <p><em>Last Updated: February 04, 2026</em></p>
+              <p>These Terms and Conditions govern the use of the Qonnect application. By creating an account or using the app, you agree to comply with these terms.</p>
+
+              <h4>1. Acceptance of Terms</h4>
+              <p>By accessing or using Qonnect, you confirm that you have read, understood, and agreed to these Terms and Conditions. If you do not agree, you should not use the application.</p>
+
+              <h4>2. Eligibility</h4>
+              <p>Users must provide accurate and complete information during registration. The application is intended for users participating in supported events.</p>
+
+              <h4>3. User Responsibilities</h4>
+              <p>Users agree to:</p>
+              <ul>
+                <li>Provide truthful and accurate information</li>
+                <li>Use the application only for its intended purpose</li>
+                <li>Avoid misuse, unauthorized access, or disruption of the system</li>
+              </ul>
+              <p>Any misuse of the application may result in suspension or termination of access.</p>
+
+              <h4>4. Use of the Application</h4>
+              <p>Qonnect is provided on an “as is” and “as available” basis. While efforts are made to ensure reliability, uninterrupted access and error-free operation are not guaranteed.</p>
+
+              <h4>5. Account Suspension or Termination</h4>
+              <p>The project team reserves the right to suspend or terminate user accounts that violate these Terms or misuse the application.</p>
+
+              <h4>6. Limitation of Liability</h4>
+              <p>As an academic project, Qonnect and its developers are not liable for any direct or indirect damages resulting from the use or inability to use the application.</p>
+
+              <h4>7. Modifications to the Terms</h4>
+              <p>These Terms and Conditions may be updated at any time. Continued use of the application after changes have been made indicates acceptance of the revised terms.</p>
+
+              <h4>8. Governing Principles</h4>
+              <p>These Terms are intended to align with applicable laws and regulations, including relevant data privacy standards in the Philippines.</p>
+
+              <h4>9. Contact Information</h4>
+              <p>For questions regarding these Terms and Conditions, please contact:</p>
+              <p><strong>Qonnect Project Team</strong><br>Email: qonnect@gmail.com</p>
+            </div>
+          </div>
+        </Modal>
+
+        <!-- Privacy Modal -->
+        <Modal v-if="showPrivacyModal" @close="showPrivacyModal = false" size="xl">
+          <div style="padding:8px 4px;">
+            <h3>Privacy Policy</h3>
+            <div style="margin-top:8px; color:#546E7A; text-align:left;">
+              <p><strong>Qonnect</strong></p>
+              <p><em>Last Updated: February 04, 2026</em></p>
+              <p>Qonnect values your privacy and is committed to protecting your personal information. This Privacy Policy explains how information is collected, used, stored, and protected when you use the Qonnect application.</p>
+
+              <p>Qonnect is an academic project developed for educational purposes and is used to support event coordination and attendance tracking.</p>
+
+              <h4>1. Information We Collect</h4>
+              <p>When you create an account and use the application, we may collect the following information:</p>
+              <h5>a. Account Information</h5>
+              <ul>
+                <li>Full name</li>
+                <li>Email address</li>
+                <li>Birthdate</li>
+                <li>Gender</li>
+                <li>Password (stored securely in encrypted form)</li>
+              </ul>
+              <h5>b. Usage and Event Information</h5>
+              <ul>
+                <li>Event attendance records</li>
+                <li>Event details such as venue, date, and time</li>
+                <li>App usage data related to event participation</li>
+              </ul>
+
+              <h4>2. Purpose of Data Collection</h4>
+              <p>The information collected is used solely for the following purposes:</p>
+              <ul>
+                <li>Creating and managing user accounts</li>
+                <li>Identifying participants for events</li>
+                <li>Tracking event attendance</li>
+                <li>Supporting event coordination and reporting</li>
+                <li>Improving application functionality</li>
+              </ul>
+              <p>Personal data is not collected for commercial or marketing purposes.</p>
+
+              <h4>3. Data Storage and Security</h4>
+              <p>Reasonable technical and organizational measures are implemented to protect personal information against unauthorized access, alteration, disclosure, or destruction. Access to data is limited to authorized individuals involved in the operation of the application.</p>
+
+              <h4>4. Data Sharing and Disclosure</h4>
+              <p>Personal information collected through Qonnect is:</p>
+              <ul>
+                <li>Shared only with authorized event organizers for legitimate event-related purposes</li>
+                <li>Not sold, rented, or shared with third parties for commercial use</li>
+              </ul>
+
+              <h4>5. Data Retention</h4>
+              <p>Personal information is retained only for as long as necessary to fulfill the purposes outlined in this policy or to meet academic and operational requirements. Users may request deletion of their data when it is no longer required.</p>
+
+              <h4>6. User Rights</h4>
+              <p>Users have the right to:</p>
+              <ul>
+                <li>Access their personal data</li>
+                <li>Request corrections to inaccurate information</li>
+                <li>Request deletion of their personal data, subject to reasonable limitations</li>
+              </ul>
+              <p>Requests may be made using the contact details provided below.</p>
+
+              <h4>7. Changes to This Privacy Policy</h4>
+              <p>This Privacy Policy may be updated from time to time. Any changes will be reflected within the application, and continued use of the app constitutes acceptance of the updated policy.</p>
+
+              <h4>8. Contact Information</h4>
+              <p>For questions or concerns regarding this Privacy Policy or personal data, please contact:</p>
+              <p><strong>Qonnect Project Team</strong><br>Email: qonnect@gmail.com</p>
+            </div>
+          </div>
+        </Modal>
       </div>
     </div>
   </div>
@@ -218,6 +360,16 @@ hr { border: none; border-top: 1px solid #ECEFF1; margin: 16px 0 24px 0; }
 .password-wrapper input { padding-right: 40px; }
 .eye-btn { position: absolute; right: 12px; background: none; border: none; cursor: pointer; color: #78909C; display: flex; align-items: center; padding: 0; }
 .eye-btn:hover { color: #37474F; }
+
+/* Agreement row styling */
+.agree-row { display: flex; align-items: center; gap: 8px; }
+.agree-row .agree-label { line-height: 1.2; font-size: 14px; color: #546E7A; margin: 0; }
+.agree-row input[type="checkbox"] { width: 18px; height: 18px; margin: 0; }
+
+/* Spacing tweaks between agree, button, and login link */
+.agree-block { margin-bottom: 6px; }
+.agree-block + button.signup-btn { margin-top: 8px; }
+.login-link { margin-top: 12px; }
 
 /* Error/Success Messages */
 .message-box { padding: 10px; border-radius: 8px; margin-bottom: 20px; font-size: 14px; text-align: center; }
