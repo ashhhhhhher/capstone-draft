@@ -108,12 +108,21 @@ function formatShortDate(dateStr) { if (!dateStr) return ''; return new Date(dat
 
     <div class="section-header"><h3>Upcoming Events</h3></div>
     <div class="upcoming-column">
-      <div v-if="upcomingEvents.length > 0" class="hero-stack">
-        <div v-for="event in upcomingEvents" :key="event.id" class="hero-card event-hero" :style="event.photoURL ? { backgroundImage: `url(${event.photoURL})` } : {}" @click="openEventDetails(event)">
-          <div class="hero-overlay centered">
-            <span class="hero-subtitle highlight">{{ formatShortDate(event.date) }}</span>
-            <h2 class="hero-title small">{{ event.name }}</h2>
-            <div class="hero-meta"><MapPin :size="12" /> {{ event.eventLocation}}</div>
+      <div v-if="upcomingEvents.length > 0" class="events-scroll-container">
+        <div v-for="event in upcomingEvents" :key="event.id" class="upcoming-card-wrapper">
+          <div class="upcoming-card" @click="openEventDetails(event)">
+            <div class="card-media">
+              <img v-if="event.photoURL" :src="event.photoURL" alt="event image" />
+              <div v-else class="card-media-placeholder"></div>
+            </div>
+            <div class="card-details">
+              <div class="card-line card-date">{{ formatShortDate(event.date) }} <span v-if="event.time">• {{ event.time }}</span></div>
+              <div class="card-line card-title">{{ event.name }}</div>
+              <div class="card-line card-type">{{ event.eventType === 'service' ? 'Service' : (event.eventType === 'b1g_event' ? 'B1G Service' : 'CCF Event') }}</div>
+              <div class="card-line card-location"><strong>Location: </strong>{{ event.eventLocation || 'Online' }}</div>
+              <div v-if="event.eventSpeaker" class="card-line card-minor"><strong>Speaker:</strong> {{ event.eventSpeaker }}</div>
+              <div v-if="event.eventSeries" class="card-line card-minor"><strong>Series:</strong> {{ event.eventSeries }}</div>
+            </div>
           </div>
         </div>
       </div>
@@ -178,4 +187,23 @@ function formatShortDate(dateStr) { if (!dateStr) return ''; return new Date(dat
 .detail-text .label { font-size: 11px; text-transform: uppercase; color: #90A4AE; font-weight: 700; letter-spacing: 0.5px; }
 .detail-text .val { font-size: 15px; color: #37474F; font-weight: 600; display: block; }
 .detail-text .description { font-size: 14px; color: #546E7A; line-height: 1.6; margin: 4px 0 0 0; }
+
+/* Upcoming event cards (aligned with Home.vue style) */
+.events-scroll-container { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; padding: 6px 0 12px 0; }
+.upcoming-card-wrapper { width: 100%; }
+.upcoming-card { width: 100%; height: 400px; border-radius: 12px; background: #fff; overflow: hidden; box-shadow: 0 4px 10px rgba(0,0,0,0.08); transition: transform 0.18s ease; cursor: pointer; display: flex; flex-direction: column; }
+.upcoming-card:hover { transform: translateY(-6px); box-shadow: 0 10px 20px rgba(0,0,0,0.12); }
+.card-media { width: 100%; height: 220px; background: #37474F; display: block; overflow: hidden; flex: 0 0 auto; }
+.card-media img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.card-media-placeholder { width:100%; height:100%; background: linear-gradient(90deg,#37474F,#546E7A); }
+.card-details { padding: 12px 14px; color: #263238; display: flex; flex-direction: column; gap: 8px; }
+.card-line { display: block; }
+.card-date { font-size: 14px; font-weight: 700; color: #1976D2; }
+.card-title { margin: 0; font-size: 18px; line-height: 1.2; font-weight: 700; color: #0D47A1; display: block; overflow: hidden; word-wrap: break-word; }
+.card-type { font-size: 13px; opacity: 0.9; text-transform: uppercase; margin-top: 2px; color: #37474F; }
+.card-location { font-size: 14px; color: #37474F; }
+.card-minor { font-size: 13px; color: #546E7A; }
+@media (max-width: 1024px) { .events-scroll-container { grid-template-columns: repeat(2, 1fr); } .card-media { height: 200px; } }
+@media (max-width: 768px) { .events-scroll-container { grid-template-columns: repeat(2, 1fr); } .card-media { height: 170px; } .card-title { font-size: 16px; } }
+@media (max-width: 480px) { .events-scroll-container { grid-template-columns: 1fr; } .card-media { height: 120px; } }
 </style>
