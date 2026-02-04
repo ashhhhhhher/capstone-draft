@@ -143,12 +143,11 @@ function formatShortDate(dateStr) { if (!dateStr) return ''; return new Date(dat
 
 <style scoped>
 .home-view { display: flex; flex-direction: column; gap: 24px; padding-bottom: 30px; }
-.header-flex { display: flex; align-items: center; gap: 8px; }
+.header-flex { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
 .hero-stack { display: flex; flex-direction: column; gap: 16px; }
 .hero-card { position: relative; border-radius: 20px; overflow: hidden; min-height: 240px; display: flex; cursor: pointer; background-size: cover; background-position: center; transition: transform 0.2s; background-color: #263238; }
 .hero-card:active { transform: scale(0.98); }
 .hero-overlay { background: linear-gradient(to top, rgba(0,0,0,0.9), rgba(0,0,0,0.4)); width: 100%; padding: 24px; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; color: white; }
-.hero-overlay.centered { justify-content: center; }
 .hero-subtitle { font-size: 10px; font-weight: 800; letter-spacing: 1.5px; opacity: 0.9; margin-bottom: 8px; text-transform: uppercase; }
 .hero-subtitle.highlight { color: #64B5F6; opacity: 1; }
 .hero-title { font-size: 24px; font-weight: 800; margin: 0 0 8px 0; }
@@ -156,7 +155,7 @@ function formatShortDate(dateStr) { if (!dateStr) return ''; return new Date(dat
 .hero-meta { font-size: 12px; opacity: 0.8; display: flex; align-items: center; gap: 4px; }
 .quick-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .action-card { background: white; padding: 16px; border-radius: 16px; display: flex; flex-direction: column; align-items: center; gap: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); cursor: pointer; }
-.icon-bg { width: 40px; height: 40px; border-radius: 12px; display: flex; align-items: center; justify-content: center; }
+.icon-bg { width: 44px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
 .icon-bg.blue { background: #E3F2FD; }
 .icon-bg.orange { background: #FFF3E0; }
 .action-card span { font-size: 12px; font-weight: 600; color: #455A64; }
@@ -164,18 +163,19 @@ function formatShortDate(dateStr) { if (!dateStr) return ''; return new Date(dat
 .today-overlay { padding: 20px; height: 100%; display: flex; flex-direction: column; justify-content: center; background: rgba(0,0,0,0.4); }
 .today-card.empty { background: white; color: #455A64; border: 1px solid #ECEFF1; padding: 20px; }
 .badge { background: #FBC02D; color: #000; font-size: 10px; font-weight: 800; padding: 4px 8px; border-radius: 4px; display: inline-block; margin-bottom: 8px; }
-.section-header h3 { font-size: 18px; color: #37474F; margin: 0 0 12px 0; }
+.section-header h3 { font-size: 18px; color: #37474F; margin: 0; }
 .empty-text { text-align: center; padding: 20px; color: #90A4AE; font-size: 14px; }
-.modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); z-index: 200; display: flex; align-items: center; justify-content: center; }
+.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 200; display: flex; align-items: center; justify-content: center; }
 .event-modal { background: white; width: 90%; max-width: 400px; border-radius: 24px; overflow: hidden; max-height: 90vh; overflow-y: auto; }
 .modal-hero { height: 200px; background-size: cover; background-position: center; position: relative; }
-.close-icon-btn { position: absolute; top: 16px; right: 16px; background: rgba(0,0,0,0.5); border: none; border-radius: 50%; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; color: white; }
+.close-icon-btn { position: absolute; top: 16px; right: 16px; background: rgba(0,0,0,0.5); border: none; border-radius: 50%; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; color: white; z-index: 10; }
 .modal-content { padding: 24px; }
 .modal-date { color: #1976D2; font-weight: 800; font-size: 12px; text-transform: uppercase; }
 .modal-header-text h2 { margin: 4px 0 16px 0; font-size: 24px; color: #263238; line-height: 1.2; }
 .modal-details { display: flex; flex-direction: column; gap: 20px; }
-.detail-row { display: flex; gap: 14px; }
+.detail-row { display: flex; align-items: flex-start; gap: 14px; }
+.detail-row .icon { flex-shrink: 0; margin-top: 2px; }
 .detail-text .label { font-size: 11px; text-transform: uppercase; color: #90A4AE; font-weight: 700; letter-spacing: 0.5px; }
-.detail-text .val { font-size: 15px; color: #37474F; font-weight: 600; }
+.detail-text .val { font-size: 15px; color: #37474F; font-weight: 600; display: block; }
 .detail-text .description { font-size: 14px; color: #546E7A; line-height: 1.6; margin: 4px 0 0 0; }
 </style>
