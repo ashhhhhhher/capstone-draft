@@ -442,7 +442,7 @@ async function handleEndCurrentEvent() {
           <div class="upcoming-card" @click="handleEditEvent(event)">
             <div class="card-media">
               <img v-if="event.photoURL" :src="event.photoURL" alt="event image" />
-              <div v-else class="card-media-placeholder"></div>
+              <div v-else class="card-media-placeholder"><img src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQu0jzHfqdWdZJdLeogBZoboqMz9-_SuJyuEw&s" alt="Elevate WKND" /></div>
             </div>
             <div class="card-details">
               <div class="card-line card-date">{{ formatShortDate(event.date) }} <span v-if="event.time">• {{ event.time }}</span></div>
@@ -549,9 +549,11 @@ async function handleEndCurrentEvent() {
 .upcoming-card-wrapper { width: 100%; }
 .upcoming-card { width: 100%; height: 400px; border-radius: 12px; background: #fff; overflow: hidden; box-shadow: 0 4px 10px rgba(0,0,0,0.08); transition: transform 0.18s ease; cursor: pointer; display: flex; flex-direction: column; }
 .upcoming-card:hover { transform: translateY(-6px); box-shadow: 0 10px 20px rgba(0,0,0,0.12); }
-.card-media { width: 100%; height: 220px; background: #37474F; display: block; overflow: hidden; flex: 0 0 auto; }
+.card-media { width: 100%; height: 220px; background: #37474F; display: block; overflow: hidden; flex: 0 0 auto; position: relative; }
 .card-media img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.card-media-placeholder { width:100%; height:100%; background: linear-gradient(90deg,#37474F,#546E7A); }
+.card-media::after { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(0,0,0,0.35) 0%, rgba(0,0,0,0.12) 40%, rgba(0,0,0,0.0) 100%); pointer-events: none; }
+.card-media-placeholder::after { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(0,0,0,0.35) 0%, rgba(0,0,0,0.12) 40%, rgba(0,0,0,0.0) 100%); pointer-events: none; }
+.card-media-placeholder { width:100%; height:100%; background: linear-gradient(90deg,#37474F,#546E7A); position: relative;}
 .card-details { padding: 12px 14px; color: #263238; display: flex; flex-direction: column; gap: 8px; }
 .card-line { display: block; }
 .card-date { font-size: 14px; font-weight: 700; color: #1976D2; }
