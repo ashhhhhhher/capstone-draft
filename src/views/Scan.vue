@@ -88,17 +88,8 @@ async function handleVolunteerSelection(ministry) {
 // update their profile so exports will place them under Regulars going forward.
 async function handleRegularAttendance() {
   if (!pendingMember.value) return
-  const member = pendingMember.value
-  // If they were previously flagged as a volunteer, flip that flag but DO NOT touch historical attendance records
-  if (member.finalTags?.isVolunteer) {
-    const updatedFinalTags = { ...member.finalTags, isVolunteer: false, volunteerMinistry: [], isRegular: true }
-    const updatedMember = { ...member, finalTags: updatedFinalTags }
-    try {
-      await membersStore.updateMember(updatedMember)
-      pendingMember.value = updatedMember
-    } catch (e) { console.error(e) }
-  }
-  // finalize attendance as regular
+  // Do NOT modify the member's persistent volunteer tag when they are marked as regular for this event.
+  // We only record per-event attendance (ministry='N/A') so their profile volunteer status remains until an admin changes it.
   await finalizeAttendance(pendingMember.value, 'N/A')
 }
 const cancelVolunteerPrompt = () => { showVolunteerPrompt.value = false; if (scannerInstance?.getState() === 3) scannerInstance.resume() }

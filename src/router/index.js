@@ -54,6 +54,12 @@ const router = createRouter({
         }
       ]
     },
+      {
+        path: '/member/approval',
+        name: 'memberApproval',
+        component: () => import('../views/MemberApproval.vue'),
+        meta: { requiresAuth: true }
+      },
 
     // --- ADMIN ROUTES ---
     {
@@ -113,6 +119,12 @@ router.beforeEach((to) => {
 
   // 🚫 STOP redirects if role is unresolved
   if (isAuthenticated && !role) {
+    return true
+  }
+
+  // If user's role is 'pending' they should only see the approval page
+  if (isAuthenticated && role === 'pending') {
+    if (to.name !== 'memberApproval') return { name: 'memberApproval' }
     return true
   }
 

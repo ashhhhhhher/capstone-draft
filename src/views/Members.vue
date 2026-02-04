@@ -13,7 +13,7 @@ import FilterModal from '../components/dgmComponents/FilterModal.vue'
 
 // --- Store Setup ---
 const membersStore = useMembersStore()
-const { activeMembers, archivedMembers } = storeToRefs(membersStore)
+const { activeMembers, archivedMembers, pendingMembers } = storeToRefs(membersStore)
 const attendanceStore = useAttendanceStore()
 const { currentEventAttendees } = storeToRefs(attendanceStore)
 
@@ -21,6 +21,8 @@ const { currentEventAttendees } = storeToRefs(attendanceStore)
 onMounted(() => {
   // Check for old archives whenever the admin visits the members page
   membersStore.purgeOldArchives();
+  // Start listening for pending registrations
+  membersStore.fetchPendingRegistrations();
 })
 
 // --- Page State ---
@@ -30,6 +32,8 @@ const showFilterModal = ref(false)
 const selectedMember = ref(null)
 const searchQuery = ref('') 
 const showAbsenceMonitoringModal = ref(false)
+const showPendingModal = ref(false)
+const selectedPending = ref(null)
 
 // --- Filters State ---
 const currentFilters = ref({
@@ -113,6 +117,20 @@ function handleArchiveMember(memberId) { membersStore.archiveMember(memberId); s
 function handleRestoreMember(memberId) { membersStore.restoreMember(memberId); showMemberModal.value = false; }
 function handleModalClose() { showMemberModal.value = false; }
 function openAbsenceMonitoring() { showAbsenceMonitoringModal.value = true; }
+function openPendingList() { showPendingModal.value = true; }
+function openPendingDetails(p) { selectedPending.value = p; }
+async function approveSelected() {
+  if (!selectedPending.value) return;
+  if (!confirm('Approve this registration?')) return;
+  await membersStore.approvePending(selectedPending.value.id);
+  selectedPending.value = null;
+}
+async function rejectSelected() {
+  if (!selectedPending.value) return;
+  if (!confirm('Reject and delete this registration?')) return;
+  await membersStore.rejectPending(selectedPending.value.id);
+  selectedPending.value = null;
+}
 
 // --- Absence count ---
 const { allEvents } = storeToRefs(useEventsStore())
@@ -137,6 +155,11 @@ const absenceCount = computed(() => { const past = getPastServices(); if (!past 
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 2v6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M5 10h14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M7 14h10" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M9 18h6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
           <span>Absence Monitoring</span>
           <span v-if="absenceCount > 0" class="absence-notif">{{ absenceCount }}</span>
+        </button>
+        <button class="pending-btn" @click="openPendingList" title="Pending Approvals">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 2v6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span>Pending Approval</span>
+          <span v-if="pendingMembers && pendingMembers.length > 0" class="pending-notif">{{ pendingMembers.length }}</span>
         </button>
       </div>
     </div>
@@ -214,6 +237,35 @@ const absenceCount = computed(() => { const past = getPastServices(); if (!past 
         @apply="showFilterModal = false" 
       />
   </Modal>
+
+  <!-- PENDING APPROVALS MODAL -->
+  <Modal v-if="showPendingModal" @close="showPendingModal = false" size="lg">
+    <div class="pending-modal">
+      <header class="pending-header"><h3>Pending Registrations</h3></header>
+      <div class="pending-body">
+        <div class="pending-list">
+          <div v-if="pendingMembers.length === 0" class="empty-text">No pending registrations.</div>
+          <div v-for="p in pendingMembers" :key="p.id" class="pending-item" @click="openPendingDetails(p)">
+            <MemberCard :member="p" :hideStatus="true" :hideDetails="false" />
+          </div>
+        </div>
+        <div class="pending-details" v-if="selectedPending">
+          <div class="details">
+            <h4>{{ selectedPending.firstName }} {{ selectedPending.lastName }}</h4>
+            <p><strong>ID:</strong> {{ selectedPending.id }}</p>
+            <p><strong>Email:</strong> {{ selectedPending.email }}</p>
+            <p><strong>Birthday:</strong> {{ selectedPending.birthday }}</p>
+            <p><strong>Gender:</strong> {{ selectedPending.gender }}</p>
+            <div class="tag-list"><span class="tag" v-for="t in selectedPending.finalTags ? [selectedPending.finalTags.ageCategory] : []" :key="t">{{ t }}</span></div>
+          </div>
+          <div class="actions">
+            <button class="btn-approve" @click="approveSelected">Approve</button>
+            <button class="btn-reject" @click="rejectSelected">Reject</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </Modal>
 </template>
 
 <style scoped>
@@ -228,6 +280,20 @@ const absenceCount = computed(() => { const past = getPastServices(); if (!past 
 .absence-btn svg { color: #D32F2F; }
 .absence-btn:hover { transform: translateY(-2px); box-shadow: 0 6px 18px rgba(0, 0, 0, 0.06); }
 .absence-notif { position: absolute; top: -6px; right: -6px; background: #D32F2F; color: #fff; font-size: 11px; width: 20px; height: 20px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 800; box-shadow: 0 4px 10px rgba(0,0,0,0.12); }
+
+.pending-btn { display: inline-flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 8px; border: 1px solid rgba(21, 101, 192, 0.08); background: #fff; color: #0D47A1; font-weight: 700; cursor: pointer; transition: box-shadow 0.12s ease, transform 0.12s ease; position: relative; }
+.pending-btn svg { color: #1976D2; }
+.pending-btn:hover { transform: translateY(-2px); box-shadow: 0 6px 18px rgba(0, 0, 0, 0.06); }
+.pending-notif { position: absolute; top: -6px; right: -6px; background: #1976D2; color: #fff; font-size: 11px; width: 20px; height: 20px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 800; box-shadow: 0 4px 10px rgba(0,0,0,0.12); }
+
+.pending-modal { display:flex; flex-direction:column; gap:12px; }
+.pending-body { display:flex; gap:12px; }
+.pending-list { flex:1; max-height:60vh; overflow:auto; display:flex; flex-direction:column; gap:8px; }
+.pending-item { cursor:pointer; }
+.pending-details { width:320px; background:#FAFAFA; padding:12px; border-radius:8px; display:flex; flex-direction:column; justify-content:space-between; }
+.pending-details .details { margin-bottom:12px }
+.btn-approve { background:#2E7D32; color:white; border:none; padding:10px; border-radius:8px; font-weight:700; cursor:pointer; }
+.btn-reject { background:transparent; color:#D32F2F; border:1px solid #D32F2F; padding:10px; border-radius:8px; font-weight:700; cursor:pointer; }
 
 .controls-wrapper { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; gap: 16px; }
 .search-bar { flex-grow: 1; position: relative; }
