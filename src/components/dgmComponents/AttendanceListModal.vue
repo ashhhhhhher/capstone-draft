@@ -139,15 +139,10 @@ function sortByName(list) {
 function exportToExcel() {
   console.log('[AttendanceListModal] exportToExcel called', { eventName: eventName.value, attendees: (attendees && attendees.value) ? attendees.value.length : 0 })
   const source = attendees.value;
-  // Classify attendees using attendanceMinistry (per-event) first — this lets DLeaders who served as
-  // volunteers appear under Volunteers for this export. Fall back to profile flags if ministry is absent.
   const firstTimers = sortByName(source.filter(m => m.finalTags?.isFirstTimer));
-  // Volunteers sheet: include only members who actually served in this event (attendanceMinistry set)
   const volunteers = sortByName(source.filter(m => !m.finalTags?.isFirstTimer && (m.attendanceMinistry && m.attendanceMinistry !== 'N/A')));
   // DLeaders sheet: include all dgroup leaders so leaders who served still appear on the DLeaders sheet
   const leaders = sortByName(source.filter(m => !m.finalTags?.isFirstTimer && m.finalTags?.isDgroupLeader));
-  // Regulars: attendees who did not serve in a volunteer ministry for this event.
-  // Include profile-tagged volunteers if they attended as regulars (no attendanceMinistry set).
   const regulars = source.filter(m => !m.finalTags?.isFirstTimer && !m.finalTags?.isDgroupLeader && !(m.attendanceMinistry && m.attendanceMinistry !== 'N/A'));
   
   const elevateMales = sortByName(regulars.filter(m => m.gender === 'Male' && m.finalTags?.ageCategory === 'Elevate'));

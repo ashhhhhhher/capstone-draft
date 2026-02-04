@@ -13,7 +13,7 @@ import FilterModal from '../components/dgmComponents/FilterModal.vue'
 
 // --- Store Setup ---
 const membersStore = useMembersStore()
-const { activeMembers, archivedMembers } = storeToRefs(membersStore)
+const { activeMembers, archivedMembers, pendingMembers } = storeToRefs(membersStore)
 const attendanceStore = useAttendanceStore()
 const { currentEventAttendees } = storeToRefs(attendanceStore)
 
@@ -21,6 +21,8 @@ const { currentEventAttendees } = storeToRefs(attendanceStore)
 onMounted(() => {
   // Check for old archives whenever the admin visits the members page
   membersStore.purgeOldArchives();
+  // Start listening for pending registrations
+  membersStore.fetchPendingRegistrations();
 })
 
 // --- Page State ---
@@ -30,6 +32,8 @@ const showFilterModal = ref(false)
 const selectedMember = ref(null)
 const searchQuery = ref('') 
 const showAbsenceMonitoringModal = ref(false)
+const showPendingModal = ref(false)
+const selectedPending = ref(null)
 
 // --- Filters State ---
 const currentFilters = ref({
@@ -113,6 +117,20 @@ function handleArchiveMember(memberId) { membersStore.archiveMember(memberId); s
 function handleRestoreMember(memberId) { membersStore.restoreMember(memberId); showMemberModal.value = false; }
 function handleModalClose() { showMemberModal.value = false; }
 function openAbsenceMonitoring() { showAbsenceMonitoringModal.value = true; }
+function openPendingList() { showPendingModal.value = true; }
+function openPendingDetails(p) { selectedPending.value = p; }
+async function approveSelected() {
+  if (!selectedPending.value) return;
+  if (!confirm('Approve this registration?')) return;
+  await membersStore.approvePending(selectedPending.value.id);
+  selectedPending.value = null;
+}
+async function rejectSelected() {
+  if (!selectedPending.value) return;
+  if (!confirm('Reject and delete this registration?')) return;
+  await membersStore.rejectPending(selectedPending.value.id);
+  selectedPending.value = null;
+}
 
 // --- Absence count ---
 const { allEvents } = storeToRefs(useEventsStore())
@@ -137,6 +155,11 @@ const absenceCount = computed(() => { const past = getPastServices(); if (!past 
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 2v6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M5 10h14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M7 14h10" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M9 18h6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
           <span>Absence Monitoring</span>
           <span v-if="absenceCount > 0" class="absence-notif">{{ absenceCount }}</span>
+        </button>
+        <button class="pending-btn" @click="openPendingList" title="Pending Approvals">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 2v6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span>Pending Approval</span>
+          <span v-if="pendingMembers && pendingMembers.length > 0" class="pending-notif">{{ pendingMembers.length }}</span>
         </button>
       </div>
     </div>
@@ -214,6 +237,42 @@ const absenceCount = computed(() => { const past = getPastServices(); if (!past 
         @apply="showFilterModal = false" 
       />
   </Modal>
+
+  <!-- PENDING APPROVALS MODAL -->
+  <Modal v-if="showPendingModal" @close="showPendingModal = false" size="lg">
+    <div class="pending-modal">
+      <header class="pending-header"><h3>Pending Registrations</h3></header>
+      <div class="pending-body">
+        <div class="pending-list">
+          <div v-if="pendingMembers.length === 0" class="empty-text">No pending registrations.</div>
+          <div v-for="p in pendingMembers" :key="p.id" :class="['pending-item', { selected: selectedPending && selectedPending.id === p.id }]" @click="openPendingDetails(p)">
+            <MemberCard :member="p" :hideStatus="true" :hideDetails="false" />
+          </div>
+        </div>
+        <div class="pending-details" v-if="selectedPending">
+          <div class="details">
+            <div class="details-top">
+              <div class="details-title">
+                <h4>{{ selectedPending.firstName }} {{ selectedPending.lastName }}</h4>
+              </div>
+              <button class="minimize-btn" @click="selectedPending = null" title="Minimize">
+                <span class="minimize-line"></span>
+              </button>
+            </div>
+            <p><strong>ID:</strong> {{ selectedPending.id }}</p>
+            <p><strong>Email:</strong> {{ selectedPending.email }}</p>
+            <p><strong>Birthday:</strong> {{ selectedPending.birthday }}</p>
+            <p><strong>Gender:</strong> {{ selectedPending.gender }}</p>
+            <div class="tag-list"><span class="tag" v-for="t in selectedPending.finalTags ? [selectedPending.finalTags.ageCategory] : []" :key="t">{{ t }}</span></div>
+          </div>
+          <div class="actions">
+            <button class="btn-approve" @click="approveSelected">Approve</button>
+            <button class="btn-reject" @click="rejectSelected">Reject</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </Modal>
 </template>
 
 <style scoped>
@@ -228,6 +287,37 @@ const absenceCount = computed(() => { const past = getPastServices(); if (!past 
 .absence-btn svg { color: #D32F2F; }
 .absence-btn:hover { transform: translateY(-2px); box-shadow: 0 6px 18px rgba(0, 0, 0, 0.06); }
 .absence-notif { position: absolute; top: -6px; right: -6px; background: #D32F2F; color: #fff; font-size: 11px; width: 20px; height: 20px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 800; box-shadow: 0 4px 10px rgba(0,0,0,0.12); }
+
+.pending-btn { display: inline-flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 8px; border: 1px solid rgba(21, 101, 192, 0.08); background: #fff; color: #0D47A1; font-weight: 700; cursor: pointer; transition: box-shadow 0.12s ease, transform 0.12s ease; position: relative; }
+.pending-btn svg { color: #1976D2; }
+.pending-btn:hover { transform: translateY(-2px); box-shadow: 0 6px 18px rgba(0, 0, 0, 0.06); }
+.pending-notif { position: absolute; top: -6px; right: -6px; background: #1976D2; color: #fff; font-size: 11px; width: 20px; height: 20px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 800; box-shadow: 0 4px 10px rgba(0,0,0,0.12); }
+
+.pending-modal { display:flex; flex-direction:column; gap:12px; }
+.pending-body { display:flex; gap:12px; background: #F6FAFC; padding:12px; border-radius:12px; }
+.pending-list { flex:1; max-height:60vh; overflow:auto; display:flex; flex-direction:column; gap:8px; }
+.pending-item { cursor:pointer; border: 1px solid transparent; transition: transform 0.12s ease, box-shadow 0.12s ease, border-color 0.12s ease; }
+.pending-item:hover { transform: translateY(-3px); box-shadow: 0 10px 24px rgba(23,42,69,0.06); border-color: rgba(25,118,210,0.12); }
+.pending-item.selected { background: linear-gradient(90deg,#E3F2FD, #FFFFFF); }
+.pending-details { width:360px; background:#FFFFFF; padding:16px; border-radius:12px; display:flex; flex-direction:column; justify-content:space-between; box-shadow: 0 10px 30px rgba(16,24,40,0.06); }
+.pending-details .details { margin-bottom:14px }
+.btn-approve { background:#2E7D32; color:white; border:none; padding:10px 14px; border-radius:10px; font-weight:700; cursor:pointer; margin-right: 12px; transition: background 0.12s ease, transform 0.08s ease; }
+.btn-approve:hover { background:#246028; transform: translateY(-2px); }
+.btn-reject { background:transparent; color:#D32F2F; border:1px solid #D32F2F; padding:10px 14px; border-radius:10px; font-weight:700; cursor:pointer; transition: background 0.12s ease, color 0.12s ease; }
+.btn-reject:hover { background:#D32F2F; color:white; }
+
+/* Minimize button */
+.minimize-btn { background: transparent; border: none; width:36px; height:28px; display:flex; align-items:center; justify-content:center; cursor:pointer; border-radius:6px; }
+.minimize-btn:hover { background: rgba(0,0,0,0.04); }
+.minimize-line { display:block; width:18px; height:3px; background:#90A4AE; border-radius:2px; }
+
+.details-top { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+.details-title h4 { margin:0; font-size:16px; }
+
+
+/* Header separation */
+.pending-header { padding-bottom: 10px; border-bottom: 1px solid #bcbbbb; }
+.pending-header h3 { margin: 0; font-size: 18px; color: #263238; }
 
 .controls-wrapper { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; gap: 16px; }
 .search-bar { flex-grow: 1; position: relative; }

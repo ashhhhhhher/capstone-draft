@@ -23,6 +23,7 @@ import {
   getDocs, 
   orderBy, 
   limit 
+  , onSnapshot
 } from "firebase/firestore";
 
 export const useAuthStore = defineStore('auth', () => {
@@ -32,6 +33,7 @@ export const useAuthStore = defineStore('auth', () => {
   const branchId = ref(null)
   const isLoading = ref(false)
   const isAuthReady = ref(false)
+  let profileUnsub = null
   
   // --- 1. PATTERNED ID GENERATION (YYMM##) ---
   // Example: Jan 2026 -> 260101, 260102...
@@ -90,22 +92,23 @@ export const useAuthStore = defineStore('auth', () => {
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, email, password)
       user.value = userCredential.user
-      
       const displayName = `${basicData.profile.firstName} ${basicData.profile.lastName}`;
 
+      // Update display name locally
       await updateProfile(user.value, {
-          displayName: displayName
+        displayName: displayName
       })
-      
-      const defaultBranch = basicData.branchId || 'baguio'; 
-      
-      // Generate ID & Create Member Profile
+
+      const defaultBranch = basicData.branchId || 'baguio';
+
+      // Generate ID & Create a PENDING member profile (admins must approve)
       const newMemberId = await generateMemberID(defaultBranch);
-      await createMemberProfile(user.value.uid, defaultBranch, basicData.profile, newMemberId);
-      
-      await fetchMemberProfile(user.value.uid, defaultBranch);
-      userRole.value = 'member';
+      await createPendingProfile(user.value.uid, defaultBranch, basicData.profile, newMemberId);
+
+      // Set local state as pending
+      userRole.value = 'pending';
       branchId.value = defaultBranch;
+      await fetchMemberProfile(user.value.uid); // will pick up pending profile
 
     } catch (error) {
       throw error;
@@ -162,6 +165,48 @@ export const useAuthStore = defineStore('auth', () => {
     await setDoc(memberRef, memberData);
   }
 
+  // --- Create PENDING profile (awaiting admin approval) ---
+  async function createPendingProfile(uid, branchId, basicData, memberId) {
+    const age = new Date().getFullYear() - new Date(basicData.birthday).getFullYear(); 
+    const ageCategory = (age >= 12 && age <= 21) ? 'Elevate' : (age >= 22 ? 'B1G' : 'N/A');
+    const todayISO = new Date().toISOString();
+
+    const pendingData = {
+      id: memberId,
+      authUid: uid,
+      createdAt: todayISO,
+      status: 'pending',
+      role: 'member',
+      branchId: branchId,
+      displayName: `${toTitleCase(basicData.firstName.trim())} ${toTitleCase(basicData.lastName.trim())}`,
+      lastName: toTitleCase(basicData.lastName.trim()),
+      firstName: toTitleCase(basicData.firstName.trim()),
+      middleInitial: '',
+      birthday: basicData.birthday,
+      age: age,
+      gender: basicData.gender,
+      email: auth.currentUser ? auth.currentUser.email : '',
+      school: '',
+      contactNumber: '',
+      fbAccount: '',
+      profilePicture: '',
+      dgroupLeader: '',
+      dgroupDetails: null,
+      finalTags: {
+        isRegular: false,
+        isVolunteer: false,
+        volunteerMinistry: [],
+        isDgroupLeader: false,
+        isSeeker: false,
+        isFirstTimer: true,
+        ageCategory: ageCategory
+      }
+    }
+
+    const pendingRef = doc(db, "branches", branchId, "pendingMembers", memberId);
+    await setDoc(pendingRef, pendingData);
+  }
+
   async function updateExtendedProfile(data) {
     if (!userProfile.value || !branchId.value) return;
     
@@ -201,7 +246,40 @@ export const useAuthStore = defineStore('auth', () => {
       onAuthStateChanged(auth, async (loggedInUser) => {
         if (loggedInUser) {
           user.value = loggedInUser
+          // initial fetch
           await fetchUserProfile(loggedInUser.uid)
+
+          // setup realtime listeners to react to admin approval/rejection
+          // clean up previous listener
+          if (profileUnsub) profileUnsub()
+
+          // listen to members collection for this user's authUid
+          try {
+            const membersRef = collection(db, "branches", branchId.value || 'baguio', "members");
+            const mq = query(membersRef, where("authUid", "==", loggedInUser.uid));
+            const pendingRef = collection(db, "branches", branchId.value || 'baguio', "pendingMembers");
+            const pq = query(pendingRef, where("authUid", "==", loggedInUser.uid));
+
+            profileUnsub = onSnapshot(mq, (snap) => {
+              if (!snap.empty) {
+                userRole.value = 'member';
+                branchId.value = branchId.value || 'baguio';
+                userProfile.value = snap.docs[0].data();
+              }
+            })
+
+            // Also listen to pending registration changes
+            onSnapshot(pq, (snap) => {
+              if (!snap.empty) {
+                userRole.value = 'pending';
+                branchId.value = branchId.value || 'baguio';
+                userProfile.value = snap.docs[0].data();
+              }
+            })
+          } catch (e) {
+            console.warn('Failed to setup realtime profile listeners', e)
+          }
+          
           if (userRole.value === 'member') {
               await fetchMemberProfile(loggedInUser.uid, branchId.value);
           }
@@ -243,7 +321,19 @@ export const useAuthStore = defineStore('auth', () => {
     return;
   }
 
-  // 3️⃣ FALLBACK (INVALID ACCOUNT)
+  // 3️⃣ CHECK PENDING REGISTRATIONS
+  const pendingRef = collection(db, "branches", branch, "pendingMembers");
+  const pq = query(pendingRef, where("authUid", "==", uid));
+  const psnap = await getDocs(pq);
+
+  if (!psnap.empty) {
+    userRole.value = 'pending';
+    branchId.value = branch;
+    userProfile.value = psnap.docs[0].data();
+    return;
+  }
+
+  // 4️⃣ FALLBACK (INVALID ACCOUNT)
   userRole.value = null;
   branchId.value = null;
   userProfile.value = null;

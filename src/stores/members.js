@@ -10,12 +10,14 @@ import {
   deleteDoc, 
   onSnapshot,
   query,
-  getDocs
+  getDocs,
+  getDoc
 } from "firebase/firestore";
 import { useAuthStore } from './auth';
 
 export const useMembersStore = defineStore('members', () => {
   const members = ref([])
+  const pendingMembers = ref([])
   const isLoading = ref(true)
 
   const activeMembers = computed(() => {
@@ -45,6 +47,14 @@ export const useMembersStore = defineStore('members', () => {
     return collection(db, "branches", authStore.branchId, "members");
   };
 
+  const getPendingCollection = () => {
+    const authStore = useAuthStore();
+    if (!authStore.branchId) {
+      return collection(db, "pending_error");
+    }
+    return collection(db, "branches", authStore.branchId, "pendingMembers");
+  };
+
   function fetchMembers() {
     this.isLoading = true;
     const membersQuery = query(getMemberCollection());
@@ -65,6 +75,21 @@ export const useMembersStore = defineStore('members', () => {
       this.isLoading = false;
     });
   }
+
+  // --- FETCH PENDING REGISTRATIONS ---
+  function fetchPendingRegistrations() {
+    const pendingQuery = query(getPendingCollection());
+    onSnapshot(pendingQuery, (querySnapshot) => {
+      const list = [];
+      querySnapshot.forEach((doc) => {
+        const data = doc.data();
+        list.push(data);
+      });
+      pendingMembers.value = list;
+    }, (error) => {
+      console.error('Error fetching pending registrations:', error);
+    })
+  }
   
   async function registerNewMember(memberData) {
     const authStore = useAuthStore();
@@ -78,6 +103,62 @@ export const useMembersStore = defineStore('members', () => {
       await authStore.sendCreationEmail(memberData.email);
     } catch (error) {
       console.error("Error during member registration:", error);
+    }
+  }
+
+  // --- APPROVE PENDING REGISTRATION ---
+  async function approvePending(memberId) {
+    try {
+      const pendingRef = doc(getPendingCollection(), memberId);
+      const snap = await getDoc(pendingRef);
+      if (!snap.exists()) throw new Error('Pending registration not found');
+      const data = snap.data();
+
+      const memberRef = doc(getMemberCollection(), memberId);
+      // Set createdAt to now if not present
+      if (!data.createdAt) data.createdAt = new Date().toISOString();
+      // Remove pending status
+      data.status = data.status || 'active';
+
+      await setDoc(memberRef, data);
+      await deleteDoc(pendingRef);
+    } catch (error) {
+      console.error('Error approving pending member:', error);
+      throw error;
+    }
+  }
+
+  // --- REJECT PENDING REGISTRATION ---
+  async function rejectPending(memberId) {
+    try {
+      const pendingRef = doc(getPendingCollection(), memberId);
+      const snap = await getDoc(pendingRef);
+      if (!snap.exists()) return;
+      const data = snap.data();
+      const authUid = data.authUid;
+
+      // Delete pending document
+      await deleteDoc(pendingRef);
+
+      // NOTE: Deleting the Auth user from client-side is not possible for other users
+      // without admin privileges. We attempt a best-effort: if the user currently
+      // signed in is the same uid, sign them out and delete their account.
+      const authStore = useAuthStore();
+      if (authStore.user && authStore.user.uid === authUid) {
+        // If the rejected user is the one currently signed in, remove their auth account
+        try {
+          // sign out first (delete will require reauth in many cases)
+          await authStore.logout();
+        } catch (e) {
+          console.warn('Failed to sign out rejected user:', e);
+        }
+      }
+
+      // Return the authUid so calling code can trigger server-side deletion if available
+      return authUid;
+    } catch (error) {
+      console.error('Error rejecting pending member:', error);
+      throw error;
     }
   }
 
@@ -177,10 +258,12 @@ export const useMembersStore = defineStore('members', () => {
   
   return { 
     members, activeMembers, archivedMembers, isLoading,
+    pendingMembers,
     leaderNames, leaders, seekers,
     fetchMembers, registerNewMember, updateMember, 
     archiveMember, restoreMember, purgeOldArchives,
     checkAndAutoRestore, // Export the new function
+    fetchPendingRegistrations, approvePending, rejectPending,
     logMonitoringAction 
   }
 })
