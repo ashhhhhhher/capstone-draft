@@ -190,7 +190,7 @@ function cancelNewSpeaker() {
         <div class="radio-group">
           <label class="radio-label">
             <input type="radio" v-model="eventType" value="service">
-            <span>Wknd Service</span>
+            <span>WKND Service</span>
           </label>
           <label class="radio-label">
             <input type="radio" v-model="eventType" value="b1g_event">
