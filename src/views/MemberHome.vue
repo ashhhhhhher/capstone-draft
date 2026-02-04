@@ -4,7 +4,7 @@ import { useAuthStore } from '../stores/auth'
 import { useEventsStore } from '../stores/events'
 import { useRouter } from 'vue-router'
 import { MapPin, QrCode, BarChart2, Clock, Info, X, Sparkles } from 'lucide-vue-next'
-import DiscoveryCard from '../components/memberComponents/DiscoveryCard.vue' // [Imported the new component]
+import DiscoveryCard from '../components/memberComponents/DiscoveryCard.vue'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -58,10 +58,10 @@ function formatShortDate(dateStr) { if (!dateStr) return ''; return new Date(dat
       
       <div class="hero-stack">
         <DiscoveryCard 
-          title="CCF"
-          subtitle="CHRIST'S COMMISSION FELLOWSHIP"
-          description="Making Christ-committed followers who will make Christ-committed followers."
-          detailedDesc="Join our main worship services and small groups. We focus on spiritual growth through intentional discipleship and biblical teaching."
+          title="WKND"
+          subtitle="EVERY OTHER WEEK SERVICES"
+          description="Experience the energy of our weekend gatherings."
+          detailedDesc="Join us for WKND services every other week as we gather for worship, teaching, and fellowship. It’s a space to recharge and connect."
           image="https://images.unsplash.com/photo-1438232992991-995b7058bbb3?q=80&w=1000"
           @click="router.push('/member/dgroup')"
         />
