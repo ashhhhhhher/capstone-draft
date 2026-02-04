@@ -245,13 +245,20 @@ const absenceCount = computed(() => { const past = getPastServices(); if (!past 
       <div class="pending-body">
         <div class="pending-list">
           <div v-if="pendingMembers.length === 0" class="empty-text">No pending registrations.</div>
-          <div v-for="p in pendingMembers" :key="p.id" class="pending-item" @click="openPendingDetails(p)">
+          <div v-for="p in pendingMembers" :key="p.id" :class="['pending-item', { selected: selectedPending && selectedPending.id === p.id }]" @click="openPendingDetails(p)">
             <MemberCard :member="p" :hideStatus="true" :hideDetails="false" />
           </div>
         </div>
         <div class="pending-details" v-if="selectedPending">
           <div class="details">
-            <h4>{{ selectedPending.firstName }} {{ selectedPending.lastName }}</h4>
+            <div class="details-top">
+              <div class="details-title">
+                <h4>{{ selectedPending.firstName }} {{ selectedPending.lastName }}</h4>
+              </div>
+              <button class="minimize-btn" @click="selectedPending = null" title="Minimize">
+                <span class="minimize-line"></span>
+              </button>
+            </div>
             <p><strong>ID:</strong> {{ selectedPending.id }}</p>
             <p><strong>Email:</strong> {{ selectedPending.email }}</p>
             <p><strong>Birthday:</strong> {{ selectedPending.birthday }}</p>
@@ -287,13 +294,30 @@ const absenceCount = computed(() => { const past = getPastServices(); if (!past 
 .pending-notif { position: absolute; top: -6px; right: -6px; background: #1976D2; color: #fff; font-size: 11px; width: 20px; height: 20px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 800; box-shadow: 0 4px 10px rgba(0,0,0,0.12); }
 
 .pending-modal { display:flex; flex-direction:column; gap:12px; }
-.pending-body { display:flex; gap:12px; }
+.pending-body { display:flex; gap:12px; background: #F6FAFC; padding:12px; border-radius:12px; }
 .pending-list { flex:1; max-height:60vh; overflow:auto; display:flex; flex-direction:column; gap:8px; }
-.pending-item { cursor:pointer; }
-.pending-details { width:320px; background:#FAFAFA; padding:12px; border-radius:8px; display:flex; flex-direction:column; justify-content:space-between; }
-.pending-details .details { margin-bottom:12px }
-.btn-approve { background:#2E7D32; color:white; border:none; padding:10px; border-radius:8px; font-weight:700; cursor:pointer; }
-.btn-reject { background:transparent; color:#D32F2F; border:1px solid #D32F2F; padding:10px; border-radius:8px; font-weight:700; cursor:pointer; }
+.pending-item { cursor:pointer; border: 1px solid transparent; transition: transform 0.12s ease, box-shadow 0.12s ease, border-color 0.12s ease; }
+.pending-item:hover { transform: translateY(-3px); box-shadow: 0 10px 24px rgba(23,42,69,0.06); border-color: rgba(25,118,210,0.12); }
+.pending-item.selected { background: linear-gradient(90deg,#E3F2FD, #FFFFFF); }
+.pending-details { width:360px; background:#FFFFFF; padding:16px; border-radius:12px; display:flex; flex-direction:column; justify-content:space-between; box-shadow: 0 10px 30px rgba(16,24,40,0.06); }
+.pending-details .details { margin-bottom:14px }
+.btn-approve { background:#2E7D32; color:white; border:none; padding:10px 14px; border-radius:10px; font-weight:700; cursor:pointer; margin-right: 12px; transition: background 0.12s ease, transform 0.08s ease; }
+.btn-approve:hover { background:#246028; transform: translateY(-2px); }
+.btn-reject { background:transparent; color:#D32F2F; border:1px solid #D32F2F; padding:10px 14px; border-radius:10px; font-weight:700; cursor:pointer; transition: background 0.12s ease, color 0.12s ease; }
+.btn-reject:hover { background:#D32F2F; color:white; }
+
+/* Minimize button */
+.minimize-btn { background: transparent; border: none; width:36px; height:28px; display:flex; align-items:center; justify-content:center; cursor:pointer; border-radius:6px; }
+.minimize-btn:hover { background: rgba(0,0,0,0.04); }
+.minimize-line { display:block; width:18px; height:3px; background:#90A4AE; border-radius:2px; }
+
+.details-top { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+.details-title h4 { margin:0; font-size:16px; }
+
+
+/* Header separation */
+.pending-header { padding-bottom: 10px; border-bottom: 1px solid #bcbbbb; }
+.pending-header h3 { margin: 0; font-size: 18px; color: #263238; }
 
 .controls-wrapper { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; gap: 16px; }
 .search-bar { flex-grow: 1; position: relative; }
