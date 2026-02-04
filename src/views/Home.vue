@@ -439,21 +439,20 @@ async function handleEndCurrentEvent() {
           :key="event.id" 
           class="upcoming-card-wrapper"
         >
-          <div 
-            class="upcoming-card"
-            :style="event.photoURL ? { backgroundImage: `url(${event.photoURL})` } : {}"
-            @click="handleEditEvent(event)"
-          >
-            <div class="card-overlay">
-              <div class="card-content">
-                <span class="card-date">{{ formatShortDate(event.date) }} at {{ event.time }}</span>
-                <h4 class="card-title">{{ event.name }}</h4>
-                <span :class="['card-type', event.eventType === 'b1g_event' ? 'b1g-type' : (event.eventType === 'service' ? 'service-type' : 'ccf-type') ]">
-                  {{ event.eventType === 'service' ? 'Service' : (event.eventType === 'b1g_event' ? 'B1G Service' : 'CCF Event') }}
-                  <span v-if="event.eventType === 'ccf_event' || event.eventType === 'service'"> &middot; {{ event.eventLocation || 'Online' }}</span>
-                  <span v-else-if="event.eventType === 'b1g_event' && event.eventLocation"> &middot; {{ event.eventLocation }}</span>
-                </span>
+          <div class="upcoming-card" @click="handleEditEvent(event)">
+            <div class="card-media">
+              <img v-if="event.photoURL" :src="event.photoURL" alt="event image" />
+              <div v-else class="card-media-placeholder"></div>
+            </div>
+            <div class="card-details">
+              <div class="card-line card-date">{{ formatShortDate(event.date) }} <span v-if="event.time">• {{ event.time }}</span></div>
+              <div class="card-line card-title">{{ event.name }}</div>
+              <div class="card-line card-type" :class="event.eventType === 'b1g_event' ? 'b1g-type' : (event.eventType === 'service' ? 'service-type' : 'ccf-type')">
+                {{ event.eventType === 'service' ? 'Service' : (event.eventType === 'b1g_event' ? 'B1G Service' : 'CCF Event') }}
               </div>
+              <div class="card-line card-location"><strong>Location: </strong>{{ event.eventLocation || 'Online' }}</div>
+              <div v-if="event.eventSpeaker" class="card-line card-minor"><strong>Speaker:</strong> {{ event.eventSpeaker }}</div>
+              <div v-if="event.eventSeries" class="card-line card-minor"><strong>Series:</strong> {{ event.eventSeries }}</div>
             </div>
           </div>
         </div>
@@ -546,18 +545,23 @@ async function handleEndCurrentEvent() {
 .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 16px; margin-bottom: 30px; }
 .upcoming-section { margin-top: 10px; flex-grow: 1; display: flex; flex-direction: column; }
 .upcoming-section h3 { margin: 0 0 16px 0; font-size: 18px; color: #333; font-weight: 700; flex-shrink: 0; }
-.events-scroll-container { display: flex; flex-direction: column; gap: 12px; overflow-y: auto; padding-bottom: 16px; }
-.upcoming-card-wrapper { flex-shrink: 0; width: 100%; }
-.upcoming-card { width: 100%; height: 150px; border-radius: 12px; background-color: #37474F; background-size: cover; background-position: center; position: relative; overflow: hidden; box-shadow: 0 4px 10px rgba(0,0,0,0.1); transition: transform 0.2s ease; cursor: pointer; }
-.upcoming-card:hover { transform: translateY(-2px); box-shadow: 0 6px 16px rgba(0,0,0,0.15); }
-.card-overlay { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: linear-gradient(90deg, rgba(0,0,0,0.7) 0%, rgba(0,0,0,0.1) 100%); display: flex; align-items: center; padding: 16px; }
-.card-content { color: white; width: 100%; }
-.card-date { font-size: 16px; font-weight: 700; color: #FFCA28; display: block; margin-bottom: 4px; }
-.card-title { margin: 0; font-size: 24px; line-height: 1.2; font-weight: 700; text-shadow: 0 1px 2px rgba(0,0,0,0.5); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.card-type { font-size: 14px; opacity: 0.8; text-transform: uppercase; margin-top: 4px; display: block; }
-.card-type.b1g-type { color: #FFCDD2; }
-.card-type.ccf-type { color: #FFD54F; }
-.card-type.service-type { color: #BBDEFB; }
+.events-scroll-container { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; padding: 6px 0 12px 0; }
+.upcoming-card-wrapper { width: 100%; }
+.upcoming-card { width: 100%; height: 400px; border-radius: 12px; background: #fff; overflow: hidden; box-shadow: 0 4px 10px rgba(0,0,0,0.08); transition: transform 0.18s ease; cursor: pointer; display: flex; flex-direction: column; }
+.upcoming-card:hover { transform: translateY(-6px); box-shadow: 0 10px 20px rgba(0,0,0,0.12); }
+.card-media { width: 100%; height: 220px; background: #37474F; display: block; overflow: hidden; flex: 0 0 auto; }
+.card-media img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.card-media-placeholder { width:100%; height:100%; background: linear-gradient(90deg,#37474F,#546E7A); }
+.card-details { padding: 12px 14px; color: #263238; display: flex; flex-direction: column; gap: 8px; }
+.card-line { display: block; }
+.card-date { font-size: 14px; font-weight: 700; color: #1976D2; }
+.card-title { margin: 0; font-size: 18px; line-height: 1.2; font-weight: 700; color: #0D47A1; display: block; overflow: hidden; word-wrap: break-word; }
+.card-type { font-size: 13px; opacity: 0.9; text-transform: uppercase; margin-top: 2px; color: #37474F; }
+.card-location { font-size: 14px; color: #37474F; }
+.card-minor { font-size: 13px; color: #546E7A; }
+.card-type.b1g-type { color: #D32F2F; }
+.card-type.ccf-type { color: #FFA000; }
+.card-type.service-type { color: #1976D2; }
 .no-upcoming-box { text-align: center; padding: 30px; background: #fff; border-radius: 12px; color: #78909C; border: 1px dashed #CFD8DC; }
 .link-btn { background: none; border: none; color: #1976D2; text-decoration: underline; cursor: pointer; font-weight: 600; margin-left: 4px; }
 .absence-notif-list { display: flex; gap: 12px; margin: 12px 0; overflow-x: auto; padding-bottom: 8px; }
@@ -567,8 +571,9 @@ async function handleEndCurrentEvent() {
 .notif-action { display: flex; justify-content: flex-end; }
 .notif-cta { background: transparent; border: none; color: #1976D2; font-weight: 700; cursor: pointer; padding: 8px; border-radius: 8px; }
 .notif-cta:hover { text-decoration: underline; }
-@media (max-width: 768px) { .dashboard-container { padding: 0 10px 10px 10px; } .stats-grid { grid-template-columns: 1fr 1fr; } .upcoming-card { height: 120px; } .card-title { font-size: 20px; } }
-@media (max-width: 480px) { .stats-grid { grid-template-columns: 1fr; } }
+@media (max-width: 1024px) { .events-scroll-container { grid-template-columns: repeat(2, 1fr); } .card-media { height: 200px; } }
+@media (max-width: 768px) { .dashboard-container { padding: 0 10px 10px 10px; } .stats-grid { grid-template-columns: 1fr 1fr; } .events-scroll-container { grid-template-columns: repeat(2, 1fr); } .card-media { height: 170px; } .card-title { font-size: 16px; } }
+@media (max-width: 480px) { .events-scroll-container { grid-template-columns: 1fr; } .card-media { height: 120px; } .stats-grid { grid-template-columns: 1fr; } }
 .event-details-modal { display: flex; flex-direction: column; gap: 16px; padding: 8px 4px; width: 100%; box-sizing: border-box; }
 .event-details-modal .modal-section h3 { margin: 0 0 8px 0; font-size: 20px; color: #0D47A1; }
 .event-details-modal .meta { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 16px; font-size: 14px; color: #37474F; }
