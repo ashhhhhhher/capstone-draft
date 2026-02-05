@@ -102,7 +102,7 @@ watch(() => authStore.userRole, (newRole) => {
                 <!-- Column 2: GROUPS -->
                 <div class="feature-col" style="background-image: url('/group2.jpg')">
                     <div class="col-overlay">
-                        <h3 class="feature-title">ELEVATE GROUPS</h3>
+                        <h3 class="feature-title">DISCIPLESHIP GROUPS</h3>
                         <p class="feature-desc">
                             Find a group of friends who you can laugh, learn, and be yourself with. Here, you can make new friends, find a mentor and grow deeper in your relationship with Jesus!
                         </p>
