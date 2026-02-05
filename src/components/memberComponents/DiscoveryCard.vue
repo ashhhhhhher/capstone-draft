@@ -1,9 +1,9 @@
 <script setup>
 defineProps({
-  title: String,
-  subtitle: String,
-  description: String,
-  detailedDesc: String,
+  title: { type: String, default: 'WKND' },
+  subtitle: { type: String, default: 'Every Other Week Services' },
+  description: { type: String, default: 'Experience the energy of our weekend gatherings.' },
+  detailedDesc: { type: String, default: 'Join us for WKND services every other week as we gather for worship, teaching, and fellowship. It’s a space to recharge and connect with the community.' },
   image: String
 })
 </script>
@@ -33,7 +33,6 @@ defineProps({
 .hero-subtitle { font-size: 10px; font-weight: 800; letter-spacing: 1.5px; opacity: 0.8; margin-bottom: 8px; text-transform: uppercase; display: block; }
 .hero-title { font-size: 32px; font-weight: 900; margin: 0 0 8px 0; }
 .hero-desc { font-size: 14px; line-height: 1.4; opacity: 0.9; max-width: 240px; margin: 0 auto; }
-/* Changed to 0.8 opacity and added backdrop blur for smoothness */
 .content-detail { position: absolute; inset: 0; padding: 30px; display: flex; flex-direction: column; justify-content: center; align-items: center; background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); opacity: 0; transform: translateY(15px); transition: all 0.5s cubic-bezier(0.25, 1, 0.5, 1); }
 .discovery-card:hover .content-front { opacity: 0; transform: translateY(-10px); }
 .discovery-card:hover .content-detail { opacity: 1; transform: translateY(0); }
