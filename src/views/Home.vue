@@ -1,8 +1,6 @@
 <script setup>
 import { ref, computed, watch } from 'vue'
-import * as XLSX from 'xlsx-js-style'
 import { storeToRefs } from 'pinia'
-import buildComparisonPayload from '../utils/eventComparisonExport'
 import { useMembersStore } from '../stores/members'
 import { useEventsStore } from '../stores/events'
 import { useAttendanceStore } from '../stores/attendance'
@@ -228,132 +226,7 @@ function handleEditEvent(event) {
   showCreateEventModal.value = true
 }
 
-// Export attendance for a single event (used in CalendarModal per-event details)
-function exportEventAttendance(event) {
-  try {
-    if (!event || !event.id) { alert('No event selected to export.'); return }
-    
-    const records = (allAttendance.value || []).filter(a => a.eventId === event.id)
-    if (!records.length) { alert('No attendance records found for this event.'); return }
-
-    const rows = []
-    // Header / metadata
-    rows.push(["CHRIST COMMISSION FOUNDATION INC."])
-    rows.push([`Event Attendance: ${event.name}`])
-    rows.push([`Date: ${event.date || 'N/A'}`])
-    rows.push([""])
-    // Extended Header for Ministry
-    const headers = ['Name', 'Age', 'Age Group', 'Gender', 'Contact #', 'Event Role / Ministry', 'Is Volunteer']
-    rows.push(headers)
-
-    const memberList = (members && members.value) ? members.value : []
-    
-    // Process records to find attendees
-    const attendees = records.map(r => {
-        const m = memberList.find(x => x.id === r.memberId)
-        if (!m) return null
-        const ministry = r.ministry || 'N/A'
-        const isVolunteerForEvent = ministry !== 'N/A'
-        return {
-            ...m,
-            attendanceMinistry: ministry, // Capture ministry from attendance record
-            isVolunteerForEvent
-        }
-    }).filter(Boolean)
-
-    attendees.forEach(m => {
-      rows.push([
-          `${m.lastName || ''}, ${m.firstName || ''}`.trim(), 
-          m.age || '', 
-          m.finalTags?.ageCategory || '', 
-          m.gender || '', 
-          m.contactNumber || '',
-          m.attendanceMinistry, // This might be 'N/A' or 'Welcome', etc.
-          m.isVolunteerForEvent ? 'Yes' : 'No'
-      ])
-    })
-
-    // Add interpretation for the event attendance
-    const total = attendees.length
-    const elevate = attendees.filter(m => m.finalTags?.ageCategory === 'Elevate').length
-    const b1g = attendees.filter(m => m.finalTags?.ageCategory === 'B1G').length
-    const male = attendees.filter(m => m.gender === 'Male').length
-    const female = attendees.filter(m => m.gender === 'Female').length
-    const volunteers = attendees.filter(m => m.isVolunteerForEvent).length
-    const pct = (n) => total > 0 ? `${Math.round((n / total) * 100)}%` : '0%'
-    
-    rows.push([])
-    rows.push(['Interpretation:'])
-    rows.push([`Total: ${total} — Volunteers ${volunteers} — Elevate ${elevate} (${pct(elevate)}), B1G ${b1g} (${pct(b1g)}). Gender: M ${male}, F ${female}.`])
-
-    const wb = XLSX.utils.book_new()
-    const ws = XLSX.utils.aoa_to_sheet(rows)
-
-    // basic styling similar to other exports
-    const headerStyle = { font: { bold: true, color: { rgb: 'FFFFFF' } }, fill: { fgColor: { rgb: '2196F3' } }, alignment: { horizontal: 'center' } }
-    if (ws['!ref']) {
-      const range = XLSX.utils.decode_range(ws['!ref'])
-      for (let R = 0; R <= range.e.r; ++R) {
-        for (let C = range.s.c; C <= range.e.c; ++C) {
-          const cell = XLSX.utils.encode_cell({ r: R, c: C })
-          if (!ws[cell]) continue
-          // style header row (the one containing headers array) — headers are at row index 4 (0-based)
-          if (R === 4) ws[cell].s = headerStyle
-          else if (R > 4) ws[cell].s = { alignment: { vertical: 'center' } }
-        }
-      }
-      ws['!cols'] = [{ wch: 30 }, { wch: 10 }, { wch: 15 }, { wch: 12 }, { wch: 18 }, { wch: 25 }, { wch: 12 }]
-    }
-
-    XLSX.utils.book_append_sheet(wb, ws, `Attendance_${(event.date||'event')}`)
-    // Append Event Comparison sheet...
-    try {
-      const payload = buildComparisonPayload({ allEvents: allEvents.value || [], allAttendance: allAttendance.value || [], members: members.value || [], activeMembers: activeMembers?.value || [] })
-      if (payload && payload.cards && payload.cards.length) {
-        // ... (existing comparison sheet logic) ...
-         const rowsComp = []
-        rowsComp.push(["CHRIST COMMISSION FOUNDATION INC."])
-        rowsComp.push(["Event Comparison (Current vs Previous 3)"])
-        rowsComp.push([""])
-        payload.cards.forEach(card => {
-          rowsComp.push([card.title || ''])
-          if (card.desc) rowsComp.push([card.desc])
-          // charts
-          if (card.charts && card.charts.length) {
-            card.charts.forEach(ch => {
-              rowsComp.push([`Chart: ${ch.title || ''}`])
-              if (ch.labels && ch.labels.length) rowsComp.push(['Labels'].concat(ch.labels))
-              (ch.datasets || []).forEach(ds => {
-                const raw = ds.raw || ds.data || []
-                rowsComp.push([ds.label || 'Dataset'].concat(raw.map(v => String(v))))
-              })
-              rowsComp.push([])
-            })
-          }
-          // tables
-          if (card.tableHeaders && card.tableRows) {
-            rowsComp.push(card.tableHeaders)
-            (card.tableRows || []).forEach(r => rowsComp.push(r))
-            rowsComp.push([])
-          }
-          if (card.interpretation) {
-            rowsComp.push(['Interpretation:'])
-            rowsComp.push([card.interpretation])
-            rowsComp.push([])
-          }
-        })
-        const wsComp = XLSX.utils.aoa_to_sheet(rowsComp)
-        XLSX.utils.book_append_sheet(wb, wsComp, 'Event Comparison')
-      }
-    } catch (e) { console.warn('Failed to append Event Comparison sheet', e) }
-
-    const fnameSafe = (`Event_Attendance_${event.date || ''}_${event.name || ''}`).replace(/[^a-z0-9_\-\.]/gi, '_')
-    XLSX.writeFile(wb, `${fnameSafe}.xlsx`)
-  } catch (err) {
-    console.error('exportEventAttendance failed', err)
-    alert('Export failed. See console for details.')
-  }
-}
+// exportEventAttendance removed — use centralized ExportButton.vue for exporting functionality
 
 // Open details modal (called when CurrentEvent emits open-details)
 function openEventDetails() {
@@ -489,7 +362,7 @@ async function handleEndCurrentEvent() {
       @close="showCalendarModal = false"
       @createEvent="handleCreateEvent"
       @editEvent="handleEditEvent"
-      @exportEvent="exportEventAttendance"
+      
     />
   </Modal>
 
