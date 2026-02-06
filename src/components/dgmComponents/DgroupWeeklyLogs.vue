@@ -1,6 +1,6 @@
 <script setup>
 import { ref, onMounted, computed } from 'vue'
-import { useMembersStore } from '../stores/members'
+import { useMembersStore } from '../../stores/members'
 import { db } from '../../firebase'
 import { collection, query, orderBy, onSnapshot } from 'firebase/firestore'
 import { Download, Users, ClipboardList, MessageCircle, Heart, UserPlus, TrendingUp } from 'lucide-vue-next'

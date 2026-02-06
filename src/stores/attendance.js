@@ -19,6 +19,7 @@ import {
 } from 'firebase/firestore'
 import { useAuthStore } from './auth'
 import { useMembersStore } from './members'
+import { useDgroupEventsStore } from './dgroupevents'
 
 export const useAttendanceStore = defineStore('attendance', () => {
 
@@ -111,8 +112,13 @@ export const useAttendanceStore = defineStore('attendance', () => {
   async function logDgroupMeeting(meetingData) {
     const authStore = useAuthStore()
     if (!authStore.branchId) return { status: 'error', message: 'Branch ID missing' }
+    console.debug('logDgroupMeeting called with:', meetingData)
     // write weekly meeting logs into the dgroupEvents -> {dgroupId}/meetings/{meetingDate}
-    if (!meetingData || !meetingData.dgroupId) {
+    if (!meetingData) return { status: 'error', message: 'Missing meeting data' }
+    // Accept dgroupId in several possible fields for robustness
+    const dgroupId = meetingData.dgroupId || meetingData.dgroup || meetingData.groupId || meetingData.group?.dgroupId
+    if (!dgroupId) {
+      console.error('Missing dgroupId in meeting data:', meetingData)
       return { status: 'error', message: 'Missing dgroupId in meeting data' }
     }
 
@@ -134,28 +140,27 @@ export const useAttendanceStore = defineStore('attendance', () => {
       })
 
       const meetingDate = meetingData.meetingDate || new Date().toISOString().split('T')[0]
-      const meetingRef = doc(db, 'branches', authStore.branchId, 'dgroupEvents', meetingData.dgroupId, 'meetings', meetingDate)
 
-      const docPayload = {
-        dgroupId: meetingData.dgroupId,
-        meetingDate: meetingDate,
-        meetingTime: meetingData.meetingTime || '',
-        venue: meetingData.venue || '',
-        meetingTitle: meetingData.meetingTitle || meetingData.description || '',
-        dgroupleader: meetingData.dgroupleader || `${authStore.userProfile?.firstName || ''} ${authStore.userProfile?.lastName || ''}`.trim(),
+      // Only include attendance map and stats — do not overwrite schedule fields like venue/time/date
+      const payload = {
         attendance: attendanceMap,
         guests: typeof meetingData.guests === 'number' ? meetingData.guests : 0,
         evangelized: typeof meetingData.evangelized === 'number' ? meetingData.evangelized : 0,
         conversations: typeof meetingData.conversations === 'number' ? meetingData.conversations : 0,
         locked: !!meetingData.locked,
-        submittedAt: serverTimestamp(),
+        // mark meeting as ended when logging the report
+        ended: true,
         submittedBy: `${authStore.userProfile?.firstName || ''} ${authStore.userProfile?.lastName || ''}`.trim(),
         submittedById: authStore.userProfile?.id || 'unknown'
       }
 
-      await setDoc(meetingRef, docPayload)
-      currentGroupHasLogged.value = true
-      return { status: 'success', message: 'DGroup attendance recorded in dgroupEvents.' }
+      const dgroupStore = useDgroupEventsStore()
+      const res = await dgroupStore.updateDgroupMeeting(dgroupId, meetingDate, payload)
+      if (res && res.status === 'success') {
+        currentGroupHasLogged.value = true
+        return { status: 'success', message: 'DGroup attendance recorded in dgroupEvents.' }
+      }
+      return { status: 'error', message: res?.message || 'Failed to update meeting.' }
     } catch (error) {
       console.error('DGroup Log Error:', error)
       return { status: 'error', message: error.message }

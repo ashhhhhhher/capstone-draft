@@ -51,7 +51,8 @@ const showAttendanceModal = ref(false)
 
 const todayMeeting = computed(() => {
   const today = new Date().toISOString().split('T')[0]
-  return dgroupMeetings.value.find(m => m.meetingDate === today)
+  // ignore meetings that have been ended
+  return dgroupMeetings.value.find(m => m.meetingDate === today && !m.ended)
 })
 
 const dgroupMembersForModal = computed(() => {
@@ -233,10 +234,22 @@ function formatShortDate(dateStr) { if (!dateStr) return ''; return new Date(dat
       </div>
     </Modal>
 
-    <section v-if="todayEvent" class="today-card" :class="{ 'has-bg': todayEvent.photoURL }" :style="todayEvent.photoURL ? { backgroundImage: `url(${todayEvent.photoURL})` } : {}" @click="openEventDetails(todayEvent)">
-      <div class="today-overlay">
-        <div class="badge">HAPPENING TODAY</div>
-        <h2>{{ todayEvent.name }}</h2>
+    <!-- Show today's main event and, if present, today's dgroup meeting in the same section -->
+    <section v-if="todayEvent || todayMeeting" class="today-section">
+      <div v-if="todayEvent" class="today-card" :class="{ 'has-bg': todayEvent.photoURL }" :style="todayEvent.photoURL ? { backgroundImage: `url(${todayEvent.photoURL})` } : {}" @click="openEventDetails(todayEvent)">
+        <div class="today-overlay">
+          <div class="badge">HAPPENING TODAY</div>
+          <h2>{{ todayEvent.name }}</h2>
+        </div>
+      </div>
+
+      <div v-if="todayMeeting" class="today-card dgroup" @click="showAttendanceModal = true" :title="'Log attendance for ' + (todayMeeting.meetingTitle || 'Dgroup Meeting')">
+        <div class="today-overlay dgroup-overlay">
+          <div class="badge">DGROUP MEETING TODAY</div>
+          <h2>{{ todayMeeting.meetingTitle || 'Dgroup Meeting' }}</h2>
+          <div class="dgroup-meta">{{ todayMeeting.meetingDate }} <span v-if="todayMeeting.meetingTime">• {{ todayMeeting.meetingTime }}</span></div>
+          <div class="dgroup-venue">{{ todayMeeting.venue || 'TBD' }}</div>
+        </div>
       </div>
     </section>
     <section v-else class="today-card empty">
@@ -341,6 +354,12 @@ function formatShortDate(dateStr) { if (!dateStr) return ''; return new Date(dat
 .today-card { background: linear-gradient(150deg, #53a2fc, #0046d2); color: white; border-radius: 20px; position: relative; overflow: hidden; min-height: 140px; background-size: cover; background-position: center; cursor: pointer; }
 .today-overlay { padding: 20px; height: 100%; display: flex; flex-direction: column; justify-content: center; background: rgba(0,0,0,0.4); }
 .today-card.empty { background: white; color: #455A64; border: 1px solid #ECEFF1; padding: 20px; }
+.today-section { display: flex; flex-direction: column; gap: 12px; }
+.today-card.dgroup { background: #a49cff; color: #263238; min-height: 100px; box-shadow: 0 4px 10px rgba(0,0,0,0.06); border-radius: 12px; }
+.today-card.dgroup .today-overlay { background: transparent; padding: 12px; justify-content: flex-start; }
+.today-card.dgroup .badge { color: #1976D2; }
+.dgroup-meta { margin-top: 6px; font-size: 13px; color: #607D8B; font-weight: 700; }
+.dgroup-venue { margin-top: 4px; font-size: 13px; color: #455A64; }
 .badge {color: #fa6e6e; font-size: 12px; font-weight: 800; padding: 4px 8px; border-radius: 4px; display: inline-block; margin-bottom: 8px; }
 .section-header h3 { font-size: 20px; color: #37474F; margin: 0; }
 .empty-text { text-align: center; padding: 20px; color: #90A4AE; font-size: 14px; }

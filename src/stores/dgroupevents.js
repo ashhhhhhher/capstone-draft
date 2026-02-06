@@ -5,6 +5,7 @@ import {
   collection,
   doc,
   setDoc,
+  updateDoc,
   getDoc,
   getDocs,
   query,
@@ -112,6 +113,36 @@ export const useDgroupEventsStore = defineStore('dgroupevents', () => {
     }
   }
 
+  /**
+   * Update (or create) a meeting document with attendance and stats
+   * meetingDate should be YYYY-MM-DD string
+   */
+  async function updateDgroupMeeting(dgroupId, meetingDate, updates) {
+    const authStore = useAuthStore()
+    if (!authStore.branchId || !dgroupId || !meetingDate) return { status: 'error', message: 'Missing branch, dgroupId, or meetingDate' }
+    try {
+      const refDoc = doc(db, 'branches', authStore.branchId, 'dgroupEvents', dgroupId, 'meetings', meetingDate)
+      const snap = await getDoc(refDoc)
+      // Only update allowed meeting fields to avoid overwriting schedule data
+      const allowed = ['attendance', 'guests', 'evangelized', 'conversations', 'locked', 'ended', 'submittedBy', 'submittedById']
+      const updateObj = { submittedAt: serverTimestamp() }
+      allowed.forEach((k) => {
+        if (updates[k] !== undefined) updateObj[k] = updates[k]
+      })
+
+      if (snap.exists()) {
+        await updateDoc(refDoc, updateObj)
+      } else {
+        // create doc with minimal required fields plus the updates
+        await setDoc(refDoc, { dgroupId, meetingDate, ...updateObj })
+      }
+      return { status: 'success' }
+    } catch (error) {
+      console.error('updateDgroupMeeting error:', error)
+      return { status: 'error', message: error.message }
+    }
+  }
+
   return {
     isLoading,
     createDgroupEvent,
@@ -119,7 +150,9 @@ export const useDgroupEventsStore = defineStore('dgroupevents', () => {
     getTodayDgroupEvent
     ,
     // real-time listener: callback receives array of docs [{id, ...data}]
-    listenToDgroupMeetings
+    listenToDgroupMeetings,
+    // allow updating an existing meeting doc with attendance/stats
+    updateDgroupMeeting
   }
 })
 

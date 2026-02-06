@@ -2,6 +2,7 @@
 import { reactive, onMounted, watch, ref } from 'vue'
 import { useAttendanceStore } from '../../stores/attendance'
 import { useMembersStore } from '../../stores/members'
+import { useAuthStore } from '../../stores/auth'
 import { ClipboardCheck } from 'lucide-vue-next'
 
 const props = defineProps({
@@ -13,8 +14,10 @@ const emit = defineEmits(['close','saved'])
 
 const attendanceStore = useAttendanceStore()
 const membersStore = useMembersStore()
+const authStore = useAuthStore()
 
 const show = ref(true)
+const showConfirm = ref(false)
 
 const attendanceForm = reactive({
 	date: props.meeting?.meetingDate || new Date().toISOString().split('T')[0],
@@ -86,8 +89,10 @@ function close() {
 }
 
 async function submitAttendance() {
+	// determine dgroupId: prefer passed prop, fallback to auth profile
+	const resolvedDgroupId = props.group?.dgroupId || props.group?.id || props.group?.dgroup || props.group?.groupId || authStore.userProfile?.dgroupId
 	const payload = {
-		dgroupId: props.group?.dgroupId || props.group?.id,
+		dgroupId: resolvedDgroupId,
 		meetingDate: attendanceForm.date,
 		attendees: attendanceForm.attendees,
 		conversations: attendanceForm.conversations || 0,
@@ -95,6 +100,8 @@ async function submitAttendance() {
 		guests: attendanceForm.guests || 0,
 		locked: false
 	}
+
+	console.debug('Submitting Dgroup attendance payload:', payload, 'props.group:', props.group, 'auth.dgroupId:', authStore.userProfile?.dgroupId)
 
 	try {
 		const res = await attendanceStore.logDgroupMeeting(payload)
@@ -113,6 +120,19 @@ async function submitAttendance() {
 		console.error('Save Error:', e)
 		alert('Error saving attendance.')
 	}
+}
+
+function openEndMeetingConfirm() {
+	showConfirm.value = true
+}
+
+function cancelEndMeeting() {
+	showConfirm.value = false
+}
+
+async function confirmEndMeeting() {
+	showConfirm.value = false
+	await submitAttendance()
 }
 </script>
 
@@ -158,7 +178,18 @@ async function submitAttendance() {
 
 			<div class="actions">
 				<button @click="close" class="cancel">Cancel</button>
-				<button @click="submitAttendance" class="confirm">Submit Report</button>
+				<button @click="openEndMeetingConfirm" class="end-meeting">End Meeting</button>
+			</div>
+
+			<!-- Confirmation popup -->
+			<div v-if="showConfirm" class="confirm-overlay">
+				<div class="confirm-box">
+					<p class="confirm-text">Are you sure you want to end the meeting?</p>
+					<div class="confirm-actions">
+						<button @click="confirmEndMeeting" class="confirm-yes">Yes, submit report</button>
+						<button @click="cancelEndMeeting" class="confirm-no">No, not yet.</button>
+					</div>
+				</div>
 			</div>
 		</div>
 	</div>
@@ -177,4 +208,13 @@ async function submitAttendance() {
 .actions { display:flex; gap:8px; justify-content:flex-end; margin-top:14px; }
 .cancel { background:transparent; border:1px solid #E0E0E0; padding:8px 12px; border-radius:8px; }
 .confirm { background:#2E7D32; color:white; padding:8px 12px; border-radius:8px; border:none; }
+.end-meeting { background:#C62828; color:white; padding:8px 12px; border-radius:8px; border:none; }
+
+/* Confirmation overlay styles */
+.confirm-overlay { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; z-index: 300; }
+.confirm-box { background: white; padding: 18px; border-radius: 12px; box-shadow: 0 6px 20px rgba(0,0,0,0.3); width: 90%; max-width: 420px; text-align: center; }
+.confirm-text { font-weight: 700; margin-bottom: 12px; color: #263238; }
+.confirm-actions { display:flex; gap: 8px; justify-content: center; }
+.confirm-yes { background: #1976d2; color: white; padding: 8px 12px; border-radius: 8px; border: none; }
+.confirm-no { background: transparent; border: 1px solid #E0E0E0; padding: 8px 12px; border-radius: 8px; }
 </style>
