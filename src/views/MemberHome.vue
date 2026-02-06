@@ -1,9 +1,11 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useAuthStore } from '../stores/auth'
 import { useEventsStore } from '../stores/events'
 import { useRouter } from 'vue-router'
-import { MapPin, QrCode, BarChart2, Clock, Info, X, Sparkles } from 'lucide-vue-next'
+import { MapPin, QrCode, BarChart2, Clock, Info, X, Sparkles, Plus, ClipboardCheck } from 'lucide-vue-next'
+import Modal from '../components/dgmComponents/Modal.vue'
+import { useDgroupEventsStore } from '../stores/dgroupevents'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -27,6 +29,78 @@ const todayEvent = computed(() => {
     return ageCat && e.allowedAgeCategories.includes(ageCat)
   })
 })
+
+const showScheduleDgroupModal = ref(false)
+const scheduleDate = ref('')
+const scheduleTime = ref('')
+const scheduleVenue = ref('')
+const scheduleDescription = ref('')
+// meeting title field (previously called description in UI)
+const scheduleTitle = ref('')
+const scheduleStatus = ref({ type: '', message: '' })
+
+const dgroupEventsStore = useDgroupEventsStore()
+
+const dgroupMeetings = ref([])
+const meetingsLoading = ref(false)
+let meetingsUnsub = null
+
+function stopMeetingsListener() {
+  if (typeof meetingsUnsub === 'function') { meetingsUnsub(); meetingsUnsub = null }
+}
+
+function startMeetingsListener(dgroupId) {
+  stopMeetingsListener()
+  if (!dgroupId) { dgroupMeetings.value = []; return }
+  meetingsLoading.value = true
+  meetingsUnsub = dgroupEventsStore.listenToDgroupMeetings(dgroupId, (items) => {
+    dgroupMeetings.value = items || []
+    meetingsLoading.value = false
+  })
+}
+
+onMounted(() => startMeetingsListener(memberProfile.value?.dgroupId))
+watch(memberProfile, (v) => startMeetingsListener(v?.dgroupId))
+onUnmounted(() => stopMeetingsListener())
+
+async function handleOpenSchedule() {
+  showScheduleDgroupModal.value = true
+  scheduleDate.value = ''
+  scheduleTime.value = ''
+  scheduleVenue.value = ''
+  scheduleDescription.value = ''
+  scheduleTitle.value = ''
+  scheduleStatus.value = { type: '', message: '' }
+}
+
+async function handleScheduleSubmit() {
+  // basic validation
+  if (!scheduleDate.value || !scheduleTime.value || !scheduleVenue.value) {
+    scheduleStatus.value = { type: 'error', message: 'Please fill required fields (date, time, venue).' }
+    return
+  }
+
+  const dgroupId = memberProfile.value?.dgroupId
+  if (!dgroupId) {
+    scheduleStatus.value = { type: 'error', message: 'You are not assigned to a Dgroup.' }
+    return
+  }
+
+  const payload = {
+    meetingDate: scheduleDate.value,
+    meetingTime: scheduleTime.value,
+    venue: scheduleVenue.value,
+    // support both meetingTitle (new) and description (legacy)
+    meetingTitle: scheduleTitle.value || scheduleDescription.value
+  }
+
+  const res = await dgroupEventsStore.createDgroupEvent(dgroupId, payload)
+  if (res && res.status === 'success') {
+    showScheduleDgroupModal.value = false
+  } else {
+    scheduleStatus.value = { type: 'error', message: res.message || 'Failed to schedule meeting.' }
+  }
+}
 
 const upcomingEvents = computed(() => {
   const now = new Date(); now.setHours(0,0,0,0)
@@ -92,7 +166,54 @@ function formatShortDate(dateStr) { if (!dateStr) return ''; return new Date(dat
         <div class="icon-bg orange"><BarChart2 :size="20" color="#F57C00"/></div>
         <span>Attendance</span>
       </div>
+      <div class="action-card disabled" aria-disabled="true">
+        <div class="icon-bg blue"><ClipboardCheck :size="20" color="#90A4AE"/></div>
+        <span>Log Dgroup Meeting</span>
+      </div>
+      <div class="action-card" @click="handleOpenSchedule" title="Schedule weekly meetings">
+        <div class="icon-bg orange"><Plus :size="20" color="#F57C00"/></div>
+        <span>Schedule Weekly Dgroup Meeting</span>
+      </div>
     </section>
+
+    <Modal v-if="showScheduleDgroupModal" @close="showScheduleDgroupModal = false">
+      <div class="form-container">
+        <div class="form-header">
+          <h2>Schedule Weekly Dgroup Meeting</h2>
+        </div>
+
+        <div v-if="scheduleStatus.message" class="status-banner" :class="scheduleStatus.type">
+          <span>{{ scheduleStatus.message }}</span>
+        </div>
+
+        <form class="form-body" @submit.prevent="handleScheduleSubmit">
+          <div class="form-group">
+            <label>Date</label>
+            <input type="date" v-model="scheduleDate" required />
+          </div>
+
+          <div class="form-group">
+            <label>Time</label>
+            <input type="time" v-model="scheduleTime" required />
+          </div>
+
+          <div class="form-group">
+            <label>Venue</label>
+            <input v-model="scheduleVenue" required />
+          </div>
+
+          <div class="form-group">
+            <label>Meeting Title</label>
+            <input v-model="scheduleTitle" placeholder="e.g. Weekly Bible Study" />
+          </div>
+
+          <div class="actions" style="margin-top: 12px;">
+            <button type="button" class="cancel" @click="showScheduleDgroupModal = false">Cancel</button>
+            <button type="submit" class="confirm">Schedule</button>
+          </div>
+        </form>
+      </div>
+    </Modal>
 
     <section v-if="todayEvent" class="today-card" :class="{ 'has-bg': todayEvent.photoURL }" :style="todayEvent.photoURL ? { backgroundImage: `url(${todayEvent.photoURL})` } : {}" @click="openEventDetails(todayEvent)">
       <div class="today-overlay">
@@ -126,6 +247,29 @@ function formatShortDate(dateStr) { if (!dateStr) return ''; return new Date(dat
         </div>
       </div>
       <div v-else class="empty-text">No upcoming events scheduled.</div>
+    </div>
+
+    <div class="section-header" style="margin-top:8px;"><h3>Upcoming Dgroup Meetings</h3></div>
+    <div class="upcoming-column">
+      <div v-if="meetingsLoading" class="empty-text">Loading meetings…</div>
+      <div v-else-if="dgroupMeetings.length > 0" class="events-scroll-container">
+        <div v-for="m in dgroupMeetings" :key="m.id || m.meetingDate" class="upcoming-card-wrapper">
+          <div class="upcoming-card">
+            <div class="card-media">
+              <div v-if="m.photoURL" style="width:100%;height:100%;"><img :src="m.photoURL" alt="meeting image" style="width:100%;height:100%;object-fit:cover;"/></div>
+              <div v-else class="card-media-placeholder"><img src="https://via.placeholder.com/400x220?text=Dgroup+Meeting" alt="placeholder"/></div>
+            </div>
+            <div class="card-details">
+              <div class="card-line card-date">{{ m.meetingDate }} <span v-if="m.meetingTime">• {{ m.meetingTime }}</span></div>
+              <div class="card-line card-title">{{ m.meetingTitle || 'Dgroup Meeting' }}</div>
+              <div class="card-line card-type">Dgroup Meeting</div>
+              <div class="card-line card-location"><strong>Venue:</strong> {{ m.venue || 'TBD' }}</div>
+              <div class="card-line card-minor">Leader: {{ m.dgroupleader || '—' }}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div v-else class="empty-text">No upcoming Dgroup meetings scheduled.</div>
     </div>
 
     <div v-if="showEventModal && selectedEvent" class="modal-overlay" @click.self="showEventModal = false">
@@ -206,4 +350,8 @@ function formatShortDate(dateStr) { if (!dateStr) return ''; return new Date(dat
 @media (max-width: 1024px) { .events-scroll-container { grid-template-columns: repeat(2, 1fr); } .card-media { height: 200px; } }
 @media (max-width: 768px) { .events-scroll-container { grid-template-columns: repeat(2, 1fr); } .card-media { height: 170px; } .card-title { font-size: 16px; } }
 @media (max-width: 480px) { .events-scroll-container { grid-template-columns: 1fr; } .card-media { height: 120px; } }
+
+/* Disabled action card */
+.action-card.disabled { opacity: 0.6; cursor: not-allowed; }
+.action-card.disabled .icon-bg { background: #F5F5F5; }
 </style>
