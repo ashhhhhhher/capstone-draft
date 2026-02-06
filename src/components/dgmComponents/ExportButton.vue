@@ -253,20 +253,11 @@ function exportMembersPDF() {
       doc.setDrawColor(0); // Black Line
       doc.line(15, y + 1, 15 + textWidth, y + 1);
 
-      y += 6;
+      y += 2;
       
       doc.setFontSize(9).setTextColor(50);
-      const col1 = 20; 
-      const col2 = 80; 
-      
-      doc.text(`- B1G MALE: ${stats.b1gMale}`, col1, y);
-      doc.text(`- ELEVATE MALE: ${stats.elevateMale}`, col2, y);
-      
-      y += 5;
-      doc.text(`- B1G FEMALE: ${stats.b1gFemale}`, col1, y);
-      doc.text(`- ELEVATE FEMALE: ${stats.elevateFemale}`, col2, y);
 
-      y += 6;
+      y += 2;
 
       autoTable(doc, {
         startY: y,
@@ -282,23 +273,6 @@ function exportMembersPDF() {
       } else {
         console.warn('[ExportButton] doc.lastAutoTable.finalY is not available, falling back to y increment');
         y += 6;
-      }
-      const total = stats.total || 0;
-      if (total > 0) {
-        const elevate = stats.elevateMale + stats.elevateFemale
-        const b1g = stats.b1gMale + stats.b1gFemale
-        const pct = (n) => `${Math.round((n / total) * 100)}%`
-        const interp = `Interpretation: ${total} total — Elevate ${elevate} (${pct(elevate)}), B1G ${b1g} (${pct(b1g)}). Gender: M ${stats.elevateMale + stats.b1gMale}, F ${stats.elevateFemale + stats.b1gFemale}.`
-        doc.setFontSize(9).setFont('helvetica','normal').setTextColor(50)
-        const wrapped = doc.splitTextToSize(interp, 170)
-        wrapped.forEach(line => {
-          if (y > 270) { doc.addPage(); y = 20 }
-          doc.text(line, 18, y)
-          y += 5
-        })
-        y += 6
-      } else {
-        y += 9
       }
     };
 
@@ -463,16 +437,7 @@ async function exportPageXLSX() {
           row = ws.lastRow.number + 1
         }
 
-        if (card.interpretation) {
-          ws.addRow([])
-          ws.addRow(['Interpretation:'])
-          const lines = String(card.interpretation).split(/\r?\n/)
-          lines.forEach(l => {
-            const r = ws.addRow([l])
-            r.getCell(1).alignment = { wrapText: true }
-          })
-          row = ws.lastRow.number + 1
-        }
+        // interpretation removed per request
         ws.columns = ws.columns.map(c => ({ width: Math.max(15, (c.header && String(c.header).length) || 15) }))
       }
 
@@ -493,7 +458,7 @@ async function exportPageXLSX() {
             card.tableHeaders = headers
             card.tableRows = rows
           } else {
-            card.interpretation = el.querySelector('.interpretation')?.innerText || ''
+            // interpretation removed per request
           }
           addCardSheet(card, i)
         })
@@ -559,11 +524,7 @@ async function exportPageXLSX() {
         })
       }
 
-      if (card.interpretation) {
-        rows.push(['Interpretation:'])
-        const lines = String(card.interpretation).split(/\r?\n/)
-        lines.forEach(l => rows.push([l]))
-      }
+      // interpretation removed per request
 
       const ws = XLSX.utils.aoa_to_sheet(rows)
       let name = card.title ? String(card.title).substring(0, 31) : `Card_${idx + 1}`
@@ -590,7 +551,7 @@ async function exportPageXLSX() {
           card.tableHeaders = headers
           card.tableRows = rows
         } else {
-          card.interpretation = el.querySelector('.interpretation')?.innerText?.trim() || ''
+          // interpretation removed per request
         }
         appendCardAsSheet(card, i)
       })
@@ -608,6 +569,123 @@ async function exportPageXLSX() {
   }
 }
 
+function exportPagePDF() {
+  try {
+    const pdata = (pageExportData && pageExportData.value) ? pageExportData.value : (pageExportData || null)
+    const cards = pdata && Array.isArray(pdata.cards) ? pdata.cards : null
+    const doc = new jsPDF({ unit: 'mm', format: 'a4' })
+    const margin = 25.4
+    const pageWidth = doc.internal.pageSize.getWidth()
+    const pageHeight = doc.internal.pageSize.getHeight()
+    doc.setFontSize(14).setFont('helvetica', 'bold').setTextColor(13,71,161)
+    doc.text("CHRIST'S COMMISSION FELLOWSHIP", margin, margin)
+    doc.setFontSize(10).setFont('helvetica','normal').setTextColor(100)
+    doc.text('Event Comparison Export', margin, margin + 6)
+    doc.line(margin, margin + 9, pageWidth - margin, margin + 9)
+    let y = margin + 14
+
+    const writeWrapped = (text) => {
+      if (!text) return
+      const maxWidth = pageWidth - margin * 2
+      const lines = doc.splitTextToSize(String(text), maxWidth)
+      lines.forEach(line => {
+        if (y > pageHeight - margin - 10) { doc.addPage(); y = margin + 10 }
+        doc.setFontSize(10).setFont('helvetica','normal').text(line, margin, y)
+        y += 5
+      })
+    }
+
+    const renderCard = (card) => {
+      if (y > pageHeight - margin - 20) { doc.addPage(); y = margin + 10 }
+      doc.setFontSize(12).setFont('helvetica','bold').setTextColor(0).text(card.title || 'Card', margin, y)
+      y += 6
+      if (card.desc) { writeWrapped(card.desc); y += 4 }
+
+      if (card.tableHeaders && card.tableRows) {
+        autoTable(doc, { startY: y, head: [card.tableHeaders], body: card.tableRows, theme: 'grid', styles: { fontSize: 9 }, margin: { left: margin, right: margin } })
+        y = doc.lastAutoTable.finalY + 8
+      }
+
+      if (card.charts && Array.isArray(card.charts)) {
+        card.charts.forEach(chart => {
+          if (y > pageHeight - margin - 20) { doc.addPage(); y = margin + 10 }
+          doc.setFontSize(10).setFont('helvetica','bold').text(chart.title || chart.label || 'Chart data', margin, y)
+          y += 6
+          const rows = []
+          if (chart.labels) rows.push(['labels', ...chart.labels])
+          if (chart.datasets) {
+            chart.datasets.forEach(ds => rows.push([ds.label || 'series', ...(ds.raw || ds.data || [])]))
+          } else if (chart.raw) {
+            rows.push(['raw', ...(chart.raw || [])])
+          }
+          if (rows.length) {
+            autoTable(doc, { startY: y, body: rows, styles: { fontSize: 8 }, margin: { left: margin, right: margin }, theme: 'grid' })
+            y = doc.lastAutoTable.finalY + 8
+          }
+        })
+      }
+
+      // interpretation removed per request
+    }
+
+    if (cards) {
+      if (!cards.length) { alert('No card data available to export.'); return }
+      cards.forEach(c => renderCard(c))
+    } else {
+      const root = document.querySelector('.event-comparison-improved')
+      if (!root) { alert('No content to export.'); return }
+      const elems = Array.from(root.querySelectorAll('.card'))
+      elems.forEach(el => {
+        const title = el.querySelector('h3')?.innerText || el.querySelector('h4')?.innerText || 'Card'
+        const desc = el.querySelector('.card-desc')?.innerText || ''
+        const charts = []
+        try {
+          const canvases = Array.from(el.querySelectorAll('canvas'))
+          canvases.forEach((cv) => {
+            try {
+              let chartInstance = null
+              if (window.Chart && typeof window.Chart.getChart === 'function') chartInstance = window.Chart.getChart(cv)
+              if (!chartInstance && cv.__chart__) chartInstance = cv.__chart__
+              if (!chartInstance && cv._chart) chartInstance = cv._chart
+              if (chartInstance && chartInstance.data) {
+                const chart = { title: (chartInstance.options && chartInstance.options.plugins && chartInstance.options.plugins.title && chartInstance.options.plugins.title.text) || '', labels: chartInstance.data.labels || [], datasets: (chartInstance.data.datasets || []).map(ds => ({ label: ds.label || '', raw: ds.data ? ds.data.slice() : (ds._data ? ds._data.slice() : []) })) }
+                charts.push(chart)
+              }
+            } catch (cErr) { }
+          })
+        } catch (e) { }
+
+        renderCard({ title, desc, tableHeaders: null, tableRows: null, charts: charts.length ? charts : null })
+      })
+    }
+
+    doc.save(`page_export_${new Date().toISOString().split('T')[0]}.pdf`)
+  } catch (err) {
+    console.error('Page PDF export failed', err)
+    alert('Page PDF export failed. See console for details.')
+  }
+}
+
+// --- Main Handler ---
+function handleExport(type) {
+  showMenu.value = false;
+  if (exportType === 'members') {
+    if (type === 'excel') exportMembersExcel();
+    else exportMembersPDF();
+    return
+  }
+  if (exportType === 'events') {
+    if (type === 'excel') exportEventsExcel();
+    else exportEventsPDF();
+    return
+  }
+  if (exportType === 'page') {
+    if (type === 'excel') exportPageXLSX();
+    else if (type === 'pdf-page') exportPagePDF();
+    else alert('Only Excel or PDF export is supported for page exports.');
+    return
+  }
+}
 </script>
 
 <template>
