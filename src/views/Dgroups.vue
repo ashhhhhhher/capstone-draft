@@ -18,7 +18,7 @@ import {
 import DgroupWeeklyLogs from '../components/dgmComponents/DgroupWeeklyLogs.vue'
 import DgroupMatchingSection from '../components/dgmComponents/DgroupMatchingSection.vue'
 import DGroupEditModal from '../components/dgmComponents/DGroupEditModal.vue'
-import MemberDetailsModal from '../components/dgmComponents/MemberDetailsModal.vue' // Added import
+import MemberDetailsModal from '../components/dgmComponents/MemberDetailsModal.vue' 
 import Modal from '../components/dgmComponents/Modal.vue'
 import MemberCard from '../components/dgmComponents/MemberCard.vue'
 
@@ -66,6 +66,10 @@ const sortedDgroups = computed(() => {
     groups[leaderFullName] = {
       leaderId: leader.id,
       leaderName: leaderFullName,
+      leaderFirstName: leader.firstName,
+      leaderLastName: leader.lastName,
+      // Add profile picture logic from leader object
+      leaderProfilePic: leader.profilePicture || leader.photoURL,
       dgroupName: leader.dgroupName || `${leader.firstName}'s Dgroup`,
       dgroupId: leader.dgroupId || 'No ID',
       leaderGender: leader.gender,
@@ -121,6 +125,23 @@ function copyId(id) {
     document.body.removeChild(el);
     alert('Dgroup ID copied!')
   });
+}
+
+// --- Avatar Helper Functions (Similar to MemberCard) ---
+function getLeaderInitials(group) {
+  if (!group.leaderFirstName) return '?'
+  return group.leaderFirstName[0] + (group.leaderLastName?.[0] || '')
+}
+
+function getLeaderColor(group) {
+   const colors = ['#FFCDD2', '#F8BBD0', '#E1BEE7', '#D1C4E9', '#C5CAE9', '#BBDEFB', '#B3E5FC', '#B2EBF2', '#B2DFDB', '#C8E6C9', '#DCEDC8', '#F0F4C3', '#FFF9C4', '#FFECB3', '#FFE0B2', '#FFCCBC'];
+   let hash = 0;
+   // Use leaderId or name for consistent hashing
+   const str = group.leaderId || group.leaderName; 
+   for (let i = 0; i < str.length; i++) {
+     hash = str.charCodeAt(i) + ((hash << 5) - hash);
+   }
+   return colors[Math.abs(hash) % colors.length];
 }
 
 // Member Details Functions
@@ -207,6 +228,20 @@ function handleRestoreMember(memberId) {
             }"
           >
             <div class="card-header" @click.self="toggleDgroup(group.leaderName)">
+              
+              <!-- Leader Avatar Section -->
+              <div class="leader-avatar-container" @click="toggleDgroup(group.leaderName)">
+                 <img 
+                   v-if="group.leaderProfilePic" 
+                   :src="group.leaderProfilePic" 
+                   class="leader-img" 
+                   alt="Leader"
+                 />
+                 <div v-else class="leader-initials" :style="{ backgroundColor: getLeaderColor(group) }">
+                   {{ getLeaderInitials(group) }}
+                 </div>
+              </div>
+
               <div class="header-content" @click="toggleDgroup(group.leaderName)">
                 <div class="group-title">
                   <h4>{{ group.leaderName }}</h4>
@@ -267,6 +302,20 @@ function handleRestoreMember(memberId) {
             }"
           >
             <div class="card-header" @click.self="toggleDgroup(group.leaderName)">
+              
+              <!-- Leader Avatar Section -->
+              <div class="leader-avatar-container" @click="toggleDgroup(group.leaderName)">
+                 <img 
+                   v-if="group.leaderProfilePic" 
+                   :src="group.leaderProfilePic" 
+                   class="leader-img" 
+                   alt="Leader"
+                 />
+                 <div v-else class="leader-initials" :style="{ backgroundColor: getLeaderColor(group) }">
+                   {{ getLeaderInitials(group) }}
+                 </div>
+              </div>
+
               <div class="header-content" @click="toggleDgroup(group.leaderName)">
                 <div class="group-title">
                   <h4>{{ group.leaderName }}</h4>
@@ -498,9 +547,38 @@ function handleRestoreMember(memberId) {
   padding: 16px;
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
+  align-items: center; /* Changed to center to align avatar */
   cursor: pointer;
+  gap: 12px; /* Gap between avatar and content */
 }
+
+/* NEW AVATAR STYLES */
+.leader-avatar-container {
+  flex-shrink: 0;
+}
+.leader-img {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  object-fit: cover;
+  background-color: #ECEFF1;
+  border: 2px solid #fff;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+.leader-initials {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  color: #455A64;
+  font-size: 16px;
+  border: 2px solid #fff;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
 
 .header-content {
   flex: 1;
