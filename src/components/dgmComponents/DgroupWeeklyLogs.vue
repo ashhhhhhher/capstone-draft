@@ -2,7 +2,7 @@
 import { ref, onMounted, computed } from 'vue'
 import { db } from '../../firebase'
 import { collection, query, orderBy, onSnapshot } from 'firebase/firestore'
-import { Download, Users, Calendar, ClipboardList, MessageCircle, Heart, UserPlus, TrendingUp } from 'lucide-vue-next'
+import { Download, Users, ClipboardList, MessageCircle, Heart, UserPlus, TrendingUp } from 'lucide-vue-next'
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
 

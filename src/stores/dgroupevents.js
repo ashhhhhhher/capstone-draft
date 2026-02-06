@@ -1,0 +1,148 @@
+import { ref } from 'vue'
+import { defineStore } from 'pinia'
+import { db } from '../firebase'
+import {
+  collection,
+  doc,
+  setDoc,
+  getDoc,
+  getDocs,
+  query,
+  where,
+  orderBy,
+  onSnapshot,
+  serverTimestamp
+} from 'firebase/firestore'
+import { useAuthStore } from './auth'
+
+export const useDgroupEventsStore = defineStore('dgroupevents', () => {
+  // minimal state
+  const isLoading = ref(false)
+
+  // Helper to get meetings collection for a dgroup
+  // Structure: branches/{branchId}/dgroupEvents/{dgroupId}/meetings/{meetingDate}
+  const getDgroupCollection = (dgroupId) => {
+    const authStore = useAuthStore()
+    if (!authStore.branchId || !dgroupId) return null
+    // collection path must end with a collection name -> odd number of segments
+    return collection(db, 'branches', authStore.branchId, 'dgroupEvents', dgroupId, 'meetings')
+  }
+
+  /**
+   * Create or overwrite a scheduled dgroup event (document id = meetingDate YYYY-MM-DD)
+   * payload should include at least meetingDate (YYYY-MM-DD string)
+   */
+  async function createDgroupEvent(dgroupId, payload) {
+    const authStore = useAuthStore()
+    if (!authStore.branchId || !dgroupId || !payload || !payload.meetingDate) {
+      return { status: 'error', message: 'Missing branch, dgroupId, or meetingDate' }
+    }
+
+    try {
+      const col = getDgroupCollection(dgroupId)
+      if (!col) return { status: 'error', message: 'Invalid branch or dgroupId' }
+
+      const meetingId = payload.meetingDate
+      // Prefer explicit doc path to avoid any collection reference ambiguity
+      const refDoc = doc(db, 'branches', authStore.branchId, 'dgroupEvents', dgroupId, 'meetings', meetingId)
+      console.debug('createDgroupEvent: writing to', `branches/${authStore.branchId}/dgroupEvents/${dgroupId}/meetings/${meetingId}`)
+
+      const dgLeaderName = `${authStore.userProfile?.firstName || ''} ${authStore.userProfile?.lastName || ''}`.trim()
+
+      const docData = {
+        dgroupId: dgroupId,
+        meetingDate: payload.meetingDate,
+        meetingTime: payload.meetingTime || '',
+        venue: payload.venue || '',
+        // store meeting title under `meetingTitle` (preferred)
+        meetingTitle: payload.meetingTitle || payload.description || '',
+        dgroupleader: payload.dgroupleader || dgLeaderName || '',
+        attendees: payload.attendees || {},
+        guests: typeof payload.guests === 'number' ? payload.guests : 0,
+        evangelized: typeof payload.evangelized === 'number' ? payload.evangelized : 0,
+        conversations: typeof payload.conversations === 'number' ? payload.conversations : 0,
+        locked: !!payload.locked,
+        submittedAt: serverTimestamp()
+      }
+
+      await setDoc(refDoc, docData)
+      return { status: 'success', message: 'Dgroup event scheduled.' }
+    } catch (error) {
+      console.error('createDgroupEvent error:', error)
+      return { status: 'error', message: error.message }
+    }
+  }
+
+  /**
+   * Get upcoming dgroup events for a given dgroupId (meetingDate >= today)
+   * Returns array sorted by meetingDate ascending
+   */
+  async function getUpcomingDgroupEvents(dgroupId) {
+    const authStore = useAuthStore()
+    if (!authStore.branchId || !dgroupId) return []
+    try {
+      const today = new Date().toISOString().split('T')[0]
+      const colRef = collection(db, 'branches', authStore.branchId, 'dgroupEvents', dgroupId, 'meetings')
+      const q = query(colRef, where('meetingDate', '>=', today), orderBy('meetingDate', 'asc'))
+      const snap = await getDocs(q)
+      const results = []
+      snap.forEach(d => results.push({ id: d.id, ...d.data() }))
+      return results
+    } catch (error) {
+      console.error('getUpcomingDgroupEvents error:', error)
+      return []
+    }
+  }
+
+  /**
+   * Get today's dgroup event for a given dgroupId (meetingDate == today)
+   */
+  async function getTodayDgroupEvent(dgroupId) {
+    const authStore = useAuthStore()
+    if (!authStore.branchId || !dgroupId) return null
+    try {
+      const today = new Date().toISOString().split('T')[0]
+      const refDoc = doc(db, 'branches', authStore.branchId, 'dgroupEvents', dgroupId, 'meetings', today)
+      const snap = await getDoc(refDoc)
+      if (!snap.exists()) return null
+      return { id: snap.id, ...snap.data() }
+    } catch (error) {
+      console.error('getTodayDgroupEvent error:', error)
+      return null
+    }
+  }
+
+  return {
+    isLoading,
+    createDgroupEvent,
+    getUpcomingDgroupEvents,
+    getTodayDgroupEvent
+    ,
+    // real-time listener: callback receives array of docs [{id, ...data}]
+    listenToDgroupMeetings
+  }
+})
+
+/**
+ * Real-time listener for meetings under a dgroup.
+ * Returns an unsubscribe function.
+ */
+async function listenToDgroupMeetings(dgroupId, callback) {
+  const authStore = useAuthStore()
+  if (!authStore.branchId || !dgroupId) return () => {}
+  try {
+    const colRef = collection(db, 'branches', authStore.branchId, 'dgroupEvents', dgroupId, 'meetings')
+    const q = query(colRef, orderBy('meetingDate', 'asc'))
+    const unsub = onSnapshot(q, snap => {
+      const results = []
+      snap.forEach(d => results.push({ id: d.id, ...d.data() }))
+      try { callback(results) } catch (e) { console.error('dgroupevents callback error', e) }
+    }, err => {
+      console.error('listenToDgroupMeetings onSnapshot error:', err)
+    })
+    return unsub
+  } catch (e) {
+    console.error('listenToDgroupMeetings error:', e)
+    return () => {}
+  }
+}
