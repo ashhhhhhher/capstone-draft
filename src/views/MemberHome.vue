@@ -4,7 +4,7 @@ import { useAuthStore } from '../stores/auth'
 import { useEventsStore } from '../stores/events'
 import { useRouter } from 'vue-router'
 import { MapPin, QrCode, BarChart2, Clock, Info, X, Sparkles, Plus, ClipboardCheck } from 'lucide-vue-next'
-import Modal from '../components/dgmComponents/Modal.vue'
+import DgroupMeetingModal from '../components/memberComponents/DgroupMeetingModal.vue'
 import DgroupAttendanceModal from '../components/memberComponents/DgroupAttendanceModal.vue'
 import { useMembersStore } from '../stores/members'
 import { useDgroupEventsStore } from '../stores/dgroupevents'
@@ -33,16 +33,17 @@ const todayEvent = computed(() => {
 })
 
 const showScheduleDgroupModal = ref(false)
-const scheduleDate = ref('')
-const scheduleTime = ref('')
-const scheduleVenue = ref('')
-const scheduleDescription = ref('')
-// meeting title field (previously called description in UI)
-const scheduleTitle = ref('')
-const scheduleStatus = ref({ type: '', message: '' })
 
 const dgroupEventsStore = useDgroupEventsStore()
 const membersStore = useMembersStore()
+
+const isDgroupLeader = computed(() => {
+  const user = authStore.userProfile
+  // prefer profile finalTags, fallback to membersStore lookup
+  if (user?.finalTags?.isDgroupLeader) return true
+  const me = membersStore.activeMembers.find(m => m.id === user?.id)
+  return !!(me && me.finalTags && me.finalTags.isDgroupLeader)
+})
 
 const dgroupMeetings = ref([])
 const meetingsLoading = ref(false)
@@ -59,6 +60,13 @@ const dgroupMembersForModal = computed(() => {
   const dgid = memberProfile.value?.dgroupId
   if (!dgid) return []
   return membersStore.activeMembers.filter(m => m.dgroupId === dgid)
+})
+
+const upcomingDgroupMeetings = computed(() => {
+  const today = new Date().toISOString().split('T')[0]
+  return (dgroupMeetings.value || [])
+    .filter(m => m && m.meetingDate && m.meetingDate > today && !m.ended)
+    .sort((a, b) => (a.meetingDate || '').localeCompare(b.meetingDate || ''))
 })
 
 function stopMeetingsListener() {
@@ -82,44 +90,7 @@ onMounted(() => {
 watch(memberProfile, (v) => startMeetingsListener(v?.dgroupId))
 onUnmounted(() => stopMeetingsListener())
 
-async function handleOpenSchedule() {
-  showScheduleDgroupModal.value = true
-  scheduleDate.value = ''
-  scheduleTime.value = ''
-  scheduleVenue.value = ''
-  scheduleDescription.value = ''
-  scheduleTitle.value = ''
-  scheduleStatus.value = { type: '', message: '' }
-}
-
-async function handleScheduleSubmit() {
-  // basic validation
-  if (!scheduleDate.value || !scheduleTime.value || !scheduleVenue.value) {
-    scheduleStatus.value = { type: 'error', message: 'Please fill required fields (date, time, venue).' }
-    return
-  }
-
-  const dgroupId = memberProfile.value?.dgroupId
-  if (!dgroupId) {
-    scheduleStatus.value = { type: 'error', message: 'You are not assigned to a Dgroup.' }
-    return
-  }
-
-  const payload = {
-    meetingDate: scheduleDate.value,
-    meetingTime: scheduleTime.value,
-    venue: scheduleVenue.value,
-    // support both meetingTitle (new) and description (legacy)
-    meetingTitle: scheduleTitle.value || scheduleDescription.value
-  }
-
-  const res = await dgroupEventsStore.createDgroupEvent(dgroupId, payload)
-  if (res && res.status === 'success') {
-    showScheduleDgroupModal.value = false
-  } else {
-    scheduleStatus.value = { type: 'error', message: res.message || 'Failed to schedule meeting.' }
-  }
-}
+// scheduling modal handled in separate component
 
 const upcomingEvents = computed(() => {
   const now = new Date(); now.setHours(0,0,0,0)
@@ -185,54 +156,21 @@ function formatShortDate(dateStr) { if (!dateStr) return ''; return new Date(dat
         <div class="icon-bg orange"><BarChart2 :size="20" color="#F57C00"/></div>
         <span>Attendance</span>
       </div>
-      <div :class="['action-card', { disabled: !todayMeeting } ]" :aria-disabled="!todayMeeting" @click="todayMeeting ? showAttendanceModal = true : null">
+      <div v-if="isDgroupLeader" :class="['action-card', { disabled: !todayMeeting } ]" :aria-disabled="!todayMeeting" @click="todayMeeting ? showAttendanceModal = true : null">
         <div class="icon-bg blue"><ClipboardCheck :size="20" :color="todayMeeting ? '#1976D2' : '#90A4AE'"/></div>
         <span>{{ todayMeeting ? 'Log Dgroup Meeting' : 'Log Dgroup Meeting' }}</span>
       </div>
-      <div class="action-card" @click="handleOpenSchedule" title="Schedule weekly meetings">
+      <div v-if="isDgroupLeader" class="action-card" @click="showScheduleDgroupModal = true" title="Schedule weekly meetings">
         <div class="icon-bg orange"><Plus :size="20" color="#F57C00"/></div>
         <span>Schedule Weekly Dgroup Meeting</span>
       </div>
     </section>
 
-    <Modal v-if="showScheduleDgroupModal" @close="showScheduleDgroupModal = false">
-      <div class="form-container">
-        <div class="form-header">
-          <h2>Schedule Weekly Dgroup Meeting</h2>
-        </div>
-
-        <div v-if="scheduleStatus.message" class="status-banner" :class="scheduleStatus.type">
-          <span>{{ scheduleStatus.message }}</span>
-        </div>
-
-        <form class="form-body" @submit.prevent="handleScheduleSubmit">
-          <div class="form-group">
-            <label>Date</label>
-            <input type="date" v-model="scheduleDate" required />
-          </div>
-
-          <div class="form-group">
-            <label>Time</label>
-            <input type="time" v-model="scheduleTime" required />
-          </div>
-
-          <div class="form-group">
-            <label>Venue</label>
-            <input v-model="scheduleVenue" required />
-          </div>
-
-          <div class="form-group">
-            <label>Meeting Title</label>
-            <input v-model="scheduleTitle" placeholder="e.g. Weekly Bible Study" />
-          </div>
-
-          <div class="actions" style="margin-top: 12px;">
-            <button type="button" class="cancel" @click="showScheduleDgroupModal = false">Cancel</button>
-            <button type="submit" class="confirm">Schedule</button>
-          </div>
-        </form>
-      </div>
-    </Modal>
+    <DgroupMeetingModal
+      v-if="showScheduleDgroupModal"
+      @close="showScheduleDgroupModal = false"
+      @scheduled="() => { showScheduleDgroupModal = false }"
+    />
 
     <!-- Show today's main event and, if present, today's dgroup meeting in the same section -->
     <section v-if="todayEvent || todayMeeting" class="today-section">
@@ -245,8 +183,8 @@ function formatShortDate(dateStr) { if (!dateStr) return ''; return new Date(dat
 
       <div v-if="todayMeeting" class="today-card dgroup" @click="showAttendanceModal = true" :title="'Log attendance for ' + (todayMeeting.meetingTitle || 'Dgroup Meeting')">
         <div class="today-overlay dgroup-overlay">
-          <div class="badge">DGROUP MEETING TODAY</div>
-          <h2>{{ todayMeeting.meetingTitle || 'Dgroup Meeting' }}</h2>
+          <h2 class="meeting-title">{{ todayMeeting.meetingTitle || 'Dgroup Meeting' }}</h2>
+          <div class="badge">DGROUP MEETING</div>
           <div class="dgroup-meta">{{ todayMeeting.meetingDate }} <span v-if="todayMeeting.meetingTime">• {{ todayMeeting.meetingTime }}</span></div>
           <div class="dgroup-venue">{{ todayMeeting.venue || 'TBD' }}</div>
         </div>
@@ -283,8 +221,8 @@ function formatShortDate(dateStr) { if (!dateStr) return ''; return new Date(dat
     <div class="section-header" style="margin-top:8px;"><h3>Upcoming Dgroup Meetings</h3></div>
     <div class="upcoming-column">
       <div v-if="meetingsLoading" class="empty-text">Loading meetings…</div>
-      <div v-else-if="dgroupMeetings.length > 0" class="events-scroll-container">
-        <div v-for="m in dgroupMeetings" :key="m.id || m.meetingDate" class="upcoming-card-wrapper">
+      <div v-else-if="upcomingDgroupMeetings.length > 0" class="events-scroll-container">
+        <div v-for="m in upcomingDgroupMeetings" :key="m.id || m.meetingDate" class="upcoming-card-wrapper">
           <div class="upcoming-card">
             <div class="card-media">
               <div v-if="m.photoURL" style="width:100%;height:100%;"><img :src="m.photoURL" alt="meeting image" style="width:100%;height:100%;object-fit:cover;"/></div>
@@ -304,7 +242,7 @@ function formatShortDate(dateStr) { if (!dateStr) return ''; return new Date(dat
     </div>
 
     <DgroupAttendanceModal
-      v-if="showAttendanceModal"
+      v-if="showAttendanceModal && isDgroupLeader"
       :group="{ dgroupId: memberProfile.value?.dgroupId, dgroupName: memberProfile.value?.dgroupName }"
       :members="dgroupMembersForModal"
       :meeting="todayMeeting"
@@ -352,14 +290,16 @@ function formatShortDate(dateStr) { if (!dateStr) return ''; return new Date(dat
 .icon-bg.orange { background: #FFF3E0; }
 .action-card span { font-size: 12px; font-weight: 600; color: #455A64; }
 .today-card { background: linear-gradient(150deg, #53a2fc, #0046d2); color: white; border-radius: 20px; position: relative; overflow: hidden; min-height: 140px; background-size: cover; background-position: center; cursor: pointer; }
-.today-overlay { padding: 20px; height: 100%; display: flex; flex-direction: column; justify-content: center; background: rgba(0,0,0,0.4); }
+  .today-overlay { padding: 20px; height: 100%; display: flex; flex-direction: column; justify-content: center; align-items: flex-start; background: rgba(0,0,0,0.4); }
 .today-card.empty { background: white; color: #455A64; border: 1px solid #ECEFF1; padding: 20px; }
 .today-section { display: flex; flex-direction: column; gap: 12px; }
-.today-card.dgroup { background: #a49cff; color: #263238; min-height: 100px; box-shadow: 0 4px 10px rgba(0,0,0,0.06); border-radius: 12px; }
-.today-card.dgroup .today-overlay { background: transparent; padding: 12px; justify-content: flex-start; }
-.today-card.dgroup .badge { color: #1976D2; }
-.dgroup-meta { margin-top: 6px; font-size: 13px; color: #607D8B; font-weight: 700; }
-.dgroup-venue { margin-top: 4px; font-size: 13px; color: #455A64; }
+.today-card.dgroup { background: linear-gradient(150deg, #1a0060, #5a3ad9); color: white; border-radius: 20px; position: relative; overflow: hidden; min-height: 140px; background-size: cover; background-position: center; cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
+  .today-card.dgroup .today-overlay { padding: 20px; height: 100%; display: flex; flex-direction: column; justify-content: center; align-items: flex-start; background: rgba(0,0,0,0.35); }
+  .today-card.dgroup .badge { color: #FFFFFF; font-weight: 600; margin-top: 2px; display: inline-flex; align-items: center; gap: 8px; }
+  .today-card.dgroup .badge::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: #FFEB3B; display: inline-block; }
+  .today-card.dgroup .meeting-title { color: #FFFFFF; font-weight: 700; margin-bottom: 2px; margin-top: 0px;}
+  .today-card.dgroup .dgroup-meta { font-size: 13px; color: rgba(255,255,255,0.9); margin-top: 8px }
+  .today-card.dgroup .dgroup-venue { font-size: 13px; color: rgba(255,255,255,0.85); margin-top: 4px }
 .badge {color: #fa6e6e; font-size: 12px; font-weight: 800; padding: 4px 8px; border-radius: 4px; display: inline-block; margin-bottom: 8px; }
 .section-header h3 { font-size: 20px; color: #37474F; margin: 0; }
 .empty-text { text-align: center; padding: 20px; color: #90A4AE; font-size: 14px; }
