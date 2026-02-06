@@ -136,9 +136,9 @@ function handleDelete(event) {
         </div>
         
         <div class="legend">
-            <div class="legend-item"><span class="dot dot-service"></span> Wknd Service</div>
-            <div class="legend-item"><span class="dot dot-b1g_service"></span> B1G Service</div>
-            <div class="legend-item"><span class="dot dot-event"></span> CCF Event</div>
+            <div class="legend-item"><span class="dot dot-service"></span>WKND</div>
+            <div class="legend-item"><span class="dot dot-b1g_service"></span>B1G</div>
+            <div class="legend-item"><span class="dot dot-event"></span>UPDATES</div>
         </div>
         
         <!-- hide create button for members -->
@@ -156,7 +156,7 @@ function handleDelete(event) {
                     <div class="detail-header">
                         <div class="detail-name">
                             <span :class="(event.eventType === 'service' && 'service-tag') || (event.eventType === 'b1g_event' && 'b1g-tag') || 'ccf-tag'">
-                                {{ event.eventType === 'service' ? 'Service' : (event.eventType === 'b1g_event' ? 'B1G Service' : 'CCF Event') }}
+                                {{ event.eventType === 'service' ? 'Service' : (event.eventType === 'b1g_event' ? 'B1G' : 'UPDATES') }}
                             </span>
                             <h4>{{ event.name }}</h4>
                         </div>
