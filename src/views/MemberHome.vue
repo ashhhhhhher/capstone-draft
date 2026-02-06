@@ -4,7 +4,6 @@ import { useAuthStore } from '../stores/auth'
 import { useEventsStore } from '../stores/events'
 import { useRouter } from 'vue-router'
 import { MapPin, QrCode, BarChart2, Clock, Info, X, Sparkles } from 'lucide-vue-next'
-import DiscoveryCard from '../components/memberComponents/DiscoveryCard.vue'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -98,12 +97,12 @@ function formatShortDate(dateStr) { if (!dateStr) return ''; return new Date(dat
     <section v-if="todayEvent" class="today-card" :class="{ 'has-bg': todayEvent.photoURL }" :style="todayEvent.photoURL ? { backgroundImage: `url(${todayEvent.photoURL})` } : {}" @click="openEventDetails(todayEvent)">
       <div class="today-overlay">
         <div class="badge">HAPPENING TODAY</div>
-        <h3>{{ todayEvent.name }}</h3>
+        <h2>{{ todayEvent.name }}</h2>
       </div>
     </section>
     <section v-else class="today-card empty">
       <h3>No Event Today</h3>
-      <p>Rest and recharge! See you at the next service.</p>
+      <p>Rest and recharge! See you at the next event.</p>
     </section>
 
     <div class="section-header"><h3>Upcoming Events</h3></div>
@@ -168,11 +167,11 @@ function formatShortDate(dateStr) { if (!dateStr) return ''; return new Date(dat
 .icon-bg.blue { background: #E3F2FD; }
 .icon-bg.orange { background: #FFF3E0; }
 .action-card span { font-size: 12px; font-weight: 600; color: #455A64; }
-.today-card { background: linear-gradient(135deg, #1565C0, #1976D2); color: white; border-radius: 20px; position: relative; overflow: hidden; min-height: 140px; background-size: cover; background-position: center; cursor: pointer; }
+.today-card { background: linear-gradient(150deg, #53a2fc, #0046d2); color: white; border-radius: 20px; position: relative; overflow: hidden; min-height: 140px; background-size: cover; background-position: center; cursor: pointer; }
 .today-overlay { padding: 20px; height: 100%; display: flex; flex-direction: column; justify-content: center; background: rgba(0,0,0,0.4); }
 .today-card.empty { background: white; color: #455A64; border: 1px solid #ECEFF1; padding: 20px; }
-.badge { background: #FBC02D; color: #000; font-size: 10px; font-weight: 800; padding: 4px 8px; border-radius: 4px; display: inline-block; margin-bottom: 8px; }
-.section-header h3 { font-size: 18px; color: #37474F; margin: 0; }
+.badge {color: #fa6e6e; font-size: 12px; font-weight: 800; padding: 4px 8px; border-radius: 4px; display: inline-block; margin-bottom: 8px; }
+.section-header h3 { font-size: 20px; color: #37474F; margin: 0; }
 .empty-text { text-align: center; padding: 20px; color: #90A4AE; font-size: 14px; }
 .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 200; display: flex; align-items: center; justify-content: center; }
 .event-modal { background: white; width: 90%; max-width: 400px; border-radius: 24px; overflow: hidden; max-height: 90vh; overflow-y: auto; }
