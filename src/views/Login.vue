@@ -64,7 +64,6 @@ async function handleForgotPassword() {
   successMessage.value = ''
 
   try {
-    // Explicitly define the redirect URL to ensure a valid link is generated
     const actionCodeSettings = {
       url: window.location.origin + '/login', 
       handleCodeInApp: false
@@ -96,7 +95,7 @@ async function handleForgotPassword() {
     <transition name="fade">
       <div v-if="showWelcome" class="welcome-overlay">
         <div class="welcome-content">
-          <img src="/ccf logo.png" alt="CCF Logo" class="welcome-logo" />
+          <img src="/qonnect.png" alt="Qonnect" class="welcome-logo" />
           <h1>Welcome, {{ authStore.user?.displayName?.split(' ')[0] || 'Member' }}!</h1>
           <p>Signing you in...</p>
           <div class="spinner"></div>
@@ -209,7 +208,7 @@ p {
   align-items: center;
 }
 .password-wrapper input {
-  padding-right: 40px; /* Space for eye icon */
+  padding-right: 40px; 
 }
 .eye-btn {
   position: absolute;
@@ -296,7 +295,7 @@ p {
   left: 0;
   width: 100%;
   height: 100%;
-  background-color: #1976D2; /* Brand Blue */
+  background-color: #1976D2;
   z-index: 9999;
   display: flex;
   align-items: center;
@@ -313,12 +312,13 @@ p {
 }
 
 .welcome-logo {
-  width: 100px;
-  height: auto;
-  margin-bottom: 16px;
+  width: 160px;        
+  height: 160px;       
+  object-fit: contain;   
+  margin-bottom: 20px;
   background: white;
   border-radius: 50%;
-  padding: 12px;
+  padding: 24px;      
   box-shadow: 0 4px 15px rgba(0,0,0,0.2);
 }
 
