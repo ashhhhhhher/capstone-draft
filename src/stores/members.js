@@ -255,6 +255,39 @@ export const useMembersStore = defineStore('members', () => {
       console.error("Error logging action:", error);
     }
   }
+  async function logMonitoringAction(memberId, actionType) {
+    try {
+      const memberRef = doc(getMemberCollection(), memberId);
+      const updateData = {};
+      
+      if (actionType === 'message') {
+        updateData['monitoringState.msgSentDate'] = new Date().toISOString();
+      } else if (actionType === 'notifyLeader') {
+        updateData['monitoringState.leaderNotifiedDate'] = new Date().toISOString();
+      }
+
+      await updateDoc(memberRef, updateData);
+    } catch (error) {
+      console.error("Error logging action:", error);
+    }
+  }
+
+  // --- REMOVE MEMBER FROM DGROUP ---
+  async function removeDgroupMember(memberId) {
+    try {
+      const memberRef = doc(getMemberCollection(), memberId);
+      // Clear dgroupLeader and dgroupId fields
+      await updateDoc(memberRef, {
+        dgroupLeader: '',
+        dgroupId: null,
+        'finalTags.isSeeker': false 
+      });
+      console.log(`Removed member ${memberId} from Dgroup.`);
+    } catch (error) {
+      console.error("Error removing member from Dgroup:", error);
+      throw error;
+    }
+  }
   
   return { 
     members, activeMembers, archivedMembers, isLoading,
@@ -262,8 +295,10 @@ export const useMembersStore = defineStore('members', () => {
     leaderNames, leaders, seekers,
     fetchMembers, registerNewMember, updateMember, 
     archiveMember, restoreMember, purgeOldArchives,
-    checkAndAutoRestore, // Export the new function
+    checkAndAutoRestore, 
     fetchPendingRegistrations, approvePending, rejectPending,
-    logMonitoringAction 
+    logMonitoringAction,
+    removeDgroupMember 
   }
 })
+
