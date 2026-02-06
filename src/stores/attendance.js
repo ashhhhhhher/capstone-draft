@@ -111,23 +111,53 @@ export const useAttendanceStore = defineStore('attendance', () => {
   async function logDgroupMeeting(meetingData) {
     const authStore = useAuthStore()
     if (!authStore.branchId) return { status: 'error', message: 'Branch ID missing' }
+    // write weekly meeting logs into the dgroupEvents -> {dgroupId}/meetings/{meetingDate}
+    if (!meetingData || !meetingData.dgroupId) {
+      return { status: 'error', message: 'Missing dgroupId in meeting data' }
+    }
 
     try {
-      // Use ministryWeek in ID to prevent accidental double-logging
-      const docId = `${meetingData.dgroupId}_${meetingData.ministryWeek || meetingData.meetingDate}`
-      const meetingRef = doc(db, 'branches', authStore.branchId, 'dgroupAttendance', docId)
+      const membersStore = useMembersStore()
+      const rawAttendees = meetingData.attendees || {}
+      const attendanceMap = {}
+      Object.keys(rawAttendees).forEach(memberId => {
+        const a = rawAttendees[memberId] || {}
+        let displayName = a.name || ''
+        if (!displayName) {
+          const m = (membersStore.activeMembers || []).find(x => x.id === memberId)
+          if (m) displayName = `${m.firstName || ''} ${m.lastName || ''}`.trim()
+        }
+        attendanceMap[memberId] = {
+          isPresent: !!a.isPresent,
+          name: displayName || 'Unknown'
+        }
+      })
 
-      await setDoc(meetingRef, {
-        ...meetingData,
+      const meetingDate = meetingData.meetingDate || new Date().toISOString().split('T')[0]
+      const meetingRef = doc(db, 'branches', authStore.branchId, 'dgroupEvents', meetingData.dgroupId, 'meetings', meetingDate)
+
+      const docPayload = {
+        dgroupId: meetingData.dgroupId,
+        meetingDate: meetingDate,
+        meetingTime: meetingData.meetingTime || '',
+        venue: meetingData.venue || '',
+        meetingTitle: meetingData.meetingTitle || meetingData.description || '',
+        dgroupleader: meetingData.dgroupleader || `${authStore.userProfile?.firstName || ''} ${authStore.userProfile?.lastName || ''}`.trim(),
+        attendance: attendanceMap,
+        guests: typeof meetingData.guests === 'number' ? meetingData.guests : 0,
+        evangelized: typeof meetingData.evangelized === 'number' ? meetingData.evangelized : 0,
+        conversations: typeof meetingData.conversations === 'number' ? meetingData.conversations : 0,
+        locked: !!meetingData.locked,
         submittedAt: serverTimestamp(),
         submittedBy: `${authStore.userProfile?.firstName || ''} ${authStore.userProfile?.lastName || ''}`.trim(),
         submittedById: authStore.userProfile?.id || 'unknown'
-      })
+      }
 
-      currentGroupHasLogged.value = true // Lock the UI immediately
-      return { status: 'success', message: 'DGroup attendance recorded.' }
+      await setDoc(meetingRef, docPayload)
+      currentGroupHasLogged.value = true
+      return { status: 'success', message: 'DGroup attendance recorded in dgroupEvents.' }
     } catch (error) {
-      console.error("DGroup Log Error:", error)
+      console.error('DGroup Log Error:', error)
       return { status: 'error', message: error.message }
     }
   }

@@ -2,7 +2,7 @@
 import { ref, computed, onMounted, reactive } from 'vue'
 import { useAuthStore } from '../stores/auth'
 import { useMembersStore } from '../stores/members'
-import { useAttendanceStore } from '../stores/attendance'
+import DgroupAttendanceModal from '../components/memberComponents/DgroupAttendanceModal.vue'
 import { 
   User, Users, ChevronRight, Plus, X, AlertCircle, 
   ArrowLeft, UserMinus, HelpCircle, Pencil, ClipboardCheck 
@@ -11,29 +11,19 @@ import DgroupOverview from '../components/memberComponents/DgroupOverview.vue'
 
 const authStore = useAuthStore()
 const membersStore = useMembersStore()
-const attendanceStore = useAttendanceStore()
 
 const activeTab = ref('upline') 
 const showCreateModal = ref(false)
 const showPersonModal = ref(false)
 const showJoinByIdModal = ref(false)
 const showEditGroupModal = ref(false)
-const showAttendanceModal = ref(false)
 
 // Join by ID logic
 const dgroupIdInput = ref('')
 const joinStatus = ref({ type: '', msg: '' })
 
-// Attendance Form Logic
-const attendanceForm = reactive({
-  date: new Date().toISOString().split('T')[0],
-  meetingName: '',
-  venue: '',
-  conversations: 0,
-  evangelized: 0,
-  guests: 0,
-  attendees: {} 
-})
+// Attendance modal visibility (logic moved to DgroupAttendanceModal)
+const showAttendanceModal = ref(false)
 
 // Edit Group Logic (Leader)
 const editGroupForm = reactive({
@@ -117,67 +107,8 @@ function removeMember(member) {
 
 // --- FIXED ATTENDANCE ACTIONS ---
 
-async function openAttendanceModal() {
-  const today = new Date().toISOString().split('T')[0];
-  
-  // Fetch service scans from database
-  let serviceScans = [];
-  try {
-    serviceScans = await attendanceStore.getAttendanceByDate(today);
-  } catch (e) {
-    console.error("Failed to fetch service scans:", e);
-  }
-
-  const checklist = {}
-  
-  currentGroupMembers.value.forEach(m => {
-    // Cross-reference with today's service scans
-    const hasScanned = serviceScans.some(scan => scan.memberId === m.id);
-
-    let autoTag = m.finalTags?.isDgroupLeader ? 'DL' : 'DM';
-
-    checklist[m.id] = {
-      name: `${m.firstName} ${m.lastName}`,
-      isPresent: hasScanned, // Automatically check if they scanned
-      scanned: hasScanned,   // Used for the UI badge
-      tag: autoTag 
-    }
-  })
-  
-  attendanceForm.attendees = checklist
+function openAttendanceModal() {
   showAttendanceModal.value = true
-}
-
-async function submitAttendance() {
-  // If you don't have a 'Meeting Name' input in your HTML, remove this check:
-  // if (!attendanceForm.meetingName) return alert("Please enter the meeting topic.")
-  
-  const payload = {
-    dgroupId: selectedGroup.value.dgroupId || selectedGroup.value.id,
-    meetingDate: attendanceForm.date,
-    attendees: attendanceForm.attendees,
-    conversations: attendanceForm.conversations || 0,
-    evangelized: attendanceForm.evangelized || 0,
-    guests: attendanceForm.guests || 0,
-    locked: false 
-  }
-
-  try {
-    const res = await attendanceStore.logDgroupMeeting(payload)
-    if (res.status === 'success') {
-      alert("Attendance logged successfully!")
-      showAttendanceModal.value = false
-      // Reset stats
-      attendanceForm.conversations = 0
-      attendanceForm.evangelized = 0
-      attendanceForm.guests = 0
-    } else {
-      alert(res.message)
-    }
-  } catch (e) {
-    console.error("Save Error:", e)
-    alert("Error saving attendance.")
-  }
 }
 
 // --- Seeker & Join Actions ---
@@ -380,53 +311,13 @@ async function saveGroupDetails() {
       </div>
     </div>
     
-    <div v-if="showAttendanceModal" class="modal-overlay">
-      <div class="modal create-modal attendance-scroll-modal">
-        <h3>Weekly Dgroup Report</h3>
-        <p class="modal-desc">Service scans from today are automatically checked.</p>
-
-        <label class="section-label">Members & Status</label>
-        <div class="attendance-checklist-updated">
-          <div v-for="(data, id) in attendanceForm.attendees" :key="id" class="attendance-item">
-            <input type="checkbox" v-model="data.isPresent" />
-            
-            <div class="member-info-stack" style="flex: 1; margin-left: 8px;">
-              <span class="member-name" :style="{ fontWeight: data.scanned ? '800' : '500' }">{{ data.name }}</span>
-              <div v-if="data.scanned" style="color: #2E7D32; font-size: 10px; display: flex; align-items: center; gap: 2px;">
-                <ClipboardCheck :size="10" /> VERIFIED SCAN
-              </div>
-            </div>
-            
-            <select v-model="data.tag" class="status-select" :disabled="!data.isPresent">
-              <option value="DL">DL</option>
-              <option value="DM">DM</option>
-              <option value="NW">NW</option>
-              <option value="NEW">NEW</option>
-            </select>
-          </div>
-        </div>
-
-        <div class="group-stats">
-          <div class="stat-input">
-            <label>Conv. (C)</label>
-            <input type="number" v-model="attendanceForm.conversations" min="0" />
-          </div>
-          <div class="stat-input">
-            <label>Evang. (E)</label>
-            <input type="number" v-model="attendanceForm.evangelized" min="0" />
-          </div>
-          <div class="stat-input">
-            <label>Guests (G)</label>
-            <input type="number" v-model="attendanceForm.guests" min="0" />
-          </div>
-        </div>
-
-        <div class="actions">
-          <button @click="showAttendanceModal = false" class="cancel">Cancel</button>
-          <button @click="submitAttendance" class="confirm">Submit Report</button>
-        </div>
-      </div>
-    </div>
+    <DgroupAttendanceModal
+      v-if="showAttendanceModal"
+      :group="selectedGroup"
+      :members="currentGroupMembers"
+      @close="showAttendanceModal = false"
+      @saved="() => { /* optional: refresh members or show toast */ }"
+    />
 
     <div v-if="showJoinByIdModal" class="modal-overlay" @click.self="showJoinByIdModal = false">
       <div class="modal create-modal">

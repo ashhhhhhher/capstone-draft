@@ -5,6 +5,8 @@ import { useEventsStore } from '../stores/events'
 import { useRouter } from 'vue-router'
 import { MapPin, QrCode, BarChart2, Clock, Info, X, Sparkles, Plus, ClipboardCheck } from 'lucide-vue-next'
 import Modal from '../components/dgmComponents/Modal.vue'
+import DgroupAttendanceModal from '../components/memberComponents/DgroupAttendanceModal.vue'
+import { useMembersStore } from '../stores/members'
 import { useDgroupEventsStore } from '../stores/dgroupevents'
 
 const router = useRouter()
@@ -40,10 +42,23 @@ const scheduleTitle = ref('')
 const scheduleStatus = ref({ type: '', message: '' })
 
 const dgroupEventsStore = useDgroupEventsStore()
+const membersStore = useMembersStore()
 
 const dgroupMeetings = ref([])
 const meetingsLoading = ref(false)
 let meetingsUnsub = null
+const showAttendanceModal = ref(false)
+
+const todayMeeting = computed(() => {
+  const today = new Date().toISOString().split('T')[0]
+  return dgroupMeetings.value.find(m => m.meetingDate === today)
+})
+
+const dgroupMembersForModal = computed(() => {
+  const dgid = memberProfile.value?.dgroupId
+  if (!dgid) return []
+  return membersStore.activeMembers.filter(m => m.dgroupId === dgid)
+})
 
 function stopMeetingsListener() {
   if (typeof meetingsUnsub === 'function') { meetingsUnsub(); meetingsUnsub = null }
@@ -59,7 +74,10 @@ function startMeetingsListener(dgroupId) {
   })
 }
 
-onMounted(() => startMeetingsListener(memberProfile.value?.dgroupId))
+onMounted(() => {
+  startMeetingsListener(memberProfile.value?.dgroupId)
+  membersStore.fetchMembers()
+})
 watch(memberProfile, (v) => startMeetingsListener(v?.dgroupId))
 onUnmounted(() => stopMeetingsListener())
 
@@ -166,9 +184,9 @@ function formatShortDate(dateStr) { if (!dateStr) return ''; return new Date(dat
         <div class="icon-bg orange"><BarChart2 :size="20" color="#F57C00"/></div>
         <span>Attendance</span>
       </div>
-      <div class="action-card disabled" aria-disabled="true">
-        <div class="icon-bg blue"><ClipboardCheck :size="20" color="#90A4AE"/></div>
-        <span>Log Dgroup Meeting</span>
+      <div :class="['action-card', { disabled: !todayMeeting } ]" :aria-disabled="!todayMeeting" @click="todayMeeting ? showAttendanceModal = true : null">
+        <div class="icon-bg blue"><ClipboardCheck :size="20" :color="todayMeeting ? '#1976D2' : '#90A4AE'"/></div>
+        <span>{{ todayMeeting ? 'Log Dgroup Meeting' : 'Log Dgroup Meeting' }}</span>
       </div>
       <div class="action-card" @click="handleOpenSchedule" title="Schedule weekly meetings">
         <div class="icon-bg orange"><Plus :size="20" color="#F57C00"/></div>
@@ -271,6 +289,15 @@ function formatShortDate(dateStr) { if (!dateStr) return ''; return new Date(dat
       </div>
       <div v-else class="empty-text">No upcoming Dgroup meetings scheduled.</div>
     </div>
+
+    <DgroupAttendanceModal
+      v-if="showAttendanceModal"
+      :group="{ dgroupId: memberProfile.value?.dgroupId, dgroupName: memberProfile.value?.dgroupName }"
+      :members="dgroupMembersForModal"
+      :meeting="todayMeeting"
+      @close="showAttendanceModal = false"
+      @saved="() => { showAttendanceModal = false }"
+    />
 
     <div v-if="showEventModal && selectedEvent" class="modal-overlay" @click.self="showEventModal = false">
       <div class="modal event-modal">

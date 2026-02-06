@@ -1,5 +1,6 @@
 <script setup>
 import { ref, onMounted, computed } from 'vue'
+import { useMembersStore } from '../stores/members'
 import { db } from '../../firebase'
 import { collection, query, orderBy, onSnapshot } from 'firebase/firestore'
 import { Download, Users, ClipboardList, MessageCircle, Heart, UserPlus, TrendingUp } from 'lucide-vue-next'
@@ -8,6 +9,7 @@ import autoTable from 'jspdf-autotable'
 
 const logs = ref([])
 const loading = ref(true)
+const membersStore = useMembersStore()
 
 onMounted(() => {
   const logsRef = collection(db, 'branches', 'baguio', 'dgroupAttendance')
@@ -17,6 +19,7 @@ onMounted(() => {
     logs.value = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
     loading.value = false
   })
+  membersStore.fetchMembers()
 })
 
 // --- Computed Stats for Summary Bar & PDF ---
@@ -27,16 +30,17 @@ const totals = computed(() => {
     acc.e += (log.evangelized || 0)
     acc.g += (log.guests || 0)
     
-    // Attendance Calculations
-    const attendees = Object.values(log.attendees || {})
-    const present = attendees.filter(a => a.isPresent)
-    acc.attendance += present.length
+    // Attendance Calculations using attendance map
+    const entries = Object.entries(log.attendance || {})
+    const presentEntries = entries.filter(([id, a]) => a && a.isPresent)
+    acc.attendance += presentEntries.length
 
-    // Tag Counts (Stored for PDF Grand Total)
-    acc.dl += present.filter(a => a.tag === 'DL').length
-    acc.dm += present.filter(a => a.tag === 'DM').length
-    acc.nw += present.filter(a => a.tag === 'NW').length
-    acc.new += present.filter(a => a.tag === 'NEW').length
+    // Tag counts derived from members store when possible (DL = leader, DM = member)
+    presentEntries.forEach(([id]) => {
+      const m = membersStore.activeMembers.find(x => x.id === id)
+      if (m && m.finalTags?.isDgroupLeader) acc.dl += 1
+      else acc.dm += 1
+    })
 
     return acc
   }, { c: 0, e: 0, g: 0, attendance: 0, dl: 0, dm: 0, nw: 0, new: 0 })
@@ -54,19 +58,23 @@ const exportLogs = () => {
   const headers = [["Dgroup Leaders", "DL", "DM", "New", "G", "NW", "E", "C", "Total"]];
 
   const rows = logs.value.map(log => {
-    const present = Object.values(log.attendees || {}).filter(a => a.isPresent);
-    const countTag = (tag) => present.filter(a => a.tag === tag).length;
+    const presentEntries = Object.entries(log.attendance || {}).filter(([id, a]) => a && a.isPresent)
+    const countTag = (tag) => {
+      if (tag === 'DL') return presentEntries.filter(([id]) => (membersStore.activeMembers.find(m => m.id === id)?.finalTags?.isDgroupLeader)).length
+      if (tag === 'DM') return presentEntries.filter(([id]) => !(membersStore.activeMembers.find(m => m.id === id)?.finalTags?.isDgroupLeader)).length
+      return 0
+    }
 
     return [
       log.submittedBy,
       countTag('DL') || '',
       countTag('DM') || '',
-      countTag('NEW') || '',
+      '',
       log.guests || '',
-      countTag('NW') || '',
+      '',
       log.evangelized || '',
       log.conversations || '',
-      present.length
+      presentEntries.length
     ];
   });
 
@@ -187,7 +195,7 @@ const exportLogs = () => {
               </td>
               <td class="text-center">
                 <span class="attendance-pill">
-                  {{ Object.values(log.attendees || {}).filter(a => a.isPresent).length }} / {{ Object.keys(log.attendees || {}).length }}
+                  {{ Object.values(log.attendance || {}).filter(a => a.isPresent).length }} / {{ Object.keys(log.attendance || {}).length }}
                 </span>
               </td>
             </tr>
