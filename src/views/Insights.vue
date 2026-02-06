@@ -262,13 +262,6 @@ const genderAgeDistributionData = computed(() => {
   }
 })
 
-const dgroupMatching = computed(() => {
-  const totalCapacity = leaders.value.reduce((sum, leader) => sum + (leader.dgroupCapacity || 8), 0)
-  const totalMembersInDgroups = activeMembers.value.filter(m => !!m.dgroupLeader).length
-  const openSlots = totalCapacity - totalMembersInDgroups
-  return { seekers: seekers.value.length, openSlots: openSlots > 0 ? openSlots : 0 }
-})
-
 // Volunteer Tracking for Table
 const volunteerTrackingReport = computed(() => {
     const volunteerIds = new Set(

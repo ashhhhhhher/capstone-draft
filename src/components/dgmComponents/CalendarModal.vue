@@ -5,7 +5,7 @@ import { ChevronLeft, ChevronRight, Plus, Edit2, Trash2, MapPin } from 'lucide-v
 import { storeToRefs } from 'pinia'
 import { useEventsStore } from '../../stores/events'
 
-const emit = defineEmits(['close', 'createEvent', 'editEvent', 'exportEvent'])
+const emit = defineEmits(['close', 'createEvent', 'editEvent'])
 // accept isMember from parent; when true, hide create/edit/delete UI for members
 const props = defineProps({
   isMember: { type: Boolean, default: false }
@@ -81,9 +81,6 @@ function handleEdit(event) {
     emit('editEvent', event)
 }
 
-function handleExport(event) {
-    emit('exportEvent', event)
-}
 
 function handleDelete(event) {
     if (confirm(`Are you sure you want to delete "${event.name}"? This cannot be undone.`)) {
@@ -171,7 +168,8 @@ function handleDelete(event) {
                             <button class="btn-icon btn-delete" @click="handleDelete(event)">
                                 <Trash2 :size="16" />
                             </button>
-                            
+                            <!-- Export button: uses centralized export logic in ExportButton.vue -->
+                            <ExportButton exportType="events" :singleEvent="event" iconOnly />
                         </div>
                     </div>
                     
