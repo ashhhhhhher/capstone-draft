@@ -34,6 +34,7 @@ const searchQuery = ref('')
 const showAbsenceMonitoringModal = ref(false)
 const showPendingModal = ref(false)
 const selectedPending = ref(null)
+const showHeaderMenu = ref(false)
 
 // --- Filters State ---
 const currentFilters = ref({
@@ -119,6 +120,7 @@ function handleModalClose() { showMemberModal.value = false; }
 function openAbsenceMonitoring() { showAbsenceMonitoringModal.value = true; }
 function openPendingList() { showPendingModal.value = true; }
 function openPendingDetails(p) { selectedPending.value = p; }
+function toggleHeaderMenu() { showHeaderMenu.value = !showHeaderMenu.value }
 async function approveSelected() {
   if (!selectedPending.value) return;
   if (!confirm('Approve this registration?')) return;
@@ -146,7 +148,8 @@ const absenceCount = computed(() => { const past = getPastServices(); if (!past 
   <div class="members-container">
     <div class="members-header">
       <h1>{{ showArchived ? 'Archived Members' : 'Members Directory' }}</h1>
-      <div class="header-actions">
+      <!-- Desktop header actions -->
+      <div class="header-actions desktop-only">
         <button class="archive-toggle-btn" @click="showArchived = !showArchived">
           <Archive :size="18" />
           <span>{{ showArchived ? 'View Active' : 'View Archived' }}</span>
@@ -161,6 +164,27 @@ const absenceCount = computed(() => { const past = getPastServices(); if (!past 
           <span>Pending Approval</span>
           <span v-if="pendingMembers && pendingMembers.length > 0" class="pending-notif">{{ pendingMembers.length }}</span>
         </button>
+      </div>
+
+      <!-- Mobile header: hamburger menu -->
+      <div class="mobile-actions">
+        <button class="hamburger-btn" @click="toggleHeaderMenu" aria-label="Open menu">
+          <svg width="20" height="14" viewBox="0 0 20 14" fill="none"><rect y="1" width="20" height="2" rx="1" fill="currentColor"/><rect y="6" width="20" height="2" rx="1" fill="currentColor"/><rect y="11" width="20" height="2" rx="1" fill="currentColor"/></svg>
+        </button>
+        <div v-if="showHeaderMenu" class="mobile-menu">
+          <button class="mobile-item" @click="showArchived = !showArchived; showHeaderMenu = false">
+            <Archive :size="14" />
+            <span>{{ showArchived ? 'View Active' : 'View Archived' }}</span>
+          </button>
+          <button class="mobile-item" @click="openAbsenceMonitoring(); showHeaderMenu = false">
+            <span>Absence Monitoring</span>
+            <span v-if="absenceCount > 0" class="abs-mobile-notif">{{ absenceCount }}</span>
+          </button>
+          <button class="mobile-item" @click="openPendingList(); showHeaderMenu = false">
+            <span>Pending Approval</span>
+            <span v-if="pendingMembers && pendingMembers.length > 0" class="pending-mobile-notif">{{ pendingMembers.length }}</span>
+          </button>
+        </div>
       </div>
     </div>
 
@@ -358,4 +382,19 @@ const absenceCount = computed(() => { const past = getPastServices(); if (!past 
 .absence-modal-header h3 { margin:0; color:#D32F2F; font-size:18px; }
 .absence-subtext { margin:6px 0 0 0; color:#546E7A; font-size:13px; }
 .absence-modal-body { padding-top:12px; overflow:auto; }
+
+/* Responsive header actions (mobile) */
+.mobile-actions { display: none; position: relative; }
+.hamburger-btn { background: #fff; border: 1px solid #CFD8DC; padding: 8px; border-radius: 8px; cursor: pointer; display: flex; align-items: center; }
+.mobile-menu { position: absolute; right: 0; top: 48px; background: #fff; border: 1px solid #CFD8DC; border-radius: 8px; padding: 8px; box-shadow: 0 10px 30px rgba(16,24,40,0.08); display: flex; flex-direction: column; gap: 8px; z-index: 60; min-width: 200px; }
+.mobile-item { display: flex; align-items: center; gap: 8px; padding: 8px; border-radius: 6px; background: transparent; border: none; cursor: pointer; font-weight: 700; text-align: left; }
+.mobile-item:hover { background: #F6FAFC; }
+.abs-mobile-notif, .pending-mobile-notif { margin-left: auto; background: #D32F2F; color: #fff; padding: 4px 8px; border-radius: 12px; font-weight: 800; font-size: 12px; }
+
+@media (max-width: 800px) {
+  .header-actions.desktop-only { display: none; }
+  .mobile-actions { display: flex; }
+  .controls-wrapper { gap: 8px; }
+  .search-bar { flex-basis: 60%; }
+}
 </style>

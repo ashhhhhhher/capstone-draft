@@ -845,5 +845,70 @@ const volunteerTrackingReport = computed(() => {
 }
 
 @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
-@media (max-width: 900px) { .charts-grid-3-col { grid-template-columns: 1fr; } .attendance-breakdown-row { grid-template-columns: 1fr; } .section-header { flex-direction: column; align-items: flex-start; } .header-actions { margin-top: 6px; } }
+
+/* Mobile: stack chart grid and adjust header/actions */
+@media (max-width: 900px) {
+  .charts-grid-3-col { grid-template-columns: 1fr; }
+  .attendance-breakdown-row { grid-template-columns: 1fr; }
+  .section-header { flex-direction: column; align-items: flex-start; }
+  .header-actions { margin-top: 6px; }
+
+  /* Chart & metric adjustments for medium screens */
+  .chart-card, .metric-card, .chart-card-full { padding: 16px; }
+  .metric-number { font-size: 28px; }
+  .metric-number-dark { font-size: 24px; }
+  .charts-grid-3-col { gap: 16px; }
+  .chart-wrapper { height: auto; min-height: 200px; }
+  .donut-wrapper { height: 160px; }
+  .chart-card h3 { font-size: 15px; }
+  .chart-legend-custom { flex-direction: column; gap: 8px; align-items: flex-start; }
+  .metrics-row { gap: 12px; }
+  .section-title-with-button { flex-direction: column; align-items: flex-start; gap: 8px; }
+  .date-controls .controls-inline { flex-direction: column; align-items: flex-start; }
+}
+
+/* Small screens (phones) - reduce paddings/margins and font sizes */
+@media (max-width: 480px) {
+  .insights-container { padding: 10px; }
+  .dashboard-header { gap: 10px; }
+  .header-text h1 { font-size: 18px; }
+  .tabs-header { gap: 6px; padding: 6px 6px 0 6px; margin-bottom: 12px; }
+  .tab-btn { padding: 8px 10px; font-size: 13px; }
+
+  .metrics-row { grid-template-columns: 1fr; gap: 12px; }
+  .metric-card { padding: 12px; }
+  .metric-number { font-size: 22px; }
+  .metric-number-dark { font-size: 20px; }
+
+  .charts-grid-3-col { gap: 12px; }
+  .chart-card, .chart-card-full { padding: 12px; }
+  .chart-wrapper { min-height: 160px; }
+  .donut-wrapper { height: 140px; }
+  .chart-card h3 { font-size: 14px; }
+
+  .chart-legend-custom { flex-direction: column; gap: 6px; align-items: flex-start; }
+  .section-title-with-button { flex-direction: column; align-items: flex-start; gap: 8px; }
+  .date-controls .controls-inline { flex-direction: column; }
+
+  .volunteer-table th, .volunteer-table td { padding: 8px; font-size: 13px; }
+}
+
+/* Mirror HistoricalAttendance wrapper behavior to avoid chart overlap */
+.chart-card .chart-wrapper,
+.chart-card-full .chart-wrapper,
+.chart-card .chart-wrapper > div,
+.chart-card-full .chart-wrapper > div {
+  border-radius: 8px;
+  padding: 12px;
+  height: auto !important;
+  min-height: 200px;
+}
+.chart-wrapper canvas {
+  width: 100% !important;
+  height: 100% !important;
+}
+@media (max-width: 600px) {
+  .chart-card .chart-wrapper,
+  .chart-card-full .chart-wrapper { min-height: 140px; }
+}
 </style>

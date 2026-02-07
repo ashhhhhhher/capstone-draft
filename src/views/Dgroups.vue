@@ -474,7 +474,7 @@ function handleRestoreMember(memberId) {
 }
 .search-bar {
   position: relative;
-  max-width: 400px;
+  max-width: 300px;
 }
 .search-icon {
   position: absolute;
@@ -484,7 +484,7 @@ function handleRestoreMember(memberId) {
   color: #90A4AE;
 }
 .search-bar input {
-  width: 100%;
+  width: 80%;
   padding: 10px 10px 10px 40px;
   border: 1px solid #CFD8DC;
   border-radius: 8px;
