@@ -1,25 +1,20 @@
 <script setup>
-import { ref } from 'vue'
 import { RouterView, useRoute, useRouter } from 'vue-router'
 import AppHeader from '../components/dgmComponents/AppHeader.vue'
-import AboutUsModal from '../components/memberComponents/AboutUsModal.vue'
-import { Home, Users, QrCode, CalendarCheck, Info } from 'lucide-vue-next'
+import { Home, Users, QrCode, CalendarCheck } from 'lucide-vue-next'
 
 const route = useRoute()
 const router = useRouter()
-const isAboutOpen = ref(false)
 
 const navItems = [
   { name: 'Home', path: '/member/home', icon: Home },
   { name: 'Dgroup', path: '/member/dgroup', icon: Users },
   { name: 'Attendance', path: '/member/attendance', icon: CalendarCheck },
   { name: 'My QR', path: '/member/qr', icon: QrCode },
-  { name: 'About', path: 'modal', icon: Info }, // Custom path for modal
 ]
 
 function handleNav(item) {
-  if (item.path === 'modal') { isAboutOpen.value = true } 
-  else { router.push(item.path) }
+  router.push(item.path)
 }
 function isActive(path) { return route.path === path }
 </script>
@@ -39,8 +34,6 @@ function isActive(path) { return route.path === path }
         <span class="nav-label">{{ item.name }}</span>
       </div>
     </nav>
-
-    <AboutUsModal :is-open="isAboutOpen" @close="isAboutOpen = false" />
   </div>
 </template>
 
