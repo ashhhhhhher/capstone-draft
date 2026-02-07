@@ -13,12 +13,21 @@ const loading = ref(true)
 const selectedWeekStart = ref('') // YYYY-MM-DD (Sunday)
 const membersStore = useMembersStore()
 
+// local YYYY-MM-DD helper to avoid UTC shift issues
+function localYMD(input) {
+  const dt = input ? new Date(input) : new Date()
+  const y = dt.getFullYear()
+  const m = String(dt.getMonth() + 1).padStart(2, '0')
+  const d = String(dt.getDate()).padStart(2, '0')
+  return `${y}-${m}-${d}`
+}
+
 onMounted(() => {
   const authStore = useAuthStore()
   const cg = collectionGroup(db, 'meetings')
   onSnapshot(cg, (snapshot) => {
     const items = []
-    const today = new Date().toISOString().split('T')[0]
+    const today = localYMD()
     snapshot.forEach(docSnap => {
       const path = docSnap.ref.path
       // include only meetings under this branch
@@ -33,7 +42,7 @@ onMounted(() => {
     loading.value = false
     // initialize selected week to latest meeting week or current week
     if (!selectedWeekStart.value) {
-      const initDate = items.length > 0 ? items[0].meetingDate : new Date().toISOString().split('T')[0]
+      const initDate = items.length > 0 ? items[0].meetingDate : localYMD()
       selectedWeekStart.value = getWeekStartISO(initDate)
     }
   })
@@ -112,7 +121,7 @@ onMounted(() => {
 
   // helper: latest week that has data (week start)
   const maxWeekStart = computed(() => {
-    if (!logs.value.length) return getWeekStartISO(new Date().toISOString().split('T')[0])
+    if (!logs.value.length) return getWeekStartISO(localYMD())
     const latest = logs.value[0].meetingDate
     return getWeekStartISO(latest)
   })
