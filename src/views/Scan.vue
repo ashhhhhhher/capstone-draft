@@ -21,7 +21,7 @@ const isProcessing = ref(false)
 const standardMinistries = ['Host Team', 'Live Prod', 'Exalt', 'Welcome', 'DGM']
 
 const isAttendanceEvent = computed(() => {
-  return currentEvent.value && (currentEvent.value.eventType === 'service' || currentEvent.value.eventType === 'b1g_event')
+  return currentEvent.value && (currentEvent.value.eventType === 'service' || currentEvent.value.eventType === 'b1g_event' || currentEvent.value.eventType === 'ccf_event')
 })
 
 async function processMemberId(memberId) {
