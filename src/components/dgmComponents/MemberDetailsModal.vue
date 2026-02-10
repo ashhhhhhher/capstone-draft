@@ -321,10 +321,10 @@ function copyToClipboard(text) {
              <div v-if="editableMember.finalTags.isVolunteer" class="indented">
                 <label class="sub-label">Select Ministries:</label>
                 <div class="checkbox-subgroup">
-                     <div class="checkbox-item"><input type="checkbox" value="Host Team" v-model="editableMember.finalTags.volunteerMinistry"><label>Host Team</label></div>
+                     <div class="checkbox-item"><input type="checkbox" value="Media" v-model="editableMember.finalTags.volunteerMinistry"><label>Media</label></div>
                      <div class="checkbox-item"><input type="checkbox" value="Live Prod" v-model="editableMember.finalTags.volunteerMinistry"><label>Live Prod</label></div>
                      <div class="checkbox-item"><input type="checkbox" value="Exalt" v-model="editableMember.finalTags.volunteerMinistry"><label>Exalt (Music)</label></div>
-                     <div class="checkbox-item"><input type="checkbox" value="Welcome" v-model="editableMember.finalTags.volunteerMinistry"><label>Welcome</label></div>
+                     <div class="checkbox-item"><input type="checkbox" value="Events" v-model="editableMember.finalTags.volunteerMinistry"><label>Events</label></div>
                      <div class="checkbox-item"><input type="checkbox" value="DGM" v-model="editableMember.finalTags.volunteerMinistry"><label>DGM</label></div>
                 </div>
             </div>
