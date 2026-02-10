@@ -92,10 +92,10 @@ onUnmounted(() => { document.removeEventListener('click', closeDropdown) })
             <div class="panel-body">
               <div v-if="!notificationsStore.localNotifications.length" class="empty-notif">No notifications</div>
               <div v-else class="notif-list">
-                <div v-for="n in notificationsStore.localNotifications" :key="n.id" class="notif-card">
+                <div v-for="n in notificationsStore.localNotifications" :key="n.id" class="notif-card" @click="n.focus ? openNotificationFocus(n.focus) : null" :class="{ clickable: !!n.focus }">
                   <div class="notif-header">{{ n.header }}</div>
                   <div class="notif-body">{{ n.body }}</div>
-                  <div class="notif-action" v-if="n.focus"><button class="notif-cta" @click="openNotificationFocus(n.focus)">Tap to view →</button></div>
+                  <div class="notif-action" v-if="n.focus"><button class="notif-cta" @click.stop="openNotificationFocus(n.focus)">Tap to view →</button></div>
                 </div>
               </div>
               <div class="panel-footer"><button class="clear-btn" @click="notificationsStore.clearLocalNotifications(); showNotifications=false">Clear</button></div>
@@ -190,6 +190,59 @@ onUnmounted(() => { document.removeEventListener('click', closeDropdown) })
 @keyframes slideIn { from { transform: translateX(100%); } to { transform: translateX(0); } }
 .panel-header { padding: 16px; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; }
 .panel-body { flex: 1; overflow-y: auto; padding: 16px; }
+/* Clickable notif card */
+.notif-card.clickable { cursor: pointer; }
+
+/* Notification card visuals */
+.notif-list .notif-card {
+  padding: 12px;
+  border-radius: 10px;
+  border: 1px solid #F1F5F9;
+  background: #FFFFFF;
+  margin-bottom: 12px;
+  box-shadow: 0 1px 2px rgba(16,24,40,0.02);
+}
+.notif-list .notif-card.clickable:hover {
+  background: #F6FBFF;
+}
+.notif-header { font-weight: 700; color: #102A43; margin-bottom: 6px; }
+.notif-body { color: #546E7A; font-size: 14px; margin-bottom: 8px; }
+
+/* CTA and control buttons inside notification panel */
+.notif-action { display: flex; justify-content: flex-end; }
+.notif-cta {
+  background-color: #1976D2;
+  color: #fff;
+  border: none;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgba(25,118,210,0.12);
+}
+.notif-cta:hover { background-color: #1565C0; }
+
+.panel-footer { padding: 12px; border-top: 1px solid #EEE; display:flex; justify-content: flex-end; }
+.clear-btn {
+  background: transparent;
+  border: 1px solid #E3F2FD;
+  color: #1976D2;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.clear-btn:hover { background: #E3F2FD; }
+
+.close-btn {
+  background: transparent;
+  border: none;
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+  color: #546E7A;
+}
+.close-btn:hover { color: #37474F; }
 
 /* ABOUT OVERLAY STYLES */
 .about-view-overlay { position: fixed; inset: 0; background: #000; z-index: 3000; overflow: hidden; display: flex; flex-direction: column; }

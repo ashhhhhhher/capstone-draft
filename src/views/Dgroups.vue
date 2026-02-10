@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useMembersStore } from '../stores/members'
 import { useAttendanceStore } from '../stores/attendance'
@@ -21,6 +21,8 @@ import DGroupEditModal from '../components/dgmComponents/DGroupEditModal.vue'
 import MemberDetailsModal from '../components/dgmComponents/MemberDetailsModal.vue' 
 import Modal from '../components/dgmComponents/Modal.vue'
 import MemberCard from '../components/dgmComponents/MemberCard.vue'
+
+import { useRoute } from 'vue-router'
 
 // --- Stores ---
 const membersStore = useMembersStore()
@@ -96,6 +98,19 @@ const femaleGroups = computed(() => sortedDgroups.value.filter(g => g.leaderGend
 const unmatchedSeekersCount = computed(() => seekers.value.length)
 
 // --- Functions ---
+
+// --- React to route query 'tab' so external links can open a specific tab ---
+const route = useRoute()
+onMounted(() => {
+  if (route.query && route.query.tab) {
+    currentTab.value = route.query.tab
+  }
+})
+
+watch(() => route.query.tab, (newTab) => {
+  if (newTab) currentTab.value = newTab
+})
+
 function toggleDgroup(leaderName) {
   const index = expandedDgroups.value.indexOf(leaderName)
   if (index > -1) expandedDgroups.value.splice(index, 1)
