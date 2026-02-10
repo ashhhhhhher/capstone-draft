@@ -121,8 +121,8 @@ async function deleteOldImage(url) {
 async function handleSubmit() {
   formStatus.value = { type: '', message: '' }
   
-  if (!eventName.value || !eventDate.value || !eventTime.value || !eventLocation.value) {
-    setStatus('error', 'Please fill in the event name, date, time, and location.')
+  if (!eventType.value||!eventName.value || !eventDate.value || !eventTime.value || !eventLocation.value) {
+    setStatus('error', 'Please fill in the event type,name, date, time, and location.')
     return
   }
   
