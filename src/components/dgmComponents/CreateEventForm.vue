@@ -26,7 +26,7 @@ const eventLocation = ref('')
 const eventSpeaker = ref('') 
 const eventSeries = ref('')
 const isAddingNewSpeaker = ref(false)
-const isManagingSpeakers = ref(false) // New state for delete mode
+const isManagingSpeakers = ref(false)
 const newSpeakerName = ref('')
 const newSpeakerInput = ref(null)
 const photoURL = ref('')
@@ -121,8 +121,8 @@ async function deleteOldImage(url) {
 async function handleSubmit() {
   formStatus.value = { type: '', message: '' }
   
-  if (!eventName.value || !eventDate.value || !eventTime.value) {
-    setStatus('error', 'Please fill in the event name, date, and time.')
+  if (!eventName.value || !eventDate.value || !eventTime.value || !eventLocation.value) {
+    setStatus('error', 'Please fill in the event name, date, time, and location.')
     return
   }
   
