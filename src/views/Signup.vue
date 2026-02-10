@@ -37,17 +37,18 @@ const gender = ref('')
 async function handleSignup() {
   errorMessage.value = ''
   tcError.value = ''
-  
+
+  // --- Validation ---
   if (!agreed.value) {
     tcError.value = 'You must agree to the Terms and Conditions and Privacy Policy.'
     return
   }
-
+  
   if (password.value !== confirmPassword.value) {
     errorMessage.value = "Passwords do not match."
     return
   }
-  
+
   if (!firstName.value || !lastName.value || !birthday.value || !gender.value || !email.value) {
     errorMessage.value = "Please fill in all required fields."
     return
@@ -64,19 +65,16 @@ async function handleSignup() {
         gender: gender.value
       }
     }
-    
-    // 1. Create account (this automatically signs them in)
+
+    //  Signup (creates account and pending profile)
     await authStore.signup(email.value, password.value, userData)
-    
-    // 2. Send Verification Email (Native Firebase)
+
+    //  Send verification email
     if (auth.currentUser && !auth.currentUser.emailVerified) {
       await sendEmailVerification(auth.currentUser)
     }
-
-    // 3. Sign out immediately so they can't access dashboard yet
     await signOut(auth)
-
-    // 4. Show Success State
+    //  Show verification notice
     isSuccess.value = true
 
   } catch (error) {
@@ -84,15 +82,13 @@ async function handleSignup() {
     if (error.code === 'auth/email-already-in-use') {
       errorMessage.value = 'This email is already in use.'
     } else if (error.code === 'auth/weak-password') {
-      // Handles password policy enforcement errors
-      errorMessage.value = 'Password is too weak. ' + (error.message.includes('characters') ? 'It must be at least 6 characters.' : error.message)
-    } else if (error.message) {
-      errorMessage.value = error.message
+      errorMessage.value = 'Password is too weak.'
     } else {
       errorMessage.value = 'An unexpected error occurred during signup.'
     }
   }
 }
+
 
 function clearTcError() {
   if (tcError.value) tcError.value = ''

@@ -87,35 +87,31 @@ export const useAuthStore = defineStore('auth', () => {
 
 
   // --- SIGNUP ---
-  async function signup(email, password, basicData) {
-    isLoading.value = true
-    try {
-      const userCredential = await createUserWithEmailAndPassword(auth, email, password)
-      user.value = userCredential.user
-      const displayName = `${basicData.profile.firstName} ${basicData.profile.lastName}`;
+async function signup(email, password, basicData) {
+  isLoading.value = true
+  try {
+    const userCredential = await createUserWithEmailAndPassword(auth, email, password)
+    user.value = userCredential.user
+    const displayName = `${basicData.profile.firstName} ${basicData.profile.lastName}`
 
-      // Update display name locally
-      await updateProfile(user.value, {
-        displayName: displayName
-      })
+    await updateProfile(user.value, { displayName })
 
-      const defaultBranch = basicData.branchId || 'baguio';
+    const defaultBranch = basicData.branchId || 'baguio'
+    const newMemberId = await generateMemberID(defaultBranch)
 
-      // Generate ID & Create a PENDING member profile (admins must approve)
-      const newMemberId = await generateMemberID(defaultBranch);
-      await createPendingProfile(user.value.uid, defaultBranch, basicData.profile, newMemberId);
+    // Create pending profile only (not full member)
+    await createPendingProfile(user.value.uid, defaultBranch, basicData.profile, newMemberId)
 
-      // Set local state as pending
-      userRole.value = 'pending';
-      branchId.value = defaultBranch;
-      await fetchMemberProfile(user.value.uid); // will pick up pending profile
+    userRole.value = 'pending'
+    branchId.value = defaultBranch
 
-    } catch (error) {
-      throw error;
-    } finally {
-      isLoading.value = false
-    }
+  } catch (error) {
+    throw error
+  } finally {
+    isLoading.value = false
   }
+}
+
 
   async function createMemberProfile(uid, branchId, basicData, memberId) {
     const age = new Date().getFullYear() - new Date(basicData.birthday).getFullYear(); 
@@ -174,6 +170,9 @@ export const useAuthStore = defineStore('auth', () => {
     const pendingData = {
       id: memberId,
       authUid: uid,
+      email: basicData.email || '',
+      emailVerified: false, //New signups who are not yet verified   
+      status: 'pending',
       createdAt: todayISO,
       status: 'pending',
       role: 'member',
@@ -216,22 +215,35 @@ export const useAuthStore = defineStore('auth', () => {
     await updateDoc(memberRef, data);
   }
 
-  async function login(email, password) {
-    isLoading.value = true
-    try {
-      const userCredential = await signInWithEmailAndPassword(auth, email, password)
-      user.value = userCredential.user
-      await fetchUserProfile(user.value.uid)
-      
-      if (userRole.value === 'member') {
-          await fetchMemberProfile(user.value.uid, branchId.value);
-      }
-    } catch (error) {
-      throw error;
-    } finally {
-      isLoading.value = false
+async function login(email, password) {
+  isLoading.value = true
+  try {
+    const userCredential = await signInWithEmailAndPassword(auth, email, password)
+    const currentUser = userCredential.user
+
+    // ✅ Check if email is verified
+    if (!currentUser.emailVerified) {
+      await signOut(auth) // Make sure user cannot stay logged in
+      alert("Please verify your email before logging in.")
+      return // STOP further execution
     }
+
+    // Only proceed if verified
+    user.value = currentUser
+    await fetchUserProfile(user.value.uid)
+    
+    if (userRole.value === 'member') {
+      await fetchMemberProfile(user.value.uid, branchId.value)
+    }
+
+  } catch (error) {
+    throw error
+  } finally {
+    isLoading.value = false
   }
+}
+
+
 
   async function logout() {
     await signOut(auth)

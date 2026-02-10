@@ -20,28 +20,31 @@ const isLoadingReset = ref(false)
 async function handleLogin() {
   errorMessage.value = ''
   successMessage.value = ''
-  
+
   try {
     await authStore.login(email.value, password.value)
-    
-    // Trigger Welcome Screen
-    showWelcome.value = true;
 
-    // Delay routing for 2.5s
-    setTimeout(() => {
-      if (authStore.userRole === 'admin') {
-        router.push('/')
-      } else {
-        router.push('/member/home') 
-      }
-    }, 2500)
+    //Only show welcome if login succeeded
+    if (authStore.user) {
+      showWelcome.value = true
+
+      setTimeout(() => {
+        if (authStore.userRole === 'admin') {
+          router.push('/')
+        } else {
+          router.push('/member/home') 
+        }
+      }, 2500)
+    }
 
   } catch (error) {
     switch (error.code) {
-      case 'auth/invalid-email':
       case 'auth/user-not-found':
-      case 'auth/wrong-password':
       case 'auth/invalid-credential':
+        errorMessage.value = 'Account does not exist or has been removed'
+        break;
+      case 'auth/invalid-email':
+      case 'auth/wrong-password':
         errorMessage.value = 'Incorrect email or password.'
         break;
       case 'auth/too-many-requests':
@@ -52,6 +55,7 @@ async function handleLogin() {
     }
   }
 }
+
 
 async function handleForgotPassword() {
   if (!email.value) {
