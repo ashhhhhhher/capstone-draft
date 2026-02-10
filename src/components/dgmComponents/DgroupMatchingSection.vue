@@ -326,7 +326,6 @@ async function assignLeader(leaderName) {
               <!-- Action -->
               <button 
                 class="assign-button" 
-                :class="index === 0 ? 'primary' : 'outline'"
                 @click="assignLeader(match.name)"
               >
                 Assign to {{ match.dgroupName }}
@@ -567,28 +566,15 @@ async function assignLeader(leaderName) {
 .assign-button {
   width: 100%;
   padding: 10px;
+  background: white;
   border-radius: 8px;
   font-weight: 600;
   font-size: 13px;
+  color: #000000;
   cursor: pointer;
   transition: all 0.2s;
 }
-.assign-button.primary {
-  background: #1976D2;
-  color: white;
-  border: none;
-}
-.assign-button.primary:hover { background: #1565C0; }
-
-.assign-button.outline {
-  background: white;
-  border: 1px solid #CFD8DC;
-  color: #546E7A;
-}
-.assign-button.outline:hover {
-  background: #F5F5F5;
-  border-color: #B0BEC5;
-}
+.assign-button:hover { background: #1565C0;color: #ffffff; }
 
 .no-matches-warning {
   padding: 20px;
