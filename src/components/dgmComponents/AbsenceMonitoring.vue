@@ -5,7 +5,7 @@ import { useAuthStore } from '../../stores/auth'
 import { useMembersStore } from '../../stores/members'
 import { db } from '../../firebase'
 import { collection, query, orderBy, onSnapshot, deleteDoc, doc } from 'firebase/firestore'
-import { defineExpose } from 'vue'
+
 
 const reports = ref([])
 const authStore = useAuthStore()

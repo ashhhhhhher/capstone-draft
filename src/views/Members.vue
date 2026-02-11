@@ -268,7 +268,7 @@ onUnmounted(() => { if (_unsubReports) _unsubReports() })
   </Modal>
 
   <Modal v-if="showAbsenceMonitoringModal" @close="showAbsenceMonitoringModal = false" size="xl">
-    <div class="absence-modal-wrapper"><header class="absence-modal-header"><h3>Consecutive Absences</h3><p class="absence-subtext">Monitor members with 3, 4 and 5+ consecutive missed gatherings.</p></header><div class="absence-modal-body"><AbsenceMonitoring /></div></div>
+    <div class="absence-modal-wrapper"><div class="absence-modal-body"><AbsenceMonitoring /></div></div>
   </Modal>
 
   <Modal v-if="showFilterModal" @close="showFilterModal = false">
