@@ -6,7 +6,8 @@ import { useAuthStore } from '../stores/auth'
 const authStore = useAuthStore()
 const memberProfile = computed(() => authStore.userProfile)
 
-const qrCodeValue = computed(() => memberProfile.value?.id || authStore.user?.uid)
+// Fallback logic for the QR value
+const qrCodeValue = computed(() => memberProfile.value?.id || authStore.user?.uid || 'no-id-found')
 const lifeStage = computed(() => memberProfile.value?.finalTags?.ageCategory || 'General')
 
 </script>
@@ -20,7 +21,18 @@ const lifeStage = computed(() => memberProfile.value?.finalTags?.ageCategory || 
       </div>
 
       <div class="qr-wrapper">
-        <QrcodeVue :value="qrCodeValue" :size="260" level="H" />
+        <!-- 
+          CHANGED: 
+          1. Added render-as="svg" (makes it a vector, not a pixel canvas)
+          2. Removed fixed :size prop (or set it high just for viewBox)
+          3. Added class="qr-code-svg" to control width via CSS
+        -->
+        <QrcodeVue 
+          :value="qrCodeValue" 
+          render-as="svg" 
+          level="H" 
+          class="qr-code-svg"
+        />
       </div>
 
       <div class="member-details">
@@ -34,18 +46,92 @@ const lifeStage = computed(() => memberProfile.value?.finalTags?.ageCategory || 
 </template>
 
 <style scoped>
-.qr-page { display: flex; flex-direction: column; align-items: center; padding-top: 20px; }
+.qr-page { 
+  display: flex; 
+  flex-direction: column; 
+  align-items: center; 
+  padding-top: 20px; 
+}
 
-.qr-card { background: white; width: 100%; max-width: 320px; border-radius: 24px; padding: 30px 20px; box-shadow: 0 10px 30px rgba(25, 118, 210, 0.15); text-align: center; margin-bottom: 30px; position: relative; border: 1px solid #E3F2FD; }
-.card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; }
-.org-logo { font-weight: 900; font-size: 18px; color: #1976D2; letter-spacing: -1px; }
-.category-tag { font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 20px; text-transform: uppercase; }
+.qr-card { 
+  background: white; 
+  width: 100%; 
+  max-width: 320px; 
+  border-radius: 24px; 
+  padding: 30px 20px; 
+  box-shadow: 0 10px 30px rgba(25, 118, 210, 0.15); 
+  text-align: center; 
+  margin-bottom: 30px; 
+  position: relative; 
+  border: 1px solid #E3F2FD; 
+}
+
+.card-header { 
+  display: flex; 
+  justify-content: space-between; 
+  align-items: center; 
+  margin-bottom: 30px; 
+}
+
+.org-logo { 
+  font-weight: 900; 
+  font-size: 18px; 
+  color: #1976D2; 
+  letter-spacing: -1px; 
+}
+
+.category-tag { 
+  font-size: 11px; 
+  font-weight: 700; 
+  padding: 4px 10px; 
+  border-radius: 20px; 
+  text-transform: uppercase; 
+}
+
 .category-tag.elevate { background: #E3F2FD; color: #1976D2; }
 .category-tag.b1g { background: #FFF3E0; color: #F57C00; }
 
-.qr-wrapper { margin: 0 auto 20px; padding: 10px; background: white; display: inline-block; }
-.member-details h2 { margin: 0 0 6px 0; font-size: 22px; color: #263238; }
-.uid { margin: 0; color: #90A4AE; font-family: monospace; font-size: 14px; letter-spacing: 1px; }
+.qr-wrapper { 
+  margin: 0 auto 20px; 
+  padding: 10px; 
+  background: white; 
+  /* This controls the container size - the SVG will fill this */
+  width: 90%; 
+  max-width: 260px; 
+  aspect-ratio: 1 / 1; /* Keeps the wrapper square */
+  display: flex;       /* Centers the SVG */
+  align-items: center;
+  justify-content: center;
+}
 
-.help-text { margin-top: 20px; font-size: 13px; color: #90A4AE; max-width: 250px; text-align: center; }
+/* This is the key fix. 
+   Targeting the SVG directly allows us to force it 
+   to fill the parent .qr-wrapper 
+*/
+:deep(.qr-code-svg) {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+.member-details h2 { 
+  margin: 0 0 6px 0; 
+  font-size: 22px; 
+  color: #263238; 
+}
+
+.uid { 
+  margin: 0; 
+  color: #90A4AE; 
+  font-family: monospace; 
+  font-size: 14px; 
+  letter-spacing: 1px; 
+}
+
+.help-text { 
+  margin-top: 20px; 
+  font-size: 13px; 
+  color: #90A4AE; 
+  max-width: 250px; 
+  text-align: center; 
+}
 </style>
