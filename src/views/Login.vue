@@ -1,5 +1,5 @@
 <script setup>
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { RouterLink, useRouter } from 'vue-router' 
 import { useAuthStore } from '../stores/auth'
 import { getAuth, sendPasswordResetEmail } from "firebase/auth"
@@ -16,6 +16,10 @@ const successMessage = ref('')
 const showWelcome = ref(false)
 const showPassword = ref(false)
 const isLoadingReset = ref(false)
+
+const welcomeName = computed(() => {
+  return authStore.userProfile?.firstName || authStore.user?.displayName?.split(' ')[0] || 'Member'
+})
 
 async function handleLogin() {
   errorMessage.value = ''
@@ -100,7 +104,7 @@ async function handleForgotPassword() {
       <div v-if="showWelcome" class="welcome-overlay">
         <div class="welcome-content">
           <img src="/qonnect.png" alt="Qonnect" class="welcome-logo" />
-          <h1>Welcome, {{ authStore.user?.displayName?.split(' ')[0] || 'Member' }}!</h1>
+          <h1>Welcome, {{ welcomeName }}!</h1>
           <p>Signing you in...</p>
           <div class="spinner"></div>
         </div>

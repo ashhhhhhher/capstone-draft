@@ -44,6 +44,18 @@ const memberDisplayRole = computed(() => {
   return 'First Timer'
 })
 
+// Computed for Display Name to ensure reactivity from store
+const displayName = computed(() => {
+  if (authStore.userProfile?.firstName && authStore.userProfile?.lastName) {
+    return `${authStore.userProfile.firstName} ${authStore.userProfile.lastName}`
+  }
+  return authStore.user?.displayName || 'User'
+})
+
+const firstName = computed(() => {
+  return authStore.userProfile?.firstName || authStore.user?.displayName?.split(' ')[0] || 'User'
+})
+
 function openNotificationFocus(focusKey) {
   showNotifications.value = false
   if (focusKey === 'matching') { router.push({ path: '/dgroups', query: { tab: 'matching' } }) } 
@@ -67,7 +79,7 @@ onUnmounted(() => { document.removeEventListener('click', closeDropdown) })
 <template>
   <header class="app-header">
     <div class="greeting">
-      <h2>Hello, {{ authStore.user?.displayName?.split(' ')[0] || 'User' }}</h2>
+      <h2>Hello, {{ firstName }}</h2>
       <p>Welcome back.</p>
     </div>
 
@@ -117,7 +129,7 @@ onUnmounted(() => { document.removeEventListener('click', closeDropdown) })
       <transition name="fade">
         <div v-if="isDropdownOpen" class="dropdown-menu">
           <div class="dropdown-header">
-            <p class="user-name">{{ authStore.user?.displayName || 'User' }}</p>
+            <p class="user-name">{{ displayName }}</p>
             <span class="user-role-badge" :class="memberDisplayRole.toLowerCase().replace(' ', '-')">{{ memberDisplayRole }}</span>
           </div>
           <div class="dropdown-items">

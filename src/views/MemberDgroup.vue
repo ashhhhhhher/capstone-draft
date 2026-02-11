@@ -33,6 +33,15 @@ const editGroupForm = reactive({
   dgroupId: ''
 })
 
+// Added missing reactive form state
+const attendanceForm = reactive({
+  attendees: {},
+  conversations: 0,
+  evangelized: 0,
+  guests: 0,
+  date: new Date().toISOString().split('T')[0]
+})
+
 const selectedPerson = ref(null) 
 const mockGroups = ref([])
 
@@ -42,7 +51,15 @@ onMounted(() => {
 
 const myProfile = computed(() => authStore.userProfile)
 const isLeader = computed(() => myProfile.value?.finalTags?.isDgroupLeader)
-const myLeaderName = computed(() => myProfile.value?.dgroupLeader)
+const rawLeaderName = computed(() => myProfile.value?.dgroupLeader)
+
+// return NULL if the leader is N/A, ensuring these users are NOT grouped together
+const myLeaderName = computed(() => {
+  const leader = rawLeaderName.value
+  if (!leader || leader === 'N/A (D-Lead)' || leader === 'N/A (First Timer)') return null
+  return leader
+})
+
 const myName = computed(() => myProfile.value ? `${myProfile.value.firstName} ${myProfile.value.lastName}` : '')
 
 const showSeekerQuestionnaire = computed(() => {
@@ -58,6 +75,7 @@ const myLeaderObject = computed(() => {
   )
 })
 
+// isolating UplineDgroups like from the "N/A" group.
 const myUplineGroup = computed(() => {
   if (!myLeaderName.value) return []
   return membersStore.activeMembers.filter(m => 
@@ -285,6 +303,8 @@ async function saveGroupDetails() {
 
       <!-- TAB 1: UPLINE -->
       <div v-if="activeTab === 'upline'" class="tab-content fade-in">
+        
+        <!-- Only show Leader Card if myLeaderName is a valid person -->
         <div class="leader-card-modern" v-if="myLeaderName" @click="viewPerson(myLeaderObject)">
           <div class="leader-bg-accent"></div>
           <div class="leader-content-row">
@@ -300,21 +320,36 @@ async function saveGroupDetails() {
           </div>
         </div>
 
+        <!-- Empty / Special States -->
         <div v-else class="empty-state-modern">
           <div class="empty-icon"><UserMinus :size="32" /></div>
+          
           <p v-if="myProfile?.finalTags.isSeeker">
             You are listed as a <strong>Seeker</strong>. <br>Waiting for a leader to add you.
           </p>
+          
+          <!-- NEW: Handle N/A (D-Lead) explicitly -->
+          <p v-else-if="rawLeaderName === 'N/A (D-Lead)'">
+            Your Dgroup Leader is part of the main church and not under ELEVATE/B1G WKND <br>
+            <span style="font-size: 0.9em; opacity: 0.8">(No Upline Assigned)</span>
+          </p>
+
+          <!-- NEW: Handle N/A (First Timer) explicitly -->
+          <p v-else-if="rawLeaderName === 'N/A (First Timer)'">
+            Welcome! Please connect with a leader to join a group.
+          </p>
+
           <p v-else>You are not assigned to a Dgroup yet.</p>
         </div>
 
+        <!-- Only show Co-Members list if there is a valid leader -->
         <div class="common-list-card" v-if="myLeaderName">
           <div class="list-header row">
-             <h4>Co-Members</h4>
-             <span class="count-badge">{{ myUplineGroup.length }}</span>
+              <h4>Co-Members</h4>
+              <span class="count-badge">{{ myUplineGroup.length }}</span>
           </div>
           <div>
-             <div v-for="member in myUplineGroup" :key="member.id" class="list-item" @click="viewPerson(member)">
+              <div v-for="member in myUplineGroup" :key="member.id" class="list-item" @click="viewPerson(member)">
                 <div class="avatar sm">{{ member.firstName.charAt(0) }}</div>
                 <div class="info-col">
                     <span class="name">{{ member.firstName }} {{ member.lastName }}</span>
