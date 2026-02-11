@@ -221,45 +221,86 @@ function clearTcError() {
             <h3>Terms and Conditions</h3>
             <div style="margin-top:8px; color:#546E7A; text-align:left;">
               <p><strong>Qonnect</strong></p>
-              <p><em>Last Updated: February 04, 2026</em></p>
-              <p>These Terms and Conditions govern the use of the Qonnect application. By creating an account or using the app, you agree to comply with these terms.</p>
+              <p><em>Last Updated: February 12, 2026</em></p>
+              <p>
+                These Terms and Conditions ("Terms") govern your access to and use of the Qonnect application.
+                By creating an account or using Qonnect, you acknowledge that you have read, understood,
+                and agreed to be bound by these Terms.
+              </p>
 
-              <h4>1. Acceptance of Terms</h4>
-              <p>By accessing or using Qonnect, you confirm that you have read, understood, and agreed to these Terms and Conditions. If you do not agree, you should not use the application.</p>
+              <h4>1. Nature of the Application</h4>
+              <p>
+                Qonnect is an academic project developed to support the coordination,
+                scheduling, attendance tracking, and documentation of Dgroup meetings,
+                Weekend (WKND) services, B1G services, and related ministry activities.
+                The application is intended for internal coordination and non-commercial use.
+              </p>
 
-              <h4>2. Eligibility</h4>
-              <p>Users must provide accurate and complete information during registration. The application is intended for users participating in supported events.</p>
+              <h4>2. User Eligibility</h4>
+              <p>
+                By registering for an account, you confirm that the information you provide
+                is accurate and complete and that you are participating in supported Dgroup,
+                WKND, or B1G activities.
+              </p>
 
               <h4>3. User Responsibilities</h4>
               <p>Users agree to:</p>
               <ul>
                 <li>Provide truthful and accurate information</li>
-                <li>Use the application only for its intended purpose</li>
+                <li>Use the application only for its intended coordination and reporting purposes</li>
                 <li>Avoid misuse, unauthorized access, or disruption of the system</li>
+                <li>Maintain the confidentiality of login credentials</li>
               </ul>
-              <p>Any misuse of the application may result in suspension or termination of access.</p>
+              <p>
+                Any misuse of the application may result in suspension or termination of access.
+              </p>
 
-              <h4>4. Use of the Application</h4>
-              <p>Qonnect is provided on an “as is” and “as available” basis. While efforts are made to ensure reliability, uninterrupted access and error-free operation are not guaranteed.</p>
+              <h4>4. Attendance and Reporting</h4>
+              <p>
+                Attendance records for Dgroup meetings, WKND services, and B1G services
+                may be logged within the system by authorized leaders. Such records form part
+                of internal coordination and ministry documentation.
+              </p>
 
-              <h4>5. Account Suspension or Termination</h4>
-              <p>The project team reserves the right to suspend or terminate user accounts that violate these Terms or misuse the application.</p>
+              <h4>5. Limitation of Liability</h4>
+              <p>
+                Qonnect is provided on an “as is” and “as available” basis. While reasonable
+                efforts are made to ensure reliability, uninterrupted access and error-free
+                operation are not guaranteed.
+              </p>
+              <p>
+                As an academic project, Qonnect and its developers shall not be liable for
+                any direct or indirect damages resulting from the use or inability to use
+                the application.
+              </p>
 
-              <h4>6. Limitation of Liability</h4>
-              <p>As an academic project, Qonnect and its developers are not liable for any direct or indirect damages resulting from the use or inability to use the application.</p>
+              <h4>6. Modifications to the Application</h4>
+              <p>
+                We reserve the right to modify, suspend, or discontinue any feature of
+                Qonnect at any time without prior notice.
+              </p>
 
-              <h4>7. Modifications to the Terms</h4>
-              <p>These Terms and Conditions may be updated at any time. Continued use of the application after changes have been made indicates acceptance of the revised terms.</p>
+              <h4>7. Changes to These Terms</h4>
+              <p>
+                These Terms may be updated periodically. Continued use of the application
+                after updates constitutes acceptance of the revised Terms.
+              </p>
 
-              <h4>8. Governing Principles</h4>
-              <p>These Terms are intended to align with applicable laws and regulations, including relevant data privacy standards in the Philippines.</p>
+              <h4>8. Governing Law</h4>
+              <p>
+                These Terms are intended to align with applicable Philippine laws,
+                including Republic Act No. 10173 or the Data Privacy Act of 2012.
+              </p>
 
               <h4>9. Contact Information</h4>
-              <p>For questions regarding these Terms and Conditions, please contact:</p>
+              <p>
+                For questions regarding these Terms and Conditions, please contact:
+              </p>
               <p><strong>Qonnect Project Team</strong><br>Email: qonnect@gmail.com</p>
             </div>
           </div>
         </Modal>
+
 
         <!-- Privacy Modal -->
         <Modal v-if="showPrivacyModal" @close="showPrivacyModal = false" size="xl">
@@ -267,13 +308,23 @@ function clearTcError() {
             <h3>Privacy Policy</h3>
             <div style="margin-top:8px; color:#546E7A; text-align:left;">
               <p><strong>Qonnect</strong></p>
-              <p><em>Last Updated: February 04, 2026</em></p>
-              <p>Qonnect values your privacy and is committed to protecting your personal information. This Privacy Policy explains how information is collected, used, stored, and protected when you use the Qonnect application.</p>
+              <p><em>Last Updated: February 12, 2026</em></p>
+              <p>
+                We at Qonnect acknowledge and respect your right to privacy and the confidentiality
+                of your personal information. As we collect, use, and store information provided
+                through the application, we are committed to handling it in accordance with
+                applicable Philippine laws, including the Data Privacy Act of 2012.
+              </p>
 
-              <p>Qonnect is an academic project developed for educational purposes and is used to support event coordination and attendance tracking.</p>
+              <p>
+                Qonnect is an academic project developed to support the coordination and
+                documentation of Dgroup meetings, WKND services, B1G services,
+                and related ministry activities.
+              </p>
 
               <h4>1. Information We Collect</h4>
-              <p>When you create an account and use the application, we may collect the following information:</p>
+              <p>We may collect the following information:</p>
+
               <h5>a. Account Information</h5>
               <ul>
                 <li>Full name</li>
@@ -282,55 +333,76 @@ function clearTcError() {
                 <li>Gender</li>
                 <li>Password (stored securely in encrypted form)</li>
               </ul>
-              <h5>b. Usage and Event Information</h5>
+
+              <h5>b. Attendance and Activity Information</h5>
               <ul>
-                <li>Event attendance records</li>
-                <li>Event details such as venue, date, and time</li>
-                <li>App usage data related to event participation</li>
+                <li>Attendance records for Dgroup meetings, WKND services, and B1G services</li>
+                <li>Meeting and service details (date, time, venue)</li>
+                <li>Reported statistics such as conversations, evangelized count, and guests</li>
               </ul>
 
               <h4>2. Purpose of Data Collection</h4>
-              <p>The information collected is used solely for the following purposes:</p>
+              <p>Your information is collected for legitimate coordination purposes, including:</p>
               <ul>
                 <li>Creating and managing user accounts</li>
-                <li>Identifying participants for events</li>
-                <li>Tracking event attendance</li>
-                <li>Supporting event coordination and reporting</li>
+                <li>Scheduling Dgroup meetings and related services</li>
+                <li>Tracking attendance for Dgroup, WKND, and B1G services</li>
+                <li>Generating internal coordination reports</li>
                 <li>Improving application functionality</li>
               </ul>
-              <p>Personal data is not collected for commercial or marketing purposes.</p>
+              <p>
+                Personal data is not collected or used for commercial advertising
+                or unrelated purposes.
+              </p>
 
               <h4>3. Data Storage and Security</h4>
-              <p>Reasonable technical and organizational measures are implemented to protect personal information against unauthorized access, alteration, disclosure, or destruction. Access to data is limited to authorized individuals involved in the operation of the application.</p>
+              <p>
+                Reasonable organizational, physical, and technical safeguards are implemented
+                to protect personal information against unauthorized access, disclosure,
+                alteration, or destruction. Access is limited to authorized leaders and
+                administrators involved in coordination activities.
+              </p>
 
               <h4>4. Data Sharing and Disclosure</h4>
-              <p>Personal information collected through Qonnect is:</p>
+              <p>Personal information is:</p>
               <ul>
-                <li>Shared only with authorized event organizers for legitimate event-related purposes</li>
-                <li>Not sold, rented, or shared with third parties for commercial use</li>
+                <li>Shared only with authorized leaders for legitimate coordination purposes</li>
+                <li>Not sold, rented, or disclosed for commercial use</li>
               </ul>
+              <p>
+                Information may be disclosed only when required by law or lawful authority.
+              </p>
 
               <h4>5. Data Retention</h4>
-              <p>Personal information is retained only for as long as necessary to fulfill the purposes outlined in this policy or to meet academic and operational requirements. Users may request deletion of their data when it is no longer required.</p>
+              <p>
+                Personal information is retained only for as long as necessary for academic
+                and coordination purposes. When no longer required, data may be deleted
+                or securely disposed of.
+              </p>
 
               <h4>6. User Rights</h4>
-              <p>Users have the right to:</p>
+              <p>As a data subject, you have the right to:</p>
               <ul>
-                <li>Access their personal data</li>
-                <li>Request corrections to inaccurate information</li>
-                <li>Request deletion of their personal data, subject to reasonable limitations</li>
+                <li>Access your personal data</li>
+                <li>Request correction of inaccurate information</li>
+                <li>Request deletion of your personal data, subject to lawful limitations</li>
               </ul>
-              <p>Requests may be made using the contact details provided below.</p>
 
               <h4>7. Changes to This Privacy Policy</h4>
-              <p>This Privacy Policy may be updated from time to time. Any changes will be reflected within the application, and continued use of the app constitutes acceptance of the updated policy.</p>
+              <p>
+                This Privacy Policy may be updated from time to time. Continued use
+                of Qonnect after updates constitutes acceptance of the revised policy.
+              </p>
 
               <h4>8. Contact Information</h4>
-              <p>For questions or concerns regarding this Privacy Policy or personal data, please contact:</p>
+              <p>
+                For questions regarding this Privacy Policy, please contact:
+              </p>
               <p><strong>Qonnect Project Team</strong><br>Email: qonnect@gmail.com</p>
             </div>
           </div>
         </Modal>
+
       </div>
     </div>
   </div>

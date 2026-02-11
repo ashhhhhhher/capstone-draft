@@ -3,6 +3,7 @@ import { ref, computed, onMounted, reactive } from 'vue'
 import { useAuthStore } from '../stores/auth'
 import { useMembersStore } from '../stores/members'
 import DgroupAttendanceModal from '../components/memberComponents/DgroupAttendanceModal.vue'
+import DgroupAbsenceMonitoring from '../components/memberComponents/DgroupAbsenceMonitoring.vue'
 import { 
   User, Users, ChevronRight, X, UserMinus, HelpCircle, 
   Pencil, ClipboardCheck, Copy, Calendar as CalendarIcon, ArrowLeft
@@ -335,11 +336,6 @@ async function saveGroupDetails() {
           <div class="drill-header-enhanced">
              <div class="header-top-row">
                 <div class="group-title-label">Your Group</div>
-                <div class="actions-right">
-                     <button class="log-btn-modern" @click="openAttendanceModal">
-                      <ClipboardCheck :size="16" /> Log Meeting
-                    </button>
-                </div>
              </div>
             
             <div class="group-hero">
@@ -385,6 +381,10 @@ async function saveGroupDetails() {
              <div v-if="primaryDownlineGroup.members.length === 0" class="empty-list-msg">
                 No members in this group yet.
              </div>
+          </div>
+          <!-- Absence monitoring for downline members -->
+          <div style="margin-top:16px">
+            <DgroupAbsenceMonitoring />
           </div>
         </div>
       </div>

@@ -125,83 +125,9 @@ function formatShortDate(dateStr) {
   return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 }
 
-// --- Notification Logic ---
-// new: local notifications generated after an event ends
-const absenceNotifications = ref([])     // contains up to 3 notification objects
-let _notifsForEventId = null             // internal guard to avoid duplicates
-
-// --- Helper: compute past service events and consecutive absences ---
-function todayISO() {
-  return new Date().toISOString().split('T')[0]
-}
-function getPastServiceEvents() {
-  const today = todayISO()
-  return allEvents.value
-    .filter(e => e.eventType === 'service' && e.date <= today)
-    .sort((a,b) => new Date(b.date) - new Date(a.date))
-}
-function computeConsecutiveAbsencesForMember(member) {
-  const past = getPastServiceEvents()
-  let count = 0
-  for (const ev of past) {
-    const attended = allAttendance.value?.some(att => att.eventId === ev.id && att.memberId === member.id)
-    if (!attended) count++
-    else break
-  }
-  return count
-}
-
-// --- Build local notification cards for 3/4/5+ ---
-function buildAbsenceNotifications() {
-  // avoid rebuilding for the same event repeatedly
-  const evId = currentEvent.value?.id || null
-  if (_notifsForEventId && _notifsForEventId === evId) return
-  _notifsForEventId = evId
-
-  const roster = (activeMembers?.value && activeMembers.value.length) ? activeMembers.value : (members?.value || [])
-  const counts = { c3: 0, c4: 0, c5p: 0 }
-  roster.forEach(m => {
-    const c = computeConsecutiveAbsencesForMember(m)
-    if (c === 3) counts.c3++
-    else if (c === 4) counts.c4++
-    else if (c >= 5) counts.c5p++
-  })
-
-  const cards = []
-
-  if (counts.c3 > 0) {
-    cards.push({
-      id: 'abs3',
-      header: '⚠️ 3 Consecutive Absences Detected',
-      body: `You have ${counts.c3} members who have missed the last 3 gatherings. They may need early follow-up to prevent further inactivity.`,
-      count: counts.c3,
-      focus: 'abs3'
-    })
-  }
-
-  if (counts.c4 > 0) {
-    cards.push({
-      id: 'abs4',
-      header: '⚠️ 4 Consecutive Absences – Attention Needed',
-      body: `${counts.c4} members have been absent for 4 consecutive gatherings. These individuals may require pastoral check-ins or leader follow-up.`,
-      count: counts.c4,
-      focus: 'abs4'
-    })
-  }
-
-  if (counts.c5p > 0) {
-    cards.push({
-      id: 'abs5p',
-      header: '⛔ Critical: 5+ Consecutive Absences',
-      body: `${counts.c5p} members have been inactive for 5 or more gatherings. Immediate follow-up is recommended to prevent disengagement.`,
-      count: counts.c5p,
-      focus: 'abs5p'
-    })
-  }
-
-  // push into notifications store for header UI
-  notificationsStore.setLocalNotifications(cards)
-}
+// Absence monitoring behavior is handled inside the AbsenceMonitoring component.
+// We'll keep a template ref to call its exposed builder when needed.
+const absenceMonitorRef = ref(null)
 
 // --- Modal Functions ---
 
@@ -238,10 +164,10 @@ const prevCurrentEventId = ref(currentEvent.value ? currentEvent.value.id : null
 
 watch(currentEvent, (newVal, oldVal) => {
   // if we had an event previously and now it's null -> it ended naturally
-  if (prevCurrentEventId.value && !newVal) {
+    if (prevCurrentEventId.value && !newVal) {
     // open absence monitoring modal
     showAbsenceModal.value = true
-    buildAbsenceNotifications()
+    absenceMonitorRef.value?.buildAbsenceNotifications?.()
   }
   prevCurrentEventId.value = newVal ? newVal.id : null
 })
@@ -261,7 +187,7 @@ async function handleEndCurrentEvent() {
     showEventDetailsModal.value = false
     // open absence monitoring modal after ending
     showAbsenceModal.value = true
-    buildAbsenceNotifications()   // build notifications after event ended
+    absenceMonitorRef.value?.buildAbsenceNotifications?.()   // build notifications after event ended
     alert('Event ended successfully. Volunteer inactivity check initiated.')
   } catch (err) {
     console.error('Failed to end event:', err)
@@ -392,19 +318,6 @@ async function handleEndCurrentEvent() {
     </div>
   </Modal>
 
-  <!-- Absence Monitoring Modal (opens after event ends) -->
-  <Modal v-if="showAbsenceModal" @close="showAbsenceModal = false" size="xl">
-    <div class="absence-modal-inner">
-      <header class="absence-modal-header">
-        <h3>Consecutive Absences Alert</h3>
-        <p class="absence-modal-subtext">Immediate action is recommended for the following members</p>
-      </header>
-
-      <div class="absence-modal-body">
-        <AbsenceMonitoring />
-      </div>
-    </div>
-  </Modal>
 </template>
 
 <style scoped>

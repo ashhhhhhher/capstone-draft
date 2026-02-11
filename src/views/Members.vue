@@ -1,10 +1,13 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { Search, Archive, Filter } from 'lucide-vue-next'
 import { storeToRefs } from 'pinia'
 import { useMembersStore } from '../stores/members'
 import { useAttendanceStore } from '../stores/attendance'
 import { useEventsStore } from '../stores/events' 
+import { useAuthStore } from '../stores/auth'
+import { db } from '../firebase'
+import { collection, query, orderBy, onSnapshot } from 'firebase/firestore'
 import MemberCard from '../components/dgmComponents/MemberCard.vue'
 import MemberDetailsModal from '../components/dgmComponents/MemberDetailsModal.vue'
 import Modal from '../components/dgmComponents/Modal.vue'
@@ -16,6 +19,7 @@ const membersStore = useMembersStore()
 const { activeMembers, archivedMembers, pendingMembers } = storeToRefs(membersStore)
 const attendanceStore = useAttendanceStore()
 const { currentEventAttendees } = storeToRefs(attendanceStore)
+const authStore = useAuthStore()
 
 // --- Lifecycle Hook: Enforce Archive Policy ---
 onMounted(() => {
@@ -134,13 +138,25 @@ async function rejectSelected() {
   selectedPending.value = null;
 }
 
-// --- Absence count ---
-const { allEvents } = storeToRefs(useEventsStore())
-const { allAttendance } = storeToRefs(attendanceStore)
-const todayISO = () => new Date().toISOString().split('T')[0]
-function getPastServices() { const today = todayISO(); return allEvents.value.filter(e => e.eventType === 'service' && e.date <= today).sort((a, b) => new Date(b.date) - new Date(a.date)); }
-function computeConsecutiveAbsences(member, past) { let count = 0; for (const ev of past) { const attended = allAttendance.value ? allAttendance.value.some(a => a.eventId === ev.id && a.memberId === member.id) : false; if (!attended) count++; else break; } return count; }
-const absenceCount = computed(() => { const past = getPastServices(); if (!past || past.length === 0) return 0; return activeMembers.value.map(m => computeConsecutiveAbsences(m, past)).filter(c => c >= 3).length; })
+// --- Reports count (admin) ---
+const reportsCount = ref(0)
+let _unsubReports = null
+onMounted(() => {
+  if (!authStore.branchId) return
+  const colRef = collection(db, 'branches', authStore.branchId, 'notifications')
+  const q = query(colRef, orderBy('createdAt', 'desc'))
+  _unsubReports = onSnapshot(q, (snap) => {
+    let count = 0
+    snap.docs.forEach(d => {
+      const data = d.data()
+      if (data.recipientId === 'admin' && typeof data.title === 'string' && data.title.startsWith('Absence Report')) {
+        count++
+      }
+    })
+    reportsCount.value = count
+  })
+})
+onUnmounted(() => { if (_unsubReports) _unsubReports() })
 
 </script>
 
@@ -157,7 +173,7 @@ const absenceCount = computed(() => { const past = getPastServices(); if (!past 
         <button class="absence-btn" @click="openAbsenceMonitoring" title="Open Absence Monitoring">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 2v6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M5 10h14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M7 14h10" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M9 18h6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
           <span>Absence Monitoring</span>
-          <span v-if="absenceCount > 0" class="absence-notif">{{ absenceCount }}</span>
+          <span v-if="reportsCount > 0" class="absence-notif">{{ reportsCount }}</span>
         </button>
         <button class="pending-btn" @click="openPendingList" title="Pending Approvals">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 2v6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -178,7 +194,7 @@ const absenceCount = computed(() => { const past = getPastServices(); if (!past 
           </button>
           <button class="mobile-item" @click="openAbsenceMonitoring(); showHeaderMenu = false">
             <span>Absence Monitoring</span>
-            <span v-if="absenceCount > 0" class="abs-mobile-notif">{{ absenceCount }}</span>
+            <span v-if="reportsCount > 0" class="abs-mobile-notif">{{ reportsCount }}</span>
           </button>
           <button class="mobile-item" @click="openPendingList(); showHeaderMenu = false">
             <span>Pending Approval</span>
