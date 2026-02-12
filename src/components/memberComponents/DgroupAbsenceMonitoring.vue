@@ -13,6 +13,8 @@ const attendanceStore = useAttendanceStore()
 const eventsStore = useEventsStore()
 
 const isLoading = ref(true)
+const messagedMembers = ref(new Set())
+const reportedMembers = ref(new Set())
 
 onMounted(async () => {
   membersStore.fetchMembers && membersStore.fetchMembers()
@@ -183,9 +185,20 @@ function severityClass(count) {
 }
 
 /* ------------------------------------------
-   ACTIONS: report and message
+   ACTIONS: message and report
 -------------------------------------------*/
 import { useNotificationsStore } from '../../stores/notifications'
+
+function messageMember(member) {
+  if (!member.email) {
+    alert('Member email not found.')
+    return
+  }
+  const subject = encodeURIComponent(`Checking in — ${member.firstName} ${member.lastName}`)
+  const body = encodeURIComponent(`Hi ${member.firstName},\n\nWe noticed you've missed recent services. We hope all is well and would love to see you at our next gathering.\n\nRegards,\n${myName.value}`)
+  messagedMembers.value.add(member.id)
+  window.location.href = `mailto:${member.email}?subject=${subject}&body=${body}`
+}
 
 async function reportToAdmin(member) {
   const notificationsStore = useNotificationsStore()
@@ -206,6 +219,7 @@ async function reportToAdmin(member) {
     }
 
     await notificationsStore.sendNotification('admin', title, message, 'alert')
+    reportedMembers.value.add(member.id)
     alert(`Report for ${member.firstName} ${member.lastName} sent to admin.`)
   } catch (err) {
     console.error('Failed to send report', err)
@@ -264,11 +278,22 @@ async function reportToAdmin(member) {
 
           <div class="actions">
             <button
+              v-if="m.consecutive >= 3"
+              class="message-btn"
+              :class="{ 'done': messagedMembers.has(m.id) }"
+              :disabled="messagedMembers.has(m.id)"
+              @click="messageMember(m)"
+            >
+              {{ messagedMembers.has(m.id) ? '✓ Messaged' : 'Message' }}
+            </button>
+            <button
               v-if="m.consecutive >= 5"
               class="report-btn"
+              :class="{ 'done': reportedMembers.has(m.id) }"
+              :disabled="reportedMembers.has(m.id)"
               @click="reportToAdmin(m)"
             >
-              Report to Admin
+              {{ reportedMembers.has(m.id) ? '✓ Reported to Admin' : 'Report to Admin' }}
             </button>
           </div>
         </div>
@@ -414,6 +439,33 @@ async function reportToAdmin(member) {
 .actions {
   display: flex;
   align-items: center;
+  gap: 8px;
+}
+
+.message-btn {
+  background: #1976D2;
+  color: white;
+  border: none;
+  padding: 8px 14px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.message-btn:hover:not(:disabled) {
+  background: #1565C0;
+}
+
+.message-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.message-btn.done {
+  background: #60b663;
 }
 
 .report-btn {
@@ -429,17 +481,26 @@ async function reportToAdmin(member) {
   white-space: nowrap;
 }
 
-.report-btn:hover {
+.report-btn:hover:not(:disabled) {
   background: #0F172A;
 }
 
-/* Optional: better contrast on red rows */
-.list-item.sev-red .report-btn {
-  background: #B91C1C;
+.report-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
-.list-item.sev-red .report-btn:hover {
+.report-btn.done {
+  background: #60b663;
+}
+
+/* Optional: better contrast on red rows */
+.list-item.sev-red .report-btn:hover:not(:disabled) {
   background: #991B1B;
+}
+
+.list-item.sev-red .report-btn:not(.done) {
+  background: #B91C1C;
 }
 
 /* -----------------------------------

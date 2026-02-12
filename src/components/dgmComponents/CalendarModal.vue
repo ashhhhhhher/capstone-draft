@@ -224,7 +224,9 @@ function handleDelete(event) {
         flex-shrink: 0;
         max-height: 80vh;
         padding-left: 20px;
-    }
+    min-height: 0;
+overflow-y: auto;
+overflow-x: hidden;   }
 }
 @media (max-width: 899px) {
     .event-details-panel {
@@ -312,7 +314,7 @@ function handleDelete(event) {
     display: flex;
     flex-direction: column;
     gap: 15px;
-    overflow-y: auto; 
+    overflow-y: hidden; 
     flex-grow: 1;
     padding-right: 8px;
     margin-right: -8px;

@@ -4,7 +4,7 @@ import { ref, onMounted, onUnmounted } from 'vue'
 import { useAuthStore } from '../../stores/auth'
 import { useMembersStore } from '../../stores/members'
 import { db } from '../../firebase'
-import { collection, query, orderBy, onSnapshot, deleteDoc, doc } from 'firebase/firestore'
+import { collection, query, orderBy, onSnapshot, deleteDoc, doc, updateDoc } from 'firebase/firestore'
 
 
 const reports = ref([])
@@ -39,15 +39,40 @@ onMounted(() => {
 
 onUnmounted(() => { if (unsub) unsub() })
 
-function messageReportedMember(memberId) {
+async function archiveMember(memberId, reportId) {
   const mem = (membersStore.activeMembers || []).find(m => m.id === memberId)
-  if (!mem || !mem.email) {
-    alert('Member email not found.')
+  if (!mem) {
+    alert('Member not found.')
     return
   }
-  const subject = encodeURIComponent(`Checking in — ${mem.firstName} ${mem.lastName}`)
-  const body = encodeURIComponent(`Hi ${mem.firstName},\n\nWe noticed you've missed recent services. We hope all is well.\n\nRegards,\nAdmin`)
-  window.location.href = `mailto:${mem.email}?subject=${subject}&body=${body}`
+  const confirmed = confirm(`Are you sure you want to archive ${mem.firstName} ${mem.lastName}? This member will no longer appear in attendance records.`)
+  if (!confirmed) return
+
+  try {
+    if (!authStore.branchId) {
+      alert('Branch not set; cannot archive member.')
+      return
+    }
+    const memberRef = doc(db, 'branches', authStore.branchId, 'members', memberId)
+    await updateDoc(memberRef, {
+      status: 'archived',
+      archivedAt: new Date(),
+      archivedBy: authStore.userProfile?.id || 'unknown'
+    })
+
+    // Delete the report after successful archiving
+    if (reportId) {
+      const reportRef = doc(db, 'branches', authStore.branchId, 'notifications', reportId)
+      await deleteDoc(reportRef)
+      reports.value = reports.value.filter(r => r.id !== reportId)
+    }
+
+    alert(`${mem.firstName} ${mem.lastName} has been archived.`)
+    membersStore.fetchMembers && membersStore.fetchMembers()
+  } catch (err) {
+    console.error('Failed to archive member', err)
+    alert(`Failed to archive ${mem.firstName} ${mem.lastName}.`)
+  }
 }
 
 async function deleteReport(reportId) {
@@ -83,7 +108,7 @@ defineExpose({ buildAbsenceNotifications })
           <div class="report-meta">ID: {{ r.memberId || '—' }}</div>
           <pre class="report-message">{{ r.message }}</pre>
           <div class="report-actions">
-            <button v-if="r.memberId" class="message-btn" @click="messageReportedMember(r.memberId)">Message</button>
+            <button v-if="r.memberId" class="archive-btn" @click="archiveMember(r.memberId, r.id)">Archive Member</button>
             <button class="delete-btn" @click="deleteReport(r.id)">Delete</button>
           </div>
         </div>
@@ -107,8 +132,9 @@ defineExpose({ buildAbsenceNotifications })
 .report-meta { font-size:12px; color:#64748B }
 .report-message { background:#FAFAFA; padding:8px; border-radius:8px; white-space:pre-wrap; font-size:13px; color:#374151 }
 .report-actions { display:flex; justify-content:flex-end; margin-top:8px }
-.message-btn { background:#1976D2; color:white; border:none; padding:8px 12px; border-radius:8px; cursor:pointer }
+.archive-btn { background:#1976D2; color:white; border:none; padding:8px 12px; border-radius:8px; cursor:pointer }
 .delete-btn { background:#E11D48; color:white; border:none; padding:8px 12px; border-radius:8px; cursor:pointer; margin-left:8px }
+.archive-btn:hover { background:#1565C0 }
 .delete-btn:hover { background:#BE123C }
-.message-btn:focus, .delete-btn:focus { outline:2px solid rgba(25,118,210,0.18); outline-offset:2px }
+.archive-btn:focus, .delete-btn:focus { outline:2px solid rgba(25,118,210,0.18); outline-offset:2px }
 </style>
