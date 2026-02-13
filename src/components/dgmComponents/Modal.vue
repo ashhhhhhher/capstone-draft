@@ -19,17 +19,15 @@ const modalSizeClass = computed(() => {
   <div class="modal-overlay" @click.self="emit('close')">
     
     <div class="modal-content" :class="modalSizeClass">
-      
-      <button class="close-btn" @click="emit('close')">
-        &times;
-      </button>
 
-      <!-- 
-        The <slot /> will be filled by MemberDetailsModal.
-        The styles below force the slotted component to
-        fill the modal and respect the max-height.
-      -->
-      <slot></slot>
+      <!-- Scrollable body: place the slotted content here so it can scroll
+           independently of the footer text. -->
+      <div class="modal-body">
+        <slot></slot>
+      </div>
+
+      <!-- Small helper text at the bottom telling users how to close the modal -->
+      <div class="modal-footer">click outside to close</div>
 
     </div>
   </div>
@@ -54,9 +52,10 @@ const modalSizeClass = computed(() => {
   background-color: white;
   border-radius: 12px;
   padding: 24px;
+  padding-bottom: 19px;
   position: relative;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
-  
+
   /* --- SCROLLING  --- */
   max-height: 90vh; 
   display: flex;
@@ -64,9 +63,8 @@ const modalSizeClass = computed(() => {
   overflow: hidden; 
 }
 
-/* Make the direct child of .modal-content fill available space and scroll if needed.
-   :slotted() does not work in this scoped CSS context — use a regular child selector. */
-.modal-content > * {
+/* Make the modal body (the slotted content wrapper) fill available space and scroll if needed. */
+.modal-content > .modal-body {
   display: flex;
   flex-direction: column;
   flex-grow: 1;
@@ -86,17 +84,13 @@ const modalSizeClass = computed(() => {
 }
 
 /* Make sure close button is always above slotted content */
-.close-btn {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  background: none;
-  border: none;
-  font-size: 28px;
-  color: #999;
-  cursor: pointer;
-  line-height: 1;
-  z-index: 20;
+.modal-footer {
+  font-size: 12px;
+  color: #777;
+  text-align: center;
+  padding-top: 5px;
+  margin-top: 5px;
+  user-select: none;
 }
 
 /* For very tall content, ensure modal is vertically centered but scrollable */
