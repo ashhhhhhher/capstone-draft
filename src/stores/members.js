@@ -1,4 +1,3 @@
-
 import { ref, computed } from 'vue'
 import { defineStore } from 'pinia'
 import { db } from '../firebase'
@@ -14,11 +13,15 @@ import {
   getDoc
 } from "firebase/firestore";
 import { useAuthStore } from './auth';
+import { useNotificationsStore } from './notifications';
 
 export const useMembersStore = defineStore('members', () => {
   const members = ref([])
   const pendingMembers = ref([])
   const isLoading = ref(true)
+
+  // --- Environment Setup ---
+  const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
 
   const activeMembers = computed(() => {
     return members.value.filter(m => m.status !== 'archived')
@@ -32,27 +35,36 @@ export const useMembersStore = defineStore('members', () => {
       .filter(m => m.finalTags.isDgroupLeader)
       .map(m => `${m.firstName} ${m.lastName}`)
   })
+  
+  // Enhanced Leaders computed property to ensure robust data access for analytics
   const leaders = computed(() => {
-    return activeMembers.value.filter(m => m.finalTags.isDgroupLeader)
+    return activeMembers.value.filter(m => m.finalTags.isDgroupLeader).map(l => ({
+      ...l,
+      // Ensure arrays exist for matching
+      dgroupDetails: {
+        interests: l.dgroupDetails?.interests || [],
+        meetingTime: l.dgroupDetails?.meetingTime || 'Anytime'
+      }
+    }))
   })
+  
   const seekers = computed(() => {
     return activeMembers.value.filter(m => m.finalTags.isSeeker)
   })
 
+  // Computed: Members requesting to join a specific leader
+  const joinRequests = computed(() => {
+    return activeMembers.value.filter(m => m.joinRequest && m.joinRequest.status === 'pending')
+  })
+
+  // --- PATH HELPERS (FIXED FOR PERMISSIONS) ---
   const getMemberCollection = () => {
-    const authStore = useAuthStore();
-    if (!authStore.branchId) {
-        return collection(db, "members_error"); 
-    }
-    return collection(db, "branches", authStore.branchId, "members");
+    // Uses the public data path to ensure read/write access for the app
+    return collection(db, "artifacts", appId, "public", "data", "members");
   };
 
   const getPendingCollection = () => {
-    const authStore = useAuthStore();
-    if (!authStore.branchId) {
-      return collection(db, "pending_error");
-    }
-    return collection(db, "branches", authStore.branchId, "pendingMembers");
+    return collection(db, "artifacts", appId, "public", "data", "pendingMembers");
   };
 
   function fetchMembers() {
@@ -63,8 +75,9 @@ export const useMembersStore = defineStore('members', () => {
       const allMembers = [];
       querySnapshot.forEach((doc) => {
         const data = doc.data();
+        // Ensure ID is set from doc.id if missing
+        if (!data.id) data.id = doc.id;
         if (!data.status) data.status = 'active';
-        // Ensure monitoringState object exists
         if (!data.monitoringState) data.monitoringState = { msgSentDate: null, leaderNotifiedDate: null };
         allMembers.push(data);
       });
@@ -83,6 +96,7 @@ export const useMembersStore = defineStore('members', () => {
       const list = [];
       querySnapshot.forEach((doc) => {
         const data = doc.data();
+        if (!data.id) data.id = doc.id;
         list.push(data);
       });
       pendingMembers.value = list;
@@ -98,9 +112,17 @@ export const useMembersStore = defineStore('members', () => {
     memberData.monitoringState = { msgSentDate: null, leaderNotifiedDate: null }; 
 
     try {
-      const memberRef = doc(getMemberCollection(), memberData.id);
+      // Use memberData.id or generate one if missing
+      const docId = memberData.id || `mem-${Date.now()}`;
+      memberData.id = docId;
+      
+      const memberRef = doc(getMemberCollection(), docId);
       await setDoc(memberRef, memberData);
-      await authStore.sendCreationEmail(memberData.email);
+      
+      // Try sending email if auth store supports it
+      if (authStore.sendCreationEmail) {
+        await authStore.sendCreationEmail(memberData.email);
+      }
     } catch (error) {
       console.error("Error during member registration:", error);
     }
@@ -115,9 +137,7 @@ export const useMembersStore = defineStore('members', () => {
       const data = snap.data();
 
       const memberRef = doc(getMemberCollection(), memberId);
-      // Set createdAt to now if not present
       if (!data.createdAt) data.createdAt = new Date().toISOString();
-      // Remove pending status
       data.status = data.status || 'active';
 
       await setDoc(memberRef, data);
@@ -134,28 +154,8 @@ export const useMembersStore = defineStore('members', () => {
       const pendingRef = doc(getPendingCollection(), memberId);
       const snap = await getDoc(pendingRef);
       if (!snap.exists()) return;
-      const data = snap.data();
-      const authUid = data.authUid;
-
-      // Delete pending document
+      
       await deleteDoc(pendingRef);
-
-      // NOTE: Deleting the Auth user from client-side is not possible for other users
-      // without admin privileges. We attempt a best-effort: if the user currently
-      // signed in is the same uid, sign them out and delete their account.
-      const authStore = useAuthStore();
-      if (authStore.user && authStore.user.uid === authUid) {
-        // If the rejected user is the one currently signed in, remove their auth account
-        try {
-          // sign out first (delete will require reauth in many cases)
-          await authStore.logout();
-        } catch (e) {
-          console.warn('Failed to sign out rejected user:', e);
-        }
-      }
-
-      // Return the authUid so calling code can trigger server-side deletion if available
-      return authUid;
     } catch (error) {
       console.error('Error rejecting pending member:', error);
       throw error;
@@ -171,20 +171,18 @@ export const useMembersStore = defineStore('members', () => {
     }
   }
 
-  // --- UPDATED: Archive with Timestamp ---
   async function archiveMember(memberId) {
     try {
       const memberRef = doc(getMemberCollection(), memberId);
       await updateDoc(memberRef, { 
         status: 'archived',
-        archivedAt: new Date().toISOString() // Save current time
+        archivedAt: new Date().toISOString()
       });
     } catch (error) {
       console.error("Error archiving member: ", error);
     }
   }
 
-  // --- UPDATED: Restore removes Timestamp ---
   async function restoreMember(memberId) {
     try {
       const memberRef = doc(getMemberCollection(), memberId);
@@ -197,25 +195,20 @@ export const useMembersStore = defineStore('members', () => {
     }
   }
 
-  // --- NEW: Auto-Restore on Attendance (for Scan) ---
   async function checkAndAutoRestore(memberId) {
     const member = members.value.find(m => m.id === memberId);
-    // If found and currently archived, restore them immediately
     if (member && member.status === 'archived') {
       console.log(`Auto-restoring member ${memberId} due to attendance activity.`);
       await restoreMember(memberId);
-      return true; // Indicates restoration happened
+      return true;
     }
     return false;
   }
 
-  // --- NEW: Policy Enforcement (Auto-Delete > 1 Year) ---
   async function purgeOldArchives() {
     const oneYearAgo = new Date();
     oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
     
-    // We filter from the local 'members' state first to minimize reads, 
-    // assuming fetchMembers() is already running.
     const toDelete = members.value.filter(m => {
       if (m.status !== 'archived' || !m.archivedAt) return false;
       const archiveDate = new Date(m.archivedAt);
@@ -224,37 +217,16 @@ export const useMembersStore = defineStore('members', () => {
 
     if (toDelete.length === 0) return;
 
-    console.log(`Found ${toDelete.length} members archived for > 1 year. Purging...`);
-
-    // Execute deletions
     for (const m of toDelete) {
       try {
         const memberRef = doc(getMemberCollection(), m.id);
         await deleteDoc(memberRef);
-        console.log(`Permanently deleted member: ${m.firstName} ${m.lastName} (ID: ${m.id})`);
       } catch (error) {
         console.error(`Failed to delete member ${m.id}:`, error);
       }
     }
   }
 
-  // --- Log Monitoring Actions ---
-  async function logMonitoringAction(memberId, actionType) {
-    try {
-      const memberRef = doc(getMemberCollection(), memberId);
-      const updateData = {};
-      
-      if (actionType === 'message') {
-        updateData['monitoringState.msgSentDate'] = new Date().toISOString();
-      } else if (actionType === 'notifyLeader') {
-        updateData['monitoringState.leaderNotifiedDate'] = new Date().toISOString();
-      }
-
-      await updateDoc(memberRef, updateData);
-    } catch (error) {
-      console.error("Error logging action:", error);
-    }
-  }
   async function logMonitoringAction(memberId, actionType) {
     try {
       const memberRef = doc(getMemberCollection(), memberId);
@@ -272,19 +244,110 @@ export const useMembersStore = defineStore('members', () => {
     }
   }
 
-  // --- REMOVE MEMBER FROM DGROUP ---
   async function removeDgroupMember(memberId) {
     try {
       const memberRef = doc(getMemberCollection(), memberId);
-      // Clear dgroupLeader and dgroupId fields
       await updateDoc(memberRef, {
         dgroupLeader: '',
         dgroupId: null,
-        'finalTags.isSeeker': false 
+        'finalTags.isSeeker': false,
+        'finalTags.isRegular': false
       });
-      console.log(`Removed member ${memberId} from Dgroup.`);
     } catch (error) {
       console.error("Error removing member from Dgroup:", error);
+      throw error;
+    }
+  }
+
+  // --- NEW: Join Request Logic ---
+
+  // 1. Request to Join (Seeker Side)
+  async function requestJoinDgroup(memberId, dgroupData, preferences) {
+    const notifStore = useNotificationsStore();
+    try {
+      const memberRef = doc(getMemberCollection(), memberId);
+      
+      // Update member with preferences and the request
+      await updateDoc(memberRef, {
+        seekerPreferences: preferences, // Save analytics data
+        joinRequest: {
+          dgroupId: dgroupData.dgroupId,
+          leaderId: dgroupData.leaderId,
+          leaderName: dgroupData.leaderName,
+          dgroupName: dgroupData.dgroupName,
+          status: 'pending',
+          requestedAt: new Date().toISOString()
+        },
+        'finalTags.isSeeker': true // Mark as seeker in the interim
+      });
+
+      // Notify Leader
+      if (dgroupData.leaderId) {
+        if(notifStore && notifStore.sendNotification) {
+          await notifStore.sendNotification(
+            dgroupData.leaderId, 
+            'New DGroup Join Request', 
+            'A member has requested to join your DGroup. Please review.', 
+            'info'
+          );
+        }
+      }
+    } catch (error) {
+      console.error("Error requesting join:", error);
+      throw error;
+    }
+  }
+
+  // 2. Respond to Request (Leader/Admin Side)
+  async function respondToJoinRequest(memberId, action, dgroupData = null) {
+    // action: 'approve' | 'reject'
+    const notifStore = useNotificationsStore();
+    
+    try {
+      const memberRef = doc(getMemberCollection(), memberId);
+      
+      if (action === 'approve') {
+        // Find member to get request details if dgroupData not passed
+        const member = members.value.find(m => m.id === memberId);
+        if (!member || !member.joinRequest) throw new Error("Request not found");
+
+        const leaderName = dgroupData?.leaderName || member.joinRequest.leaderName;
+        const dgroupId = dgroupData?.dgroupId || member.joinRequest.dgroupId;
+
+        await updateDoc(memberRef, {
+          dgroupLeader: leaderName,
+          dgroupId: dgroupId,
+          joinRequest: null, // Clear request
+          'finalTags.isSeeker': false,
+          'finalTags.isRegular': true,
+          'finalTags.isFirstTimer': false
+        });
+
+        if (notifStore && notifStore.sendNotification) {
+          await notifStore.sendNotification(
+            memberId,
+            'Join Request Approved',
+            `Welcome! You have been accepted into ${leaderName}'s Dgroup.`,
+            'success'
+          );
+        }
+
+      } else if (action === 'reject') {
+        await updateDoc(memberRef, {
+          joinRequest: null // Just clear the request, remains a seeker
+        });
+
+        if (notifStore && notifStore.sendNotification) {
+          await notifStore.sendNotification(
+            memberId,
+            'Join Request Declined',
+            `Your request to join the Dgroup was declined. Please try another group or contact an admin.`,
+            'warning'
+          );
+        }
+      }
+    } catch (error) {
+      console.error("Error responding to request:", error);
       throw error;
     }
   }
@@ -292,13 +355,13 @@ export const useMembersStore = defineStore('members', () => {
   return { 
     members, activeMembers, archivedMembers, isLoading,
     pendingMembers,
-    leaderNames, leaders, seekers,
+    leaderNames, leaders, seekers, joinRequests,
     fetchMembers, registerNewMember, updateMember, 
     archiveMember, restoreMember, purgeOldArchives,
     checkAndAutoRestore, 
     fetchPendingRegistrations, approvePending, rejectPending,
     logMonitoringAction,
-    removeDgroupMember 
+    removeDgroupMember,
+    requestJoinDgroup, respondToJoinRequest
   }
 })
-

@@ -2,11 +2,11 @@
 import { ref, computed } from 'vue'
 import { useMembersStore } from '../../stores/members'
 import { storeToRefs } from 'pinia'
-import { User, Sparkles, Check, ChevronRight, Calendar, Users } from 'lucide-vue-next'
+import { User, Sparkles, Check, ChevronRight, Calendar, Users, Clock, AlertCircle } from 'lucide-vue-next'
 
 // --- Store Setup ---
 const membersStore = useMembersStore()
-const { seekers, leaders, members } = storeToRefs(membersStore)
+const { seekers, leaders, members, joinRequests } = storeToRefs(membersStore)
 
 // --- State ---
 const selectedSeekerId = ref(null)
@@ -16,7 +16,6 @@ function fullName(person) {
   return `${person.firstName} ${person.lastName}`
 }
 
-// Generate a consistent pastel color for avatars
 function getAvatarColor(id) {
   const colors = ['#FFCDD2', '#F8BBD0', '#E1BEE7', '#D1C4E9', '#C5CAE9', '#BBDEFB', '#B3E5FC', '#B2EBF2', '#B2DFDB', '#C8E6C9', '#DCEDC8', '#F0F4C3', '#FFF9C4', '#FFECB3', '#FFE0B2', '#FFCCBC'];
   let hash = 0;
@@ -32,28 +31,23 @@ function getAvatarColor(id) {
 const leaderStats = computed(() => {
   return leaders.value.map(leader => {
     const name = fullName(leader)
-    // Get actual members to analyze composition
     const groupMembers = members.value.filter(m => m.dgroupLeader === name)
     const currentMembers = groupMembers.length
     const capacity = leader.dgroupCapacity || 8
     const openSlots = capacity - currentMembers
     
-    // Determine Group Type (ELEVATE vs B1G vs Mixed)
     let groupType = 'Mixed Aged Group'
     if (currentMembers === 0) {
-      // If empty, base on Leader's category
       if (leader.finalTags?.ageCategory === 'Elevate') groupType = 'ELEVATE'
       else if (leader.finalTags?.ageCategory === 'B1G') groupType = 'B1G'
     } else {
       const allElevate = groupMembers.every(m => m.finalTags?.ageCategory === 'Elevate')
       const allB1G = groupMembers.every(m => m.finalTags?.ageCategory === 'B1G')
-      
       if (allElevate) groupType = 'ELEVATE'
       else if (allB1G) groupType = 'B1G'
       else groupType = 'Mixed Aged Group'
     }
 
-    // Calculate Average Member Age (Excluding Leader)
     const membersWithAge = groupMembers.filter(m => m.age)
     let averageMemberAge = null
     if (membersWithAge.length > 0) {
@@ -71,95 +65,92 @@ const leaderStats = computed(() => {
       capacity,
       openSlots,
       groupType,
-      averageMemberAge
+      averageMemberAge,
+      // Pass down prescriptive details
+      interests: leader.dgroupDetails?.interests || [],
+      meetingTime: leader.dgroupDetails?.meetingTime || 'Anytime'
     }
   })
 })
 
-// 2. Process Seekers List
-const seekerList = computed(() => {
-  return seekers.value.map(s => ({
+// 2. Process Seekers List (Filtered to exclude those with Pending Requests)
+const availableSeekerList = computed(() => {
+  return seekers.value
+    .filter(s => !s.joinRequest || s.joinRequest.status !== 'pending')
+    .map(s => ({
+      id: s.id,
+      name: fullName(s),
+      firstName: s.firstName,
+      lastName: s.lastName,
+      age: s.age,
+      gender: s.gender,
+      photoURL: s.photoURL || s.profilePicture,
+      prefs: s.seekerPreferences || { interests: [], meetingTime: [] } // New field
+    }))
+})
+
+// 3. Process Pending Requests
+const pendingRequestList = computed(() => {
+  return joinRequests.value.map(s => ({
     id: s.id,
     name: fullName(s),
-    firstName: s.firstName,
-    lastName: s.lastName,
+    photoURL: s.photoURL || s.profilePicture,
+    request: s.joinRequest,
     age: s.age,
-    gender: s.gender,
-    photoURL: s.photoURL || s.profilePicture
+    gender: s.gender
   }))
 })
 
-// 3. Get Matches for Selected Seeker
+// 4. Get Matches for Selected Seeker
 const currentMatches = computed(() => {
   if (!selectedSeekerId.value) return []
 
-  const seeker = seekerList.value.find(s => s.id === selectedSeekerId.value)
+  const seeker = availableSeekerList.value.find(s => s.id === selectedSeekerId.value)
   if (!seeker) return []
 
   const sAge = Number(seeker.age)
   const sGender = seeker.gender
+  const sPrefs = seeker.prefs
 
-  // Filter candidates
   const candidates = leaderStats.value.filter(l => {
-    // Must have open slots
     if (l.openSlots <= 0) return false
-    // Must match gender
     if (sGender && l.gender && l.gender !== sGender) return false
     return true
   })
 
-  // Calculate Scores & Metadata
   const scored = candidates.map(l => {
     let score = 0
     let reasons = []
 
-    // A. Gender Match (Base Requirement)
+    // A. Gender Match
     score += 40 
 
-    // B. Age Compatibility Logic
+    // B. Age Match
     let ageScore = 0
-    
     if (l.averageMemberAge && sAge) {
-      // Logic: Compare Seeker Age to Group Average Age
       const diff = Math.abs(sAge - l.averageMemberAge)
-      
-      if (diff <= 2) {
-        ageScore = 40 // Very close to average
-        reasons.push('Fits group age profile')
-      } else if (diff <= 5) {
-        ageScore = 30 // Good fit
-        reasons.push('Close age range')
-      } else if (diff <= 8) {
-        ageScore = 15 // Okay fit
-      }
+      if (diff <= 2) { ageScore = 30; reasons.push('Fits group age'); }
+      else if (diff <= 5) { ageScore = 20; }
     } else {
-      // Empty Group or missing data: Fallback to Leader Rule
-      // "What matters is that they are 3 years older than you"
-      if (l.age && sAge) {
-        const leaderGap = l.age - sAge
-        if (leaderGap >= 3) {
-          ageScore = 30
-          reasons.push('Leader is senior/mentor')
-        } else if (leaderGap >= 0) {
-          ageScore = 15
-          reasons.push('Leader is peer')
-        }
-      } else {
-        ageScore = 10 // Missing age data
-      }
+       if (l.age && sAge && l.age > sAge) ageScore = 15;
     }
     score += ageScore
 
-    // C. Capacity Bonus
-    if (l.openSlots >= 3) {
-      score += 10
-      reasons.push(`${l.openSlots} slots available`)
-    } else {
-      score += 5
-      reasons.push('Space available')
+    // C. Interest Match (New Prescriptive)
+    if (sPrefs.interests?.length > 0 && l.interests.length > 0) {
+       const intersect = l.interests.filter(i => sPrefs.interests.includes(i));
+       if (intersect.length > 0) {
+         score += 15
+         reasons.push(`${intersect.length} Common Interests`)
+       }
     }
 
-    // D. Cap at 98% (Nobody is perfect except...)
+    // D. Time Match (New Prescriptive)
+    if (sPrefs.meetingTime?.includes(l.meetingTime) || l.meetingTime === 'Anytime' || sPrefs.meetingTime?.includes('Anytime')) {
+       score += 15
+       reasons.push('Schedule Match')
+    }
+
     if (score > 98) score = 98
 
     return {
@@ -170,40 +161,38 @@ const currentMatches = computed(() => {
     }
   })
 
-  // Sort by score desc, show ALL
   return scored.sort((a, b) => b.matchPercentage - a.matchPercentage)
 })
 
-// --- Actions ---
 function selectSeeker(id) {
   selectedSeekerId.value = id
 }
 
 async function assignLeader(leaderName) {
   if (!selectedSeekerId.value) return
-  
   const seeker = members.value.find(m => m.id === selectedSeekerId.value)
   if (!seeker) return
-
   if(!confirm(`Assign ${seeker.firstName} to ${leaderName}?`)) return
-
   const updated = {
     ...seeker,
     dgroupLeader: leaderName,
-    finalTags: {
-      ...seeker.finalTags,
-      isSeeker: false,
-      isFirstTimer: false,
-      isRegular: true
-    }
+    finalTags: { ...seeker.finalTags, isSeeker: false, isFirstTimer: false, isRegular: true }
   }
-  
   try {
     await membersStore.updateMember(updated)
-    // Clear selection after assignment
     selectedSeekerId.value = null
-  } catch (e) {
-    console.error('Failed to assign leader:', e)
+  } catch (e) { console.error(e) }
+}
+
+async function adminOverrideRequest(req, action) {
+  const dgroupData = action === 'approve' ? { leaderName: req.request.leaderName, dgroupId: req.request.dgroupId } : null;
+  if (!confirm(`ADMIN OVERRIDE: Are you sure you want to ${action} this request for ${req.request.leaderName}?`)) return;
+  
+  try {
+     await membersStore.respondToJoinRequest(req.id, action, dgroupData)
+     alert(`Request ${action}d via admin override.`)
+  } catch(e) {
+     alert("Error processing override.")
   }
 }
 </script>
@@ -215,22 +204,42 @@ async function assignLeader(leaderName) {
       <p>Match seekers to recommended DGroups based on availability and compatibility.</p>
     </div>
 
+    <!-- PENDING LEADER APPROVAL SECTION -->
+    <div v-if="pendingRequestList.length > 0" class="pending-section">
+       <div class="section-label">
+          <AlertCircle :size="16" /> Awaiting Leader Approval
+       </div>
+       <div class="pending-grid">
+          <div v-for="req in pendingRequestList" :key="req.id" class="pending-card">
+             <div class="pending-info">
+                <strong>{{ req.name }}</strong>
+                <span>Requested: {{ req.request.dgroupName }}</span>
+                <span class="sub-text">Leader: {{ req.request.leaderName }}</span>
+             </div>
+             <div class="pending-actions">
+                <button class="btn-xs approve" @click="adminOverrideRequest(req, 'approve')">Force Approve</button>
+                <button class="btn-xs reject" @click="adminOverrideRequest(req, 'reject')">Reject</button>
+             </div>
+          </div>
+       </div>
+    </div>
+
     <div class="grid-container">
       
       <!-- LEFT PANEL: SEEKERS LIST -->
       <div class="panel left-panel">
         <div class="panel-header">
           <User :size="18" class="text-blue-600" />
-          <h4>Seekers waiting to be matched ({{ seekerList.length }})</h4>
+          <h4>Unmatched Seekers ({{ availableSeekerList.length }})</h4>
         </div>
 
         <div class="seekers-list-wrapper">
-          <div v-if="seekerList.length === 0" class="empty-state-small">
-            No seekers found.
+          <div v-if="availableSeekerList.length === 0" class="empty-state-small">
+            No unmatched seekers found.
           </div>
 
           <div 
-            v-for="seeker in seekerList" 
+            v-for="seeker in availableSeekerList" 
             :key="seeker.id" 
             class="seeker-card"
             :class="{ 'active': selectedSeekerId === seeker.id }"
@@ -248,6 +257,10 @@ async function assignLeader(leaderName) {
               <div class="seeker-meta">
                 <span>{{ seeker.gender }}</span>
                 <span v-if="seeker.age">• Age {{ seeker.age }}</span>
+              </div>
+              <!-- Pref Icons -->
+              <div class="seeker-prefs" v-if="seeker.prefs?.interests?.length">
+                 <span class="pref-badge">{{ seeker.prefs.interests.length }} Interests</span>
               </div>
             </div>
 
@@ -313,13 +326,10 @@ async function assignLeader(leaderName) {
                 <span class="match-tag type-tag" :class="match.groupType === 'Mixed Aged Group' ? 'mixed' : 'standard'">
                    {{ match.groupType }}
                 </span>
-
-                <!-- Average Member Age -->
-                <span v-if="match.averageMemberAge" class="match-tag">
-                   Avg Age: {{ match.averageMemberAge }}
-                </span>
-                <span v-else class="match-tag mixed">
-                   New / Empty Group
+                
+                <!-- Time Tag -->
+                <span class="match-tag time-tag" v-if="match.meetingTime">
+                   <Clock :size="10" /> {{ match.meetingTime }}
                 </span>
               </div>
 
@@ -340,251 +350,76 @@ async function assignLeader(leaderName) {
 </template>
 
 <style scoped>
-.matching-layout {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-}
-
-.header-section {
-  margin-bottom: 24px;
-}
-.header-section h3 {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 0 0 4px 0;
-  font-size: 20px;
-  color: #0D47A1;
-}
-.header-section p {
-  margin: 0;
-  color: #546E7A;
-  font-size: 14px;
-}
+.matching-layout { height: 100%; display: flex; flex-direction: column; }
+.header-section { margin-bottom: 24px; }
+.header-section h3 { display: flex; align-items: center; gap: 8px; margin: 0 0 4px 0; font-size: 20px; color: #0D47A1; }
+.header-section p { margin: 0; color: #546E7A; font-size: 14px; }
 .icon-inline { color: #1976D2; }
 
-/* GRID */
-.grid-container {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 24px;
-  flex: 1;
-  min-height: 500px;
-}
+/* PENDING SECTION */
+.pending-section { background: #FFF7ED; border: 1px solid #FFEDD5; border-radius: 12px; padding: 16px; margin-bottom: 24px; }
+.section-label { font-weight: 700; color: #C2410C; display: flex; align-items: center; gap: 8px; margin-bottom: 12px; font-size: 14px; }
+.pending-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+.pending-card { background: white; border: 1px solid #FED7AA; padding: 12px; border-radius: 8px; display: flex; justify-content: space-between; align-items: center; }
+.pending-info { display: flex; flex-direction: column; }
+.pending-info strong { font-size: 14px; color: #431407; }
+.pending-info span { font-size: 12px; color: #9A3412; }
+.pending-info .sub-text { color: #64748B; font-style: italic; font-size: 11px; }
+.pending-actions { display: flex; flex-direction: column; gap: 4px; }
+.btn-xs { padding: 4px 8px; font-size: 11px; border-radius: 4px; border: none; cursor: pointer; font-weight: 600; }
+.btn-xs.approve { background: #EA580C; color: white; }
+.btn-xs.reject { background: #FEE2E2; color: #991B1B; }
 
-@media (min-width: 900px) {
-  .grid-container {
-    grid-template-columns: 350px 1fr;
-  }
-}
+/* GRID */
+.grid-container { display: grid; grid-template-columns: 1fr; gap: 24px; flex: 1; min-height: 500px; }
+@media (min-width: 900px) { .grid-container { grid-template-columns: 350px 1fr; } }
 
 /* PANELS */
-.panel {
-  display: flex;
-  flex-direction: column;
-}
-.panel-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 12px;
-}
-.panel-header h4 {
-  margin: 0;
-  font-size: 14px;
-  font-weight: 600;
-  color: #37474F;
-}
+.panel { display: flex; flex-direction: column; }
+.panel-header { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+.panel-header h4 { margin: 0; font-size: 14px; font-weight: 600; color: #37474F; }
 .text-blue-600 { color: #1976D2; }
 
 /* SEEKERS LIST */
-.seekers-list-wrapper {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.seeker-card {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px;
-  background: white;
-  border: 1px solid #ECEFF1;
-  border-radius: 12px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.seeker-card:hover {
-  border-color: #B0BEC5;
-  background: #FAFAFA;
-}
-
-.seeker-card.active {
-  border-color: #1976D2;
-  background: #E3F2FD;
-  box-shadow: 0 0 0 1px #1976D2;
-}
-
-.seeker-avatar {
-  width: 40px;
-  height: 40px;
-  flex-shrink: 0;
-}
-.avatar-img {
-  width: 100%; height: 100%; border-radius: 50%; object-fit: cover;
-}
-.avatar-placeholder {
-  width: 100%; height: 100%; border-radius: 50%;
-  display: flex; align-items: center; justify-content: center;
-  font-weight: 600; color: #455A64;
-}
-
+.seekers-list-wrapper { display: flex; flex-direction: column; gap: 12px; }
+.seeker-card { display: flex; align-items: center; gap: 12px; padding: 12px; background: white; border: 1px solid #ECEFF1; border-radius: 12px; cursor: pointer; transition: all 0.2s ease; }
+.seeker-card:hover { border-color: #B0BEC5; background: #FAFAFA; }
+.seeker-card.active { border-color: #1976D2; background: #E3F2FD; box-shadow: 0 0 0 1px #1976D2; }
+.seeker-avatar { width: 40px; height: 40px; flex-shrink: 0; }
+.avatar-img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; }
+.avatar-placeholder { width: 100%; height: 100%; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 600; color: #455A64; }
 .seeker-info { flex: 1; }
 .seeker-name { font-weight: 600; color: #263238; font-size: 14px; }
 .seeker-meta { font-size: 12px; color: #78909C; margin-top: 2px; }
-
+.seeker-prefs { margin-top: 4px; }
+.pref-badge { background: #F1F5F9; color: #475569; font-size: 10px; padding: 2px 6px; border-radius: 8px; font-weight: 600; }
 .chevron { color: #CFD8DC; }
 .seeker-card.active .chevron { color: #1976D2; }
 
-
 /* MATCHES RIGHT PANEL */
-.matches-content {
-  flex: 1;
-  background: #FAFAFA; /* Light gray bg for contrast if needed, or white */
-  border-radius: 16px;
-  /* border: 1px dashed #CFD8DC; */
-}
-
-/* Empty State */
-.empty-selection {
-  height: 100%;
-  min-height: 300px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  color: #90A4AE;
-  border: 2px dashed #E0E0E0;
-  border-radius: 16px;
-  background: #fff;
-}
-.empty-icon-circle {
-  width: 64px; height: 64px; background: #F5F5F5; border-radius: 50%;
-  display: flex; align-items: center; justify-content: center;
-  margin-bottom: 16px;
-}
-
-/* Matches List */
-.matches-list {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.match-card {
-  background: white;
-  border: 1px solid #ECEFF1;
-  border-radius: 12px;
-  padding: 16px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.03);
-}
-
-.match-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 12px;
-}
-
+.matches-content { flex: 1; background: #FAFAFA; border-radius: 16px; }
+.empty-selection { height: 100%; min-height: 300px; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #90A4AE; border: 2px dashed #E0E0E0; border-radius: 16px; background: #fff; }
+.empty-icon-circle { width: 64px; height: 64px; background: #F5F5F5; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin-bottom: 16px; }
+.matches-list { display: flex; flex-direction: column; gap: 16px; }
+.match-card { background: white; border: 1px solid #ECEFF1; border-radius: 12px; padding: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.03); }
+.match-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px; }
 .match-title-block { display: flex; flex-direction: column; gap: 4px; }
 .dgroup-name { margin: 0; font-size: 16px; font-weight: 700; color: #263238; }
 .leader-sub { font-size: 12px; color: #78909C; }
-.best-match-badge {
-  display: inline-block;
-  background: #1976D2; color: white;
-  font-size: 10px; font-weight: 700;
-  padding: 2px 6px; border-radius: 4px;
-  width: fit-content;
-  text-transform: uppercase;
-}
-
+.best-match-badge { display: inline-block; background: #1976D2; color: white; font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 4px; width: fit-content; text-transform: uppercase; }
 .match-score { text-align: right; }
 .score-val { font-size: 20px; font-weight: 800; color: #1976D2; }
-
-/* Progress Bar */
-.progress-bg {
-  height: 6px;
-  background: #ECEFF1;
-  border-radius: 3px;
-  margin-bottom: 12px;
-  overflow: hidden;
-}
-.progress-fill {
-  height: 100%;
-  border-radius: 3px;
-  transition: width 0.5s ease;
-}
+.progress-bg { height: 6px; background: #ECEFF1; border-radius: 3px; margin-bottom: 12px; overflow: hidden; }
+.progress-fill { height: 100%; border-radius: 3px; transition: width 0.5s ease; }
 .progress-fill.high { background: #1976D2; }
 .progress-fill.med { background: #42A5F5; }
-
-/* Tags */
-.match-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-bottom: 16px;
-}
-.match-tag {
-  background: #F1F5F9;
-  color: #475569;
-  font-size: 11px;
-  padding: 4px 8px;
-  border-radius: 12px;
-  font-weight: 600;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-.match-tag.type-tag.mixed {
-  background: #FFF3E0;
-  color: #E65100;
-}
-.match-tag.type-tag.standard {
-  background: #E3F2FD;
-  color: #1565C0;
-}
-.match-tag.mixed {
-  background: #FAFAFA;
-  color: #90A4AE;
-  font-style: italic;
-}
-
-/* Buttons */
-.assign-button {
-  width: 100%;
-  padding: 10px;
-  background: white;
-  border-radius: 8px;
-  font-weight: 600;
-  font-size: 13px;
-  color: #000000;
-  cursor: pointer;
-  transition: all 0.2s;
-}
+.match-tags { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+.match-tag { background: #F1F5F9; color: #475569; font-size: 11px; padding: 4px 8px; border-radius: 12px; font-weight: 600; display: flex; align-items: center; gap: 4px; }
+.match-tag.type-tag.mixed { background: #FFF3E0; color: #E65100; }
+.match-tag.type-tag.standard { background: #E3F2FD; color: #1565C0; }
+.match-tag.time-tag { background: #F0FDF4; color: #15803D; }
+.assign-button { width: 100%; padding: 10px; background: white; border-radius: 8px; font-weight: 600; font-size: 13px; color: #000000; cursor: pointer; transition: all 0.2s; }
 .assign-button:hover { background: #1565C0;color: #ffffff; }
-
-.no-matches-warning {
-  padding: 20px;
-  text-align: center;
-  background: #FFF3E0;
-  color: #E65100;
-  border-radius: 12px;
-  font-size: 14px;
-}
-.empty-state-small {
-  text-align: center; color: #90A4AE; font-size: 13px; padding: 20px;
-}
+.no-matches-warning { padding: 20px; text-align: center; background: #FFF3E0; color: #E65100; border-radius: 12px; font-size: 14px; }
+.empty-state-small { text-align: center; color: #90A4AE; font-size: 13px; padding: 20px; }
 </style>
