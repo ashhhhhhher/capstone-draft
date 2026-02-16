@@ -1,9 +1,9 @@
 <script setup>
-import { ref, computed, onMounted, reactive } from 'vue'
+import { ref, computed, onMounted, reactive, watch } from 'vue'
 import { useAuthStore } from '../stores/auth'
 import { useMembersStore } from '../stores/members'
 import { useAttendanceStore } from '../stores/attendance'
-import DgroupAttendanceModal from '../components/memberComponents/DgroupAttendanceModal.vue'
+import { useRoute } from 'vue-router'
 import DgroupAbsenceMonitoring from '../components/memberComponents/DgroupAbsenceMonitoring.vue'
 import { 
   User, Users, ChevronRight, X, UserMinus, HelpCircle, 
@@ -15,6 +15,7 @@ import DgroupOverview from '../components/memberComponents/DgroupOverview.vue'
 const authStore = useAuthStore()
 const membersStore = useMembersStore()
 const attendanceStore = useAttendanceStore()
+const route = useRoute()
 
 const activeTab = ref('upline') 
 const showCreateModal = ref(false)
@@ -80,7 +81,23 @@ const mockGroups = ref([])
 
 onMounted(() => {
   membersStore.fetchMembers()
+  
+  // Initial check for tab navigation
+  checkTabQuery()
 })
+
+// WATCHER: React to query param changes (e.g. clicking notification while already on page)
+watch(() => route.query.tab, () => {
+  checkTabQuery()
+})
+
+function checkTabQuery() {
+  if (route.query.tab === 'downline' || route.query.tab === 'requests') {
+    activeTab.value = 'downline'
+  } else if (route.query.tab === 'upline') {
+    activeTab.value = 'upline'
+  }
+}
 
 const myProfile = computed(() => authStore.userProfile)
 const isLeader = computed(() => myProfile.value?.finalTags?.isDgroupLeader)
@@ -302,11 +319,11 @@ function toggleInterest(id) {
 function toggleTime(t) {
   const idx = seekerPrefs.meetingTime.indexOf(t)
   if (t === 'Anytime') {
-     seekerPrefs.meetingTime = ['Anytime']
+      seekerPrefs.meetingTime = ['Anytime']
   } else {
-     if (seekerPrefs.meetingTime.includes('Anytime')) seekerPrefs.meetingTime = []
-     if (idx === -1) seekerPrefs.meetingTime.push(t)
-     else seekerPrefs.meetingTime.splice(idx, 1)
+      if (seekerPrefs.meetingTime.includes('Anytime')) seekerPrefs.meetingTime = []
+      if (idx === -1) seekerPrefs.meetingTime.push(t)
+      else seekerPrefs.meetingTime.splice(idx, 1)
   }
 }
 
@@ -472,7 +489,7 @@ async function handleLeaderResponse(req, action) {
           <div class="empty-icon"><UserMinus :size="32" /></div>
           
           <p v-if="myProfile?.finalTags.isSeeker || mySentRequest">
-             You are listed as a <strong>Seeker</strong>. <br>Waiting for a leader to add you.
+              You are listed as a <strong>Seeker</strong>. <br>Waiting for a leader to add you.
           </p>
           
           <p v-else-if="rawLeaderName === 'N/A (D-Lead)'">
@@ -602,8 +619,8 @@ async function handleLeaderResponse(req, action) {
     <!-- Seeker Preferences & Matching Modal -->
     <div v-if="showSeekerFlowModal" class="modal-overlay">
        <div class="modal seeker-modal">
-          <!-- STEP 1: PREFERENCES -->
-          <div v-if="seekerStep === 1">
+         <!-- STEP 1: PREFERENCES -->
+         <div v-if="seekerStep === 1">
              <div class="modal-header">
                 <h3>Let's get to know you</h3>
                 <p>Help us find a Dgroup that fits your vibe.</p>
@@ -644,10 +661,10 @@ async function handleLeaderResponse(req, action) {
                 <button @click="showSeekerFlowModal = false" class="cancel">Cancel</button>
                 <button @click="seekerStep = 2" class="confirm">Find Groups</button>
              </div>
-          </div>
+         </div>
 
-          <!-- STEP 2: RECOMMENDATIONS -->
-          <div v-if="seekerStep === 2">
+         <!-- STEP 2: RECOMMENDATIONS -->
+         <div v-if="seekerStep === 2">
              <div class="modal-header">
                 <h3>Recommended for you</h3>
                 <p>Based on your age, interests, and availability.</p>
@@ -680,7 +697,7 @@ async function handleLeaderResponse(req, action) {
                 </button>
                 <button @click="seekerStep = 1" class="cancel">Back</button>
              </div>
-          </div>
+         </div>
        </div>
     </div>
 

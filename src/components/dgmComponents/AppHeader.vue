@@ -1,12 +1,14 @@
 <script setup>
-import { ref, onMounted, onUnmounted, computed } from 'vue'
+import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
 import { User, ChevronDown, LogOut, Info } from 'lucide-vue-next'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../../stores/auth'
 import { useNotificationsStore } from '../../stores/notifications'
+import { useMembersStore } from '../../stores/members'
 
 const authStore = useAuthStore()
 const notificationsStore = useNotificationsStore()
+const membersStore = useMembersStore()
 const router = useRouter()
 
 const isDropdownOpen = ref(false)
@@ -58,19 +60,75 @@ const firstName = computed(() => {
 
 function openNotificationFocus(focusKey) {
   showNotifications.value = false
-  if (focusKey === 'matching') { router.push({ path: '/dgroups', query: { tab: 'matching' } }) } 
-  else if (focusKey === 'memberDgroup') { router.push({ name: 'memberDgroup' }) } 
-  else if (focusKey === 'memberAttendance') { router.push({ name: 'memberAttendance' }) } 
-  else { if (authStore.userRole === 'admin') { router.push({ path: '/members', query: { focus: focusKey } }) } }
+  if (focusKey === 'matching') { 
+    router.push({ path: '/dgroups', query: { tab: 'matching' } }) 
+  } 
+  else if (focusKey === 'memberDgroup') { 
+    router.push({ name: 'memberDgroup' }) 
+  } 
+  else if (focusKey === 'memberAttendance') { 
+    router.push({ name: 'memberAttendance' }) 
+  } 
+  else if (focusKey === 'leaderRequests') { 
+    // UPDATED: Navigate to memberDgroup with 'downline' tab to see requests
+    router.push({ name: 'memberDgroup', query: { tab: 'downline' } }) 
+  } 
+  else { 
+    if (authStore.userRole === 'admin') { router.push({ path: '/members', query: { focus: focusKey } }) } 
+  }
+}
+
+// --- LEADER WATCHER ---
+// Watches the members store for requests targeting this leader
+function initLeaderWatcher() {
+  if (!authStore.userProfile?.finalTags?.isDgroupLeader) return;
+
+  // Watch the computed property from members store
+  watch(() => membersStore.joinRequests, (allRequests) => {
+    const myId = authStore.user.uid;
+    const myMemberId = authStore.userProfile.id;
+    
+    // Filter requests where leaderId matches Auth UID OR Member ID
+    const myRequests = allRequests.filter(r => 
+      r.joinRequest.leaderId === myId || r.joinRequest.leaderId === myMemberId
+    );
+
+    if (myRequests.length > 0) {
+      notificationsStore.addSystemNotification({
+        id: 'leader-requests',
+        header: 'Pending Join Requests',
+        body: `You have ${myRequests.length} person(s) waiting to join your DGroup.`,
+        focus: 'leaderRequests',
+        type: 'alert'
+      });
+    } else {
+      notificationsStore.removeSystemNotification('leader-requests');
+    }
+  }, { immediate: true, deep: true });
 }
 
 onMounted(() => {
   document.addEventListener('click', closeDropdown)
-  if (authStore.userRole === 'admin') {
-    notificationsStore.cleanupOldNotifications()
-    notificationsStore.initSeekerListener()
-  } else if (authStore.user) {
-    notificationsStore.initMemberListeners(authStore.user.uid)
+  
+  if (authStore.user) {
+    // 1. Initialize General Notifications (Firestore) 
+    // Pass Member ID too, so First Timers receive notifications sent to their Member Profile
+    const memberId = authStore.userProfile?.id || null;
+    notificationsStore.initUserNotifications(authStore.user.uid, memberId);
+
+    // 2. Role-specific listeners
+    if (authStore.userRole === 'admin') {
+      notificationsStore.cleanupOldNotifications()
+      notificationsStore.initSeekerListener()
+    } else {
+      // Members/Leaders: Absence checks
+      notificationsStore.initMemberListeners(authStore.user.uid)
+      
+      // Leaders: Watch for Pending Requests
+      if (authStore.userProfile?.finalTags?.isDgroupLeader) {
+        initLeaderWatcher();
+      }
+    }
   }
 })
 onUnmounted(() => { document.removeEventListener('click', closeDropdown) })
