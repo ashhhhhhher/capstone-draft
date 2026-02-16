@@ -20,12 +20,12 @@ export const useMembersStore = defineStore('members', () => {
   const pendingMembers = ref([])
   const isLoading = ref(true)
 
-  // --- Environment Setup ---
-  const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+  // --- Computed Properties ---
 
   const activeMembers = computed(() => {
     return members.value.filter(m => m.status !== 'archived')
   })
+  
   const archivedMembers = computed(() => {
     return members.value.filter(m => m.status === 'archived')
   })
@@ -36,11 +36,11 @@ export const useMembersStore = defineStore('members', () => {
       .map(m => `${m.firstName} ${m.lastName}`)
   })
   
-  // Enhanced Leaders computed property to ensure robust data access for analytics
+  // Enhanced Leaders computed property (From Updated Version)
   const leaders = computed(() => {
     return activeMembers.value.filter(m => m.finalTags.isDgroupLeader).map(l => ({
       ...l,
-      // Ensure arrays exist for matching
+      // Ensure arrays exist for matching/analytics
       dgroupDetails: {
         interests: l.dgroupDetails?.interests || [],
         meetingTime: l.dgroupDetails?.meetingTime || 'Anytime'
@@ -52,33 +52,55 @@ export const useMembersStore = defineStore('members', () => {
     return activeMembers.value.filter(m => m.finalTags.isSeeker)
   })
 
-  // Computed: Members requesting to join a specific leader
+  // New: Members requesting to join a specific leader
   const joinRequests = computed(() => {
     return activeMembers.value.filter(m => m.joinRequest && m.joinRequest.status === 'pending')
   })
 
-  // --- PATH HELPERS (FIXED FOR PERMISSIONS) ---
+  // --- PATH HELPERS (RESTORED TO PREVIOUS LOGIC) ---
+  // This was the cause of the empty list. We switched back to 'branches' 
+  // instead of 'artifacts' to match your existing data.
+
   const getMemberCollection = () => {
-    // Uses the public data path to ensure read/write access for the app
-    return collection(db, "artifacts", appId, "public", "data", "members");
+    const authStore = useAuthStore();
+    if (!authStore.branchId) {
+        // Return a dummy collection or handle error if branchId isn't ready
+        return collection(db, "members_loading_wait"); 
+    }
+    return collection(db, "branches", authStore.branchId, "members");
   };
 
   const getPendingCollection = () => {
-    return collection(db, "artifacts", appId, "public", "data", "pendingMembers");
+    const authStore = useAuthStore();
+    if (!authStore.branchId) {
+      return collection(db, "pending_loading_wait");
+    }
+    return collection(db, "branches", authStore.branchId, "pendingMembers");
   };
+
+  // --- ACTIONS ---
 
   function fetchMembers() {
     this.isLoading = true;
-    const membersQuery = query(getMemberCollection());
+    
+    // Ensure we have a valid collection before querying
+    const colRef = getMemberCollection();
+    // Safety check: if auth isn't ready, retry or wait (handled by auth listener usually)
+    
+    const membersQuery = query(colRef);
 
     onSnapshot(membersQuery, (querySnapshot) => {
       const allMembers = [];
       querySnapshot.forEach((doc) => {
         const data = doc.data();
-        // Ensure ID is set from doc.id if missing
+        
+        // Ensure ID is set from doc.id if missing inside the data
         if (!data.id) data.id = doc.id;
+        
+        // Default values for stability
         if (!data.status) data.status = 'active';
         if (!data.monitoringState) data.monitoringState = { msgSentDate: null, leaderNotifiedDate: null };
+        
         allMembers.push(data);
       });
       members.value = allMembers;
@@ -101,7 +123,8 @@ export const useMembersStore = defineStore('members', () => {
       });
       pendingMembers.value = list;
     }, (error) => {
-      console.error('Error fetching pending registrations:', error);
+      // It's okay if this fails permissions on public view, just log it
+      console.log('Fetching pending registrations (may require admin):', error.code);
     })
   }
   
@@ -112,14 +135,13 @@ export const useMembersStore = defineStore('members', () => {
     memberData.monitoringState = { msgSentDate: null, leaderNotifiedDate: null }; 
 
     try {
-      // Use memberData.id or generate one if missing
+      // Use provided ID or generate one
       const docId = memberData.id || `mem-${Date.now()}`;
       memberData.id = docId;
       
       const memberRef = doc(getMemberCollection(), docId);
       await setDoc(memberRef, memberData);
       
-      // Try sending email if auth store supports it
       if (authStore.sendCreationEmail) {
         await authStore.sendCreationEmail(memberData.email);
       }
@@ -155,7 +177,21 @@ export const useMembersStore = defineStore('members', () => {
       const snap = await getDoc(pendingRef);
       if (!snap.exists()) return;
       
+      const data = snap.data();
+      const authUid = data.authUid;
+
       await deleteDoc(pendingRef);
+
+      // Best-effort cleanup of Auth user if it's the current user
+      const authStore = useAuthStore();
+      if (authStore.user && authStore.user.uid === authUid) {
+        try {
+          await authStore.logout();
+        } catch (e) {
+          console.warn('Failed to sign out rejected user:', e);
+        }
+      }
+      return authUid;
     } catch (error) {
       console.error('Error rejecting pending member:', error);
       throw error;
@@ -259,7 +295,7 @@ export const useMembersStore = defineStore('members', () => {
     }
   }
 
-  // --- NEW: Join Request Logic ---
+  // --- NEW FEATURE: Join Request Logic (Now using correct Paths) ---
 
   // 1. Request to Join (Seeker Side)
   async function requestJoinDgroup(memberId, dgroupData, preferences) {
