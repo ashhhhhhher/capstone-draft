@@ -20,6 +20,21 @@ const isUploading = ref(false)
 const pendingPhotoBlob = ref(null)
 const pendingPhotoPreview = ref('')
 
+// --- School Select State ---
+const selectedSchoolOption = ref('')
+const schoolOptions = [
+  "University of the Cordilleras",
+  "Saint Louis University",
+  "University of Baguio",
+  "University of the Philippines Baguio",
+  "Benguet State University",
+  "Saint Louis Laboratory Junior High School",
+  "Baguio City National High School",
+  "University of Baguio Science High School",
+  "Small World Christian School Foundation",
+  "Others"
+]
+
 // --- Profile Data ---
 const profile = reactive({
   firstName: '',
@@ -59,8 +74,26 @@ onMounted(() => {
       fbAccount: p.fbAccount || '',
       profilePicture: p.profilePicture || ''
     })
+
+    // Set initial dropdown state based on saved school
+    const existingSchool = p.school || ''
+    if (existingSchool && schoolOptions.includes(existingSchool) && existingSchool !== 'Others') {
+      selectedSchoolOption.value = existingSchool
+    } else if (existingSchool) {
+      selectedSchoolOption.value = 'Others'
+    } else {
+      selectedSchoolOption.value = ''
+    }
   }
 })
+
+function handleSchoolSelectChange() {
+  if (selectedSchoolOption.value !== 'Others') {
+    profile.school = selectedSchoolOption.value
+  } else {
+    profile.school = '' // Clear it so they can type in the new input
+  }
+}
 
 // ... (Image compression/upload logic matches previous version) ...
 function triggerUpload() {
@@ -295,7 +328,15 @@ async function updatePassword() {
           <label>School / Workplace</label>
           <div class="input-wrapper">
             <GraduationCap :size="18" class="icon" />
-            <input v-model="profile.school" placeholder="Enter school or workplace" />
+            <select v-model="selectedSchoolOption" @change="handleSchoolSelectChange">
+              <option value="" disabled>Select an option</option>
+              <option v-for="opt in schoolOptions" :key="opt" :value="opt">{{ opt }}</option>
+            </select>
+          </div>
+          <!-- Custom Input for 'Others' -->
+          <div v-if="selectedSchoolOption === 'Others'" class="input-wrapper other-input">
+            <GraduationCap :size="18" class="icon" />
+            <input v-model="profile.school" placeholder="Enter specific school or workplace" />
           </div>
         </div>
       </div>
@@ -575,7 +616,7 @@ label {
   color: #90A4AE;
 }
 
-input {
+input, select {
   width: 100%;
   padding: 12px 12px 12px 40px; /* space for icon */
   border: 1px solid #CFD8DC;
@@ -583,11 +624,16 @@ input {
   font-size: 14px;
   box-sizing: border-box;
   transition: border-color 0.2s;
+  background-color: white;
 }
-input:focus {
+input:focus, select:focus {
   border-color: #1976D2;
   outline: none;
 }
+.other-input {
+  margin-top: 10px;
+}
+
 /* Inputs without icons (e.g. password) */
 .form-card.security input {
   padding-left: 12px;
