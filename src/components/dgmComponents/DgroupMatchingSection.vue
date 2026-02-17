@@ -173,13 +173,22 @@ async function assignLeader(leaderName) {
   const seeker = members.value.find(m => m.id === selectedSeekerId.value)
   if (!seeker) return
   if(!confirm(`Assign ${seeker.firstName} to ${leaderName}?`)) return
-  const updated = {
-    ...seeker,
-    dgroupLeader: leaderName,
-    finalTags: { ...seeker.finalTags, isSeeker: false, isFirstTimer: false, isRegular: true }
-  }
+
+  // Try to resolve leader id from leaders list
+  const leaderObj = leaders.value.find(l => `${l.firstName} ${l.lastName}` === leaderName)
   try {
-    await membersStore.updateMember(updated)
+    if (leaderObj && leaderObj.id) {
+      // Use centralized assign to also set dgroupId
+      await membersStore.assignDgroupLeader(seeker.id, leaderObj.id)
+    } else {
+      // Fallback to previous behavior if we can't find leader id
+      const updated = {
+        ...seeker,
+        dgroupLeader: leaderName,
+        finalTags: { ...seeker.finalTags, isSeeker: false, isFirstTimer: false, isRegular: true }
+      }
+      await membersStore.updateMember(updated)
+    }
     selectedSeekerId.value = null
   } catch (e) { console.error(e) }
 }

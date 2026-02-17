@@ -33,8 +33,9 @@ onMounted(() => {
       // include only meetings under this branch
       if (!authStore.branchId || !path.includes(`branches/${authStore.branchId}/dgroupEvents/`)) return
       const data = docSnap.data()
-      // include only past or today's meetings (skip future meetings)
-      if (data && data.meetingDate && data.meetingDate <= today) items.push({ id: docSnap.id, ...data })
+      if (data && data.meetingDate && data.meetingDate <= today) {
+        if (data.submittedBy || data.submittedById) items.push({ id: docSnap.id, ...data })
+      }
     })
     // sort by meetingDate desc
     items.sort((a,b) => (b.meetingDate || '').localeCompare(a.meetingDate || ''))

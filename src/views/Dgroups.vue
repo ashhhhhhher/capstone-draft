@@ -17,7 +17,6 @@ import {
 // Components
 import DgroupWeeklyLogs from '../components/dgmComponents/DgroupWeeklyLogs.vue'
 import DgroupMatchingSection from '../components/dgmComponents/DgroupMatchingSection.vue'
-import DGroupEditModal from '../components/dgmComponents/DGroupEditModal.vue'
 import MemberDetailsModal from '../components/dgmComponents/MemberDetailsModal.vue' 
 import Modal from '../components/dgmComponents/Modal.vue'
 import MemberCard from '../components/dgmComponents/MemberCard.vue'

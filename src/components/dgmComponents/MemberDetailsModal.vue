@@ -107,7 +107,7 @@ function generateDgroupID() {
   return `DG-${year}-${random}`;
 }
 
-function save() {
+async function save() {
   const finalTags = editableMember.value.finalTags;
   const dgroupLeaderSelection = editableMember.value.dgroupLeader;
 
@@ -200,6 +200,29 @@ function save() {
   editableMember.value.fbAccount = editableMember.value.fbAccount ? editableMember.value.fbAccount.trim() : '';
   editableMember.value.contactNumber = editableMember.value.contactNumber ? editableMember.value.contactNumber.trim() : '';
   
+  // --- Persist Dgroup assignment using centralized function so dgroupId is consistent ---
+  try {
+    const selection = editableMember.value.dgroupLeader;
+    // Treat these special values as no leader
+    const isSpecialNA = !selection || selection === 'N/A (D-Lead)' || selection === 'N/A (First Timer)';
+    if (isSpecialNA) {
+      await membersStore.assignDgroupLeader(editableMember.value.id, null);
+      editableMember.value.dgroupId = null;
+    } else {
+      // Try to resolve leader id by name
+      const leaderObj = leaders.value.find(l => `${l.firstName} ${l.lastName}` === selection);
+      if (leaderObj && leaderObj.id) {
+        await membersStore.assignDgroupLeader(editableMember.value.id, leaderObj.id);
+        // Ensure local copy has the leader's dgroupId so parent update doesn't overwrite it
+        editableMember.value.dgroupId = leaderObj.dgroupId || leaderObj.dgroupDetails?.dgroupId || editableMember.value.dgroupId || null;
+      } else {
+        // No leader id resolved — keep editableMember values and let parent update persist name
+      }
+    }
+  } catch (e) {
+    console.error('Failed to persist dgroup assignment:', e);
+  }
+
   emit('saveChanges', editableMember.value)
   isEditMode.value = false
 }

@@ -225,6 +225,15 @@ async function joinDgroupById() {
       dgroupLeader: leaderName,
       finalTags: { ...myProfile.value.finalTags, isSeeker: false, isRegular: true }
     })
+    // Ensure the member document also gets the leader's dgroupId set
+    try {
+      if (leader && leader.id && myProfile.value && myProfile.value.id) {
+        await membersStore.assignDgroupLeader(myProfile.value.id, leader.id)
+      }
+    } catch (e) {
+      // Non-fatal: log but don't block the user
+      console.warn('Failed to assign dgroupId after join:', e)
+    }
     joinStatus.value = { type: 'success', msg: `Joined ${leaderName}'s group!` }
     setTimeout(() => { showJoinByIdModal.value = false }, 1500);
   } catch (e) {

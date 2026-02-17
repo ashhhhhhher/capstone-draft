@@ -302,6 +302,72 @@ export const useMembersStore = defineStore('members', () => {
     }
   }
 
+  // --- NEW: Assign Dgroup Leader and automatically set dgroupId ---
+  async function assignDgroupLeader(memberId, leaderId) {
+    try {
+      const memberRef = doc(getMemberCollection(), memberId);
+
+      // If leaderId is falsy, treat this as removal of leader assignment and clear dgroupId
+      if (!leaderId) {
+        await updateDoc(memberRef, {
+          dgroupLeader: '',
+          dgroupId: null,
+        });
+        return;
+      }
+
+      // Try to find leader in local cache first
+      let leader = members.value.find(m => m.id === leaderId);
+
+      // If not found locally, attempt to fetch from firestore
+      if (!leader) {
+        const leaderRef = doc(getMemberCollection(), leaderId);
+        const snap = await getDoc(leaderRef);
+        if (snap.exists()) leader = snap.data();
+      }
+
+      if (!leader) throw new Error('Leader not found');
+
+      const leaderName = `${leader.firstName || ''} ${leader.lastName || ''}`.trim() || leader.displayName || leader.name || leaderId;
+      const dgroupId = leader.dgroupId || leader.dgroupDetails?.dgroupId || leader.dgroupDetails?.id || null;
+
+      const updatePayload = {
+        dgroupLeader: leaderName,
+        dgroupId: dgroupId
+      };
+
+      // If the member had a joinRequest for this leader, clear it
+      // Also: if the member is currently a seeker or first-timer, promote to regular
+      let member = members.value.find(m => m.id === memberId);
+      if (!member) {
+        // try fetch member doc to inspect tags
+        try {
+          const memberSnap = await getDoc(doc(getMemberCollection(), memberId));
+          if (memberSnap.exists()) member = memberSnap.data();
+        } catch (e) {
+          console.warn('Could not fetch member to determine tags for promotion:', e);
+        }
+      }
+
+      const promoteToRegular = !!(member && (member.finalTags?.isSeeker || member.finalTags?.isFirstTimer));
+
+      if (member && member.joinRequest && member.joinRequest.leaderId === leaderId) {
+        updatePayload.joinRequest = null;
+        updatePayload['finalTags.isSeeker'] = false;
+        updatePayload['finalTags.isRegular'] = true;
+      } else if (promoteToRegular) {
+        updatePayload['finalTags.isSeeker'] = false;
+        updatePayload['finalTags.isFirstTimer'] = false;
+        updatePayload['finalTags.isRegular'] = true;
+      }
+
+      await updateDoc(memberRef, updatePayload);
+    } catch (error) {
+      console.error('Error assigning dgroup leader:', error);
+      throw error;
+    }
+  }
+
   // --- NEW FEATURE: Join Request Logic (Now using correct Paths) ---
 
   // 1. Request to Join (Seeker Side)
@@ -354,17 +420,29 @@ export const useMembersStore = defineStore('members', () => {
         const member = members.value.find(m => m.id === memberId);
         if (!member || !member.joinRequest) throw new Error("Request not found");
 
-        const leaderName = dgroupData?.leaderName || member.joinRequest.leaderName;
-        const dgroupId = dgroupData?.dgroupId || member.joinRequest.dgroupId;
-
-        await updateDoc(memberRef, {
-          dgroupLeader: leaderName,
-          dgroupId: dgroupId,
-          joinRequest: null, // Clear request
-          'finalTags.isSeeker': false,
-          'finalTags.isRegular': true,
-          'finalTags.isFirstTimer': false
-        });
+        const leaderId = dgroupData?.leaderId || member.joinRequest.leaderId;
+        // Prefer centralized assign which also populates dgroupId from leader record
+        if (leaderId) {
+          await assignDgroupLeader(memberId, leaderId);
+          // Ensure joinRequest cleared and tags set (assignDgroupLeader may have cleared some, but be explicit)
+          await updateDoc(memberRef, {
+            joinRequest: null,
+            'finalTags.isSeeker': false,
+            'finalTags.isRegular': true,
+            'finalTags.isFirstTimer': false
+          });
+        } else {
+          const leaderName = dgroupData?.leaderName || member.joinRequest.leaderName;
+          const dgroupId = dgroupData?.dgroupId || member.joinRequest.dgroupId;
+          await updateDoc(memberRef, {
+            dgroupLeader: leaderName,
+            dgroupId: dgroupId,
+            joinRequest: null, // Clear request
+            'finalTags.isSeeker': false,
+            'finalTags.isRegular': true,
+            'finalTags.isFirstTimer': false
+          });
+        }
 
         if (notifStore && notifStore.sendNotification) {
           await notifStore.sendNotification(
@@ -405,6 +483,7 @@ export const useMembersStore = defineStore('members', () => {
     fetchPendingRegistrations, approvePending, rejectPending,
     logMonitoringAction,
     removeDgroupMember,
-    requestJoinDgroup, respondToJoinRequest
+    requestJoinDgroup, respondToJoinRequest,
+    assignDgroupLeader
   }
 })
