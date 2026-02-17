@@ -23,7 +23,7 @@ export const useMembersStore = defineStore('members', () => {
   // --- Computed Properties ---
 
   const activeMembers = computed(() => {
-    return members.value.filter(m => m.status !== 'archived')
+    return members.value.filter(m => m.status === 'active')
   })
   
   const archivedMembers = computed(() => {
@@ -93,14 +93,19 @@ export const useMembersStore = defineStore('members', () => {
       const allMembers = [];
       querySnapshot.forEach((doc) => {
         const data = doc.data();
-        
+
         // Ensure ID is set from doc.id if missing inside the data
         if (!data.id) data.id = doc.id;
-        
+
         // Default values for stability
         if (!data.status) data.status = 'active';
         if (!data.monitoringState) data.monitoringState = { msgSentDate: null, leaderNotifiedDate: null };
         
+        if (data.status === 'pending') {
+          console.warn(`Skipping member ${data.id} with status 'pending' found in members collection`);
+          return;
+        }
+
         allMembers.push(data);
       });
       members.value = allMembers;
@@ -160,7 +165,9 @@ export const useMembersStore = defineStore('members', () => {
 
       const memberRef = doc(getMemberCollection(), memberId);
       if (!data.createdAt) data.createdAt = new Date().toISOString();
-      data.status = data.status || 'active';
+      // Ensure the transferred record becomes active immediately on approval.
+      data.status = 'active';
+      if (!data.monitoringState) data.monitoringState = { msgSentDate: null, leaderNotifiedDate: null };
 
       await setDoc(memberRef, data);
       await deleteDoc(pendingRef);
