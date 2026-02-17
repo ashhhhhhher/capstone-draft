@@ -44,7 +44,8 @@ const showHeaderMenu = ref(false)
 const currentFilters = ref({
   age: [],
   type: { included: [], excluded: [] },
-  ministries: []
+  ministries: [],
+  sort: { key: 'joinDate', order: 'desc' }
 })
 
 // --- Computed Properties ---
@@ -54,7 +55,8 @@ const presentMemberIds = computed(() => {
 
 // --- Main Filter Logic ---
 const filteredMembers = computed(() => {
-  let list = showArchived.value ? archivedMembers.value : activeMembers.value
+  // copy to avoid mutating store arrays
+  let list = (showArchived.value ? archivedMembers.value : activeMembers.value).slice()
 
   // 1. Text Search
   if (searchQuery.value.trim() !== '') {
@@ -105,8 +107,22 @@ const filteredMembers = computed(() => {
     )
   }
   
-  // Sort Alphabetically by FIRST Name
-  list.sort((a, b) => a.firstName.localeCompare(b.firstName))
+  // Sorting based on currentFilters.sort (added by FilterModal)
+  const sort = f.sort || { key: 'joinDate', order: 'desc' }
+  const dir = sort.order === 'asc' ? 1 : -1
+  if (sort.key === 'joinDate') {
+    list.sort((a, b) => {
+      const ta = a.createdAt ? new Date(a.createdAt).getTime() : 0
+      const tb = b.createdAt ? new Date(b.createdAt).getTime() : 0
+      return (ta - tb) * dir
+    })
+  } else {
+    // alphabetical by firstName then lastName
+    list.sort((a, b) => {
+      const cmp = a.firstName.localeCompare(b.firstName)
+      return (cmp !== 0 ? cmp : a.lastName.localeCompare(b.lastName)) * dir
+    })
+  }
   
   return list
 })

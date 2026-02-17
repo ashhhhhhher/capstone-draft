@@ -1,0 +1,11 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global Admin Access (Allows read/write to all data)
+    // CRITICAL: This is the rule that ensures only logged-in users access member data
+    match /{document=**} {
+      allow read, write: if request.auth != null;
+    }
+  }
+}

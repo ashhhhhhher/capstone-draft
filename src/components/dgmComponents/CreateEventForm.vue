@@ -1,5 +1,6 @@
 <script setup>
 import { ref, watch, nextTick, onMounted, computed, reactive } from 'vue'
+import DatePicker from './DatePicker.vue'
 import { useEventsStore } from '../../stores/events'
 import { useAttendanceStore } from '../../stores/attendance'
 import { storage } from '../../firebase'
@@ -14,16 +15,7 @@ const emit = defineEmits(['close'])
 const eventsStore = useEventsStore()
 const attendanceStore = useAttendanceStore()
 
-// Minimum selectable date for the date input (null when editing so existing dates remain selectable)
-const minDate = computed(() => {
-  if (isEditMode.value) return null
-  // build YYYY-MM-DD using local timezone components so the min reflects the user's date
-  const d = new Date()
-  const yyyy = d.getFullYear()
-  const mm = String(d.getMonth() + 1).padStart(2, '0')
-  const dd = String(d.getDate()).padStart(2, '0')
-  return `${yyyy}-${mm}-${dd}`
-})
+
 
 // Per-field validation errors
 const errors = reactive({})
@@ -147,27 +139,7 @@ async function handleSubmit() {
   if (!eventTime.value) { errors.eventTime = 'Please fill out event time.'; hasError = true }
   if (!eventLocation.value) { errors.eventLocation = 'Please fill out event location.'; hasError = true }
 
-  // Prevent creating new events on a past date (use local timezone parsing)
-  try {
-    const today = new Date()
-    today.setHours(0,0,0,0)
-    if (eventDate.value) {
-      const parts = eventDate.value.split('-')
-      if (parts.length === 3) {
-        const y = parseInt(parts[0], 10)
-        const m = parseInt(parts[1], 10)
-        const d = parseInt(parts[2], 10)
-        const selectedDate = new Date(y, m - 1, d)
-        selectedDate.setHours(0,0,0,0)
-        if (!isEditMode.value && selectedDate < today) {
-          errors.eventDate = 'Event date cannot be in the past.'
-          hasError = true
-        }
-      }
-    }
-  } catch (e) {
-    // ignore parsing errors
-  }
+  // DatePicker enforces min date (today); no extra per-component parsing required here.
 
   if (hasError) {
     return
@@ -311,11 +283,11 @@ async function handleDeleteSpeaker(speaker) {
       </div>
 
       <div class="form-grid">
-        <div class="form-group" :class="{ 'has-error': errors.eventDate }">
-          <label for="eventDate">Event Date</label>
-          <input :class="{ 'input-error': errors.eventDate }" type="date" id="eventDate" v-model="eventDate" :min="minDate" required />
-          <small v-if="errors.eventDate" class="error-text">{{ errors.eventDate }}</small>
-        </div>
+              <div class="form-group" :class="{ 'has-error': errors.eventDate }">
+                <label for="eventDate">Event Date</label>
+                <DatePicker :id="'eventDate'" :class="{ 'input-error': errors.eventDate }" v-model="eventDate" required />
+                <small v-if="errors.eventDate" class="error-text">{{ errors.eventDate }}</small>
+              </div>
         <div class="form-group" :class="{ 'has-error': errors.eventTime }">
           <label for="eventTime">Event Time</label>
           <input :class="{ 'input-error': errors.eventTime }" type="time" id="eventTime" v-model="eventTime" required />

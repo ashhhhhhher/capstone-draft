@@ -1,6 +1,7 @@
 <script setup>
 import { ref, computed } from 'vue'
 import Modal from '../dgmComponents/Modal.vue'
+import DatePicker from '../dgmComponents/DatePicker.vue'
 import { useAuthStore } from '../../stores/auth'
 import { useDgroupEventsStore } from '../../stores/dgroupevents'
 
@@ -76,7 +77,7 @@ async function handleScheduleSubmit() {
       <form class="form-body" @submit.prevent="handleScheduleSubmit">
         <div class="form-group">
           <label>Date</label>
-          <input type="date" v-model="scheduleDate" required />
+          <DatePicker v-model="scheduleDate" required />
         </div>
 
         <div class="form-group">

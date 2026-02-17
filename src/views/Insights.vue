@@ -14,7 +14,6 @@ import {
 import BarChart from '../components/charts/BarChart.vue'
 import DoughnutChart from '../components/charts/DoughnutChart.vue'
 import Modal from '../components/dgmComponents/Modal.vue'
-import DgroupMatchingModal from '../components/dgmComponents/DgroupMatchingModal.vue'
 import AttendanceOverviewModal from '../components/dgmComponents/AttendanceOverviewModal.vue'
 import ExportButton from '../components/dgmComponents/ExportButton.vue'
 import HistoricalAttendance from '../components/dgmComponents/HistoricalAttendance.vue'

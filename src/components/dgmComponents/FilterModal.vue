@@ -19,10 +19,15 @@ const emit = defineEmits(['update:modelValue', 'apply', 'clear'])
 
 const localFilters = ref(JSON.parse(JSON.stringify(props.modelValue)))
 
+// Ensure sort structure exists (default: join date descending)
+if (!localFilters.value.sort) {
+  localFilters.value.sort = { key: 'joinDate', order: 'desc' }
+}
+
 // Ensure type structure exists for compatibility
 if (Array.isArray(localFilters.value.type)) {
-    // Convert old array format to new structure if passed
-    localFilters.value.type = { included: [...localFilters.value.type], excluded: [] };
+  // Convert old array format to new structure if passed
+  localFilters.value.type = { included: [...localFilters.value.type], excluded: [] };
 }
 
 const ministries = ref(['Live Prod', 'Host Team', 'Exalt', 'Welcome', 'DGM'])
@@ -68,6 +73,8 @@ function clearFilters() {
     age: [],
     type: { included: [], excluded: [] }, 
     ministries: []
+    ,
+    sort: { key: 'joinDate', order: 'desc' }
   }
   applyFilters()
 }
@@ -81,6 +88,19 @@ function clearFilters() {
     </div>
     
     <div class="filter-body">
+      <!-- Sort Section -->
+      <div class="filter-group">
+        <h4>Sort By</h4>
+        <div class="sort-row">
+          <label class="sort-key"><input type="radio" value="alphabetical" v-model="localFilters.sort.key"> Alphabetical</label>
+          <label class="sort-key"><input type="radio" value="joinDate" v-model="localFilters.sort.key"> Join Date</label>
+          <div class="order-buttons">
+            <button class="order-button" :class="{ active: localFilters.sort.order === 'asc' }" @click.prevent="localFilters.sort.order = 'asc'">Asc</button>
+            <button class="order-button" :class="{ active: localFilters.sort.order === 'desc' }" @click.prevent="localFilters.sort.order = 'desc'">Desc</button>
+          </div>
+        </div>
+      </div>
+
       <!-- Age Section (Standard) -->
       <div class="filter-group">
         <h4>Age Group</h4>
@@ -152,6 +172,13 @@ function clearFilters() {
 .checkbox-item label { font-size: 14px; font-weight: 500; }
 
 .hint { font-size: 11px; color: #999; font-weight: 400; margin-left: 6px; }
+
+/* Sort styles */
+.sort-row { display: flex; align-items: center; gap: 12px; margin-top: 8px; }
+.sort-key { font-size: 14px; font-weight: 500; display: flex; align-items: center; gap: 8px; }
+.order-buttons { margin-left: auto; display: flex; gap: 6px; }
+.order-button { padding: 6px 10px; background: #fff; border: 1px solid #E6EEF6; border-radius: 6px; cursor: pointer; font-weight: 700; color: #546E7A; }
+.order-button.active { background: #1976D2; color: #fff; border-color: #1976D2; }
 
 /* Tri-state styles */
 .tri-state-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; cursor: pointer; user-select: none; }
