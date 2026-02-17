@@ -170,11 +170,12 @@ async function signup(email, password, basicData) {
     const pendingData = {
       id: memberId,
       authUid: uid,
-      email: basicData.email || '',
-      emailVerified: false, //New signups who are not yet verified   
+      // Prefer the authenticated user's email when available, otherwise fall back
+      // to the email collected in the form data.
+      email: (auth.currentUser && auth.currentUser.email) || basicData.email || '',
+      emailVerified: false, // New signups who are not yet verified
       status: 'pending',
       createdAt: todayISO,
-      status: 'pending',
       role: 'member',
       branchId: branchId,
       displayName: `${toTitleCase(basicData.firstName.trim())} ${toTitleCase(basicData.lastName.trim())}`,
@@ -184,7 +185,6 @@ async function signup(email, password, basicData) {
       birthday: basicData.birthday,
       age: age,
       gender: basicData.gender,
-      email: auth.currentUser ? auth.currentUser.email : '',
       school: '',
       contactNumber: '',
       fbAccount: '',
@@ -237,7 +237,34 @@ async function login(email, password) {
     }
 
   } catch (error) {
-    throw error
+    // Log raw error so network/API response can be inspected in console
+    console.error('Sign-in failed (raw):', error);
+
+    // Normalize errors so UI switch(error.code) in Login.vue always works.
+    let code = error && error.code;
+    const msg = error && (error.message || String(error));
+
+    // Some Firebase REST responses embed a short error token (e.g., EMAIL_NOT_FOUND,
+    // INVALID_PASSWORD, MISSING_PASSWORD) in the message text — check for those.
+    const apiMessage = (msg || '').toString();
+
+    // If the raw error already contains a Firebase-style code that we want to
+    // normalize for the UI, handle it explicitly.
+    if (code === 'auth/invalid-credential' || /INVALID_CREDENTIAL/i.test(apiMessage)) {
+      code = 'auth/wrong-password';
+    }
+
+    if (!code && apiMessage) {
+      if (/INVALID_PASSWORD|wrong[-\s]?password/i.test(apiMessage)) code = 'auth/wrong-password';
+      else if (/EMAIL_NOT_FOUND|user not found|no user record/i.test(apiMessage)) code = 'auth/user-not-found';
+      else if (/MISSING_PASSWORD/i.test(apiMessage)) code = 'auth/wrong-password';
+      else if (/INVALID_EMAIL/i.test(apiMessage)) code = 'auth/invalid-email';
+      else if (/TOO_MANY_ATTEMPTS|too many requests/i.test(apiMessage)) code = 'auth/too-many-requests';
+      else code = 'auth/unknown';
+    }
+
+    // Throw a plain object with code + message so Login.vue's switch works.
+    throw { code, message: msg, original: error };
   } finally {
     isLoading.value = false
   }

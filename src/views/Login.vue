@@ -44,7 +44,6 @@ async function handleLogin() {
   } catch (error) {
     switch (error.code) {
       case 'auth/user-not-found':
-      case 'auth/invalid-credential':
         errorMessage.value = 'Account does not exist or has been removed'
         break;
       case 'auth/invalid-email':

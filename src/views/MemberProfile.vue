@@ -218,15 +218,26 @@ async function updatePassword() {
   }
   
   passwordLoading.value = true
-  // In a real implementation, you would call updatePassword(auth.currentUser, newPass)
-  // after re-authenticating with current pass. For this scope, simulating or assuming authStore handles it.
-  setTimeout(() => {
-    passwordLoading.value = false
+  try {
+    // Use the auth store helper which reauthenticates then updates the password
+    await authStore.updateAdminPassword(passwordForm.current, passwordForm.new)
+    alert("Password updated successfully!")
     passwordForm.current = ''
     passwordForm.new = ''
     passwordForm.confirm = ''
-    alert("Password updated successfully!")
-  }, 1000)
+  } catch (error) {
+    console.error('Password update failed:', error)
+    // Map common Firebase errors to friendlier messages
+    let msg = 'Failed to update password.'
+    const code = error && (error.code || error?.original?.code)
+    if (code === 'auth/wrong-password') msg = 'Current password is incorrect.'
+    else if (code === 'auth/weak-password') msg = 'New password is too weak.'
+    else if (code === 'auth/requires-recent-login') msg = 'Please sign out and sign in again, then retry.'
+    else if (error && error.message) msg = error.message
+    alert(msg)
+  } finally {
+    passwordLoading.value = false
+  }
 }
 </script>
 
