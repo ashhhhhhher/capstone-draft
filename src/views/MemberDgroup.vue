@@ -327,8 +327,8 @@ function isPersonLeader(person) {
         <!-- EMPTY STATE -->
         <div v-if="!myLeaderName" class="empty-state-card">
           <div class="empty-icon-ring"><UserMinus :size="40" color="#94A3B8" /></div>
-          <h3>Not Assigned Yet</h3>
-          <p>You haven't been assigned to a Dgroup yet. Use the "Find a Dgroup" button above if you haven't already.</p>
+          <h3>N/A Dleader</h3>
+          <p>You haven't been assigned to a Dgroup. </p>
         </div>
 
         <!-- UPLINE CONTENT (Mirrored from Downline) -->
