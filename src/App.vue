@@ -2,6 +2,7 @@
 import { computed, watch } from 'vue'
 import { RouterView, useRoute } from 'vue-router'
 import NavBar from './components/dgmComponents/NavBar.vue'
+import ChatBox from './components/ChatBox.vue'
 import { useAuthStore } from './stores/auth'
 import { useMembersStore } from './stores/members'
 import { useEventsStore } from './stores/events'
@@ -60,6 +61,9 @@ watch(() => eventsStore.currentEvent, (newEvent, oldEvent) => {
       <RouterView />
     </main>
     <NavBar v-if="showNav" />
+    
+    <!-- GLOBAL CHATBOX: Visible on all pages when logged in -->
+    <ChatBox v-if="authStore.user" />
   </div>
 </template>
 
