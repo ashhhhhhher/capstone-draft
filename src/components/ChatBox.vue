@@ -160,7 +160,7 @@ function formatTime(timestamp) {
     <!-- FLOATING TOGGLE BUTTON -->
     <button class="chat-fab" @click="toggleChat" :class="{ 'is-open': isOpen }">
       <div v-if="!isOpen" class="icon-bubble">
-        <img src="/qonnect.png" alt="Chat" class="q-logo" />
+        <img src="/qonnectchat.png" alt="Chat" class="q-logo" />
         <!-- Notification Badge (Red Dot) -->
         <span v-if="unreadCount > 0" class="notif-badge">{{ unreadCount }}</span>
       </div>
@@ -175,10 +175,10 @@ function formatTime(timestamp) {
         <div class="chat-header">
           <div class="header-left">
             <div class="header-icon-bg">
-               <img src="/qonnect.png" alt="Q" />
+               <img src="/qonnectchat.png" alt="Q" />
             </div>
             <div class="header-info">
-              <h3>Qonnect (Chat)</h3>
+              <h3>Qonnect Chatbox</h3>
               <span class="status-dot"></span>
             </div>
           </div>
@@ -371,7 +371,7 @@ function formatTime(timestamp) {
 .chat-system { position: fixed; bottom: 24px; right: 24px; z-index: 9999; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
 @media (max-width: 768px) { .chat-system { bottom: 80px; right: 16px; } }
 
-.chat-fab { width: 60px; height: 60px; border-radius: 50%; background: #2962FF; border: none; box-shadow: 0 4px 12px rgba(41, 98, 255, 0.4); cursor: pointer; display: flex; align-items: center; justify-content: center; transition: transform 0.2s, background 0.2s; position: relative; z-index: 10001; }
+.chat-fab { width: 75px; height: 60px; border-radius: 100%; background: #2962FF; border: none; box-shadow: 0 4px 12px rgba(41, 98, 255, 0.4); cursor: pointer; display: flex; align-items: center; justify-content: center; transition: transform 0.2s, background 0.2s; position: relative; z-index: 10001; }
 .chat-fab:hover { transform: scale(1.05); }
 .chat-fab.is-open { background: #ef4444; transform: rotate(90deg); }
 .icon-bubble { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; border-radius: 50%; overflow: hidden; background: white; position: relative; }
