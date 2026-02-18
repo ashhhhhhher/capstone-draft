@@ -133,8 +133,10 @@ onUnmounted(() => {
       </transition>
     </div>
 
-    <AboutUs :isOpen="showAboutPage" @close="showAboutPage = false" />
   </header>
+  <Teleport to="body">
+    <AboutUs :isOpen="showAboutPage" @close="showAboutPage = false" />
+  </Teleport>
 </template>
 
 <style scoped>
