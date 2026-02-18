@@ -23,13 +23,22 @@ const groupSearchQuery = ref('')
 const selectedMemberIds = ref([])
 
 // Init listeners when profile is ready
-onMounted(() => {
-  watch(() => authStore.userProfile, (profile) => {
-    if (profile) {
+watch(
+  () => [authStore.userProfile, authStore.branchId],
+  ([profile, branchId]) => {
+    if (!profile || !branchId) return
+    if (!profile.id) return
+    
+    try {
       chatStore.initChatListeners()
+    } catch (e) {
+      console.error("Chat init failed:", e)
     }
-  }, { immediate: true })
-})
+  },
+  { immediate: true }
+)
+
+
 
 watch(() => chatStore.messages, () => {
   nextTick(() => {
