@@ -71,7 +71,7 @@ watch(() => eventsStore.currentEvent, (newEvent, oldEvent) => {
   align-items: center;
   justify-content: center;
   height: 100vh;
-  background-color: #f4f7f9;
+  background-color: #fbfbfb;
   color: #0D47A1;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
 }
