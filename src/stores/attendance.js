@@ -115,11 +115,31 @@ export const useAttendanceStore = defineStore('attendance', () => {
     console.debug('logDgroupMeeting called with:', meetingData)
     // write weekly meeting logs into the dgroupEvents -> {dgroupId}/meetings/{meetingDate}
     if (!meetingData) return { status: 'error', message: 'Missing meeting data' }
-    // Accept dgroupId in several possible fields for robustness
-    const dgroupId = meetingData.dgroupId || meetingData.dgroup || meetingData.groupId || meetingData.group?.dgroupId
+    // Resolve target dgroupId. We primarily accept an explicit dgroupId, but
+    // also allow a leader pointer (dgroupLeaderId / leaderId) and resolve it
+    // to the leader's dgroupId when possible for backwards compatibility.
+    let dgroupId = meetingData.dgroupId || meetingData.dgroup || meetingData.groupId || meetingData.group?.dgroupId
+    const leaderId = meetingData.dgroupLeaderId || meetingData.leaderId || meetingData.leader || null
+
+    if (!dgroupId && leaderId) {
+      // Try to resolve leader's dgroupId from members store
+      try {
+        const membersStore = useMembersStore()
+        const leader = (membersStore.activeMembers || []).find(m => m.id === leaderId)
+        if (leader && leader.dgroupId) dgroupId = leader.dgroupId
+        else {
+          // Fallback: use leaderId as collection key to avoid failure (keeps data accessible)
+          dgroupId = leaderId
+        }
+      } catch (e) {
+        console.warn('Failed to resolve leader -> dgroupId, falling back to leaderId as dgroupId', e)
+        dgroupId = leaderId
+      }
+    }
+
     if (!dgroupId) {
-      console.error('Missing dgroupId in meeting data:', meetingData)
-      return { status: 'error', message: 'Missing dgroupId in meeting data' }
+      console.error('Missing dgroupId or leaderId in meeting data:', meetingData)
+      return { status: 'error', message: 'Missing dgroupId or leaderId in meeting data' }
     }
 
     try {
