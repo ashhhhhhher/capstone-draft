@@ -226,8 +226,8 @@ async function adminOverrideRequest(req, action) {
                 <span class="sub-text">Leader: {{ req.request.leaderName }}</span>
              </div>
              <div class="pending-actions">
-                <button class="btn-xs approve" @click="adminOverrideRequest(req, 'approve')">Force Approve</button>
-                <button class="btn-xs reject" @click="adminOverrideRequest(req, 'reject')">Reject</button>
+                <button class="btn-xs approve" @click="adminOverrideRequest(req, 'approve')">Approve</button>
+
              </div>
           </div>
        </div>
