@@ -232,7 +232,7 @@ async function joinDgroupById() {
       }
     } catch (e) {
       // Non-fatal: log but don't block the user
-      console.warn('Failed to assign dgroupId after join:', e)
+        console.warn('Failed to assign dgroupLeaderId after join:', e)
     }
     joinStatus.value = { type: 'success', msg: `Joined ${leaderName}'s group!` }
     setTimeout(() => { showJoinByIdModal.value = false }, 1500);

@@ -64,10 +64,25 @@ const todayMeeting = computed(() => {
 })
 
 const dgroupMembersForModal = computed(() => {
-  const dgid = memberProfile.value?.dgroupId
-  if (!dgid) return []
-  return membersStore.activeMembers.filter(m => m.dgroupId === dgid)
+  const leaderId =
+    memberProfile.value?.id || null
+
+  if (!leaderId) return []
+
+  const downlines = membersStore.activeMembers.filter(
+    m => m.dgroupLeaderId === leaderId
+  )
+
+  // find the leader herself
+  const leaderSelf = membersStore.activeMembers.find(
+    m => m.id === leaderId
+  )
+
+  return leaderSelf
+    ? [leaderSelf, ...downlines]
+    : downlines
 })
+
 
 const upcomingDgroupMeetings = computed(() => {
   const today = localYMD()
@@ -252,6 +267,7 @@ function formatShortDate(dateStr) { if (!dateStr) return ''; return new Date(dat
     <DgroupAttendanceModal
       v-if="showAttendanceModal && isDgroupLeader"
       :group="{ dgroupId: memberProfile.value?.dgroupId, dgroupName: memberProfile.value?.dgroupName }"
+      :leader-id="memberProfile.value?.id"
       :members="dgroupMembersForModal"
       :meeting="todayMeeting"
       @close="showAttendanceModal = false"

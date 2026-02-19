@@ -64,7 +64,7 @@ async function saveTransfer(member) {
   if (!confirm(`Transfer ${member.firstName} to ${newLeader}'s DGroup?`)) return
 
   try {
-    // Resolve leader id and use centralized assign function so dgroupId is set automatically
+    // Resolve leader id and use centralized assign function so dgroupLeaderId is set (do not auto-change dgroupId)
     const leaderObj = leaders.value.find(l => `${l.firstName} ${l.lastName}` === newLeader)
     if (leaderObj && leaderObj.id) {
       await membersStore.assignDgroupLeader(member.id, leaderObj.id)

@@ -8,6 +8,7 @@ import { ClipboardCheck } from 'lucide-vue-next'
 const props = defineProps({
 	group: { type: Object, required: true },
 	members: { type: Array, required: true },
+	leaderId: { type: String, required: false },
 	meeting: { type: Object, required: false }
 })
 const emit = defineEmits(['close','saved'])
@@ -47,10 +48,12 @@ async function buildChecklist() {
 	}
 
 	const checklist = {}
-	// Prefer deriving members from the members store by group id
+	// Prefer deriving members from the members store by leader id (dgroupLeaderId)
 	let membersList = []
-	if (props.group && props.group.dgroupId) {
-		membersList = membersStore.activeMembers.filter(m => m.dgroupId === props.group.dgroupId)
+	// Prefer explicit leaderId prop, fallback to resolving from the passed group object
+	const leaderPointer = props.leaderId || props.group?.dgroupLeaderId || props.group?.leaderId || props.group?.id || null
+	if (leaderPointer) {
+		membersList = membersStore.activeMembers.filter(m => m.dgroupLeaderId === leaderPointer)
 	}
 	// Fallback to props.members if store-based list is empty
 	if (!membersList || membersList.length === 0) {
@@ -100,19 +103,27 @@ async function submitAttendance() {
 		alert('Only Dgroup leaders can submit attendance.')
 		return
 	}
-	// determine dgroupId: prefer passed prop, fallback to auth profile
-	const resolvedDgroupId = props.group?.dgroupId || props.group?.id || props.group?.dgroup || props.group?.groupId || authStore.userProfile?.dgroupId
-	const payload = {
-		dgroupId: resolvedDgroupId,
+		// determine leaderId: prefer explicit prop, then group fields, then auth profile
+		const resolvedLeaderId =
+		props.leaderId ||
+		props.group?.leaderId ||
+		props.group?.dgroupLeaderId ||
+		props.group?.id ||
+		authStore.userProfile?.dgroupLeaderId ||
+		authStore.userProfile?.id; // if leader logging own group
+
+		const payload = {
+		dgroupLeaderId: resolvedLeaderId,
 		meetingDate: attendanceForm.date,
 		attendees: attendanceForm.attendees,
 		conversations: attendanceForm.conversations || 0,
 		evangelized: attendanceForm.evangelized || 0,
 		guests: attendanceForm.guests || 0,
 		locked: false
-	}
+		};
 
-	console.debug('Submitting Dgroup attendance payload:', payload, 'props.group:', props.group, 'auth.dgroupId:', authStore.userProfile?.dgroupId)
+
+	console.debug('Submitting Dgroup attendance payload:', payload, 'props.group:', props.group, 'props.leaderId:', props.leaderId, 'auth.dgroupLeaderId:', authStore.userProfile?.dgroupLeaderId)
 
 		try {
 		const res = await attendanceStore.logDgroupMeeting(payload)
@@ -161,9 +172,7 @@ async function confirmEndMeeting() {
 					<input type="checkbox" v-model="data.isPresent" :disabled="!isLeader" />
 					<div class="member-info-stack" style="flex: 1; margin-left: 8px;">
 						<span class="member-name" :style="{ fontWeight: data.scanned ? '400' : '400' }">{{ data.name }}</span>
-						<div v-if="data.scanned" style="color: #2E7D32; font-size: 10px; display: flex; align-items: center; gap: 2px;">
-							<ClipboardCheck :size="10" /> VERIFIED SCAN
-						</div>
+
 					</div>
 					<select v-model="data.tag" class="status-select" :disabled="!data.isPresent || !isLeader">
 						<option value="DL">DL</option>

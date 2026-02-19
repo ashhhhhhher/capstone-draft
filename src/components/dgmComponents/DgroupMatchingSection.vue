@@ -194,7 +194,8 @@ async function assignLeader(leaderName) {
 }
 
 async function adminOverrideRequest(req, action) {
-  const dgroupData = action === 'approve' ? { leaderName: req.request.leaderName, dgroupId: req.request.dgroupId } : null;
+  // When overriding, pass the leader id (dgroupLeaderId) rather than a group code
+  const dgroupData = action === 'approve' ? { leaderName: req.request.leaderName, leaderId: req.request.leaderId || req.request.dgroupLeaderId } : null;
   if (!confirm(`ADMIN OVERRIDE: Are you sure you want to ${action} this request for ${req.request.leaderName}?`)) return;
   
   try {

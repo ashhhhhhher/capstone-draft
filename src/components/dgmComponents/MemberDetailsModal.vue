@@ -207,14 +207,15 @@ async function save() {
     const isSpecialNA = !selection || selection === 'N/A (D-Lead)' || selection === 'N/A (First Timer)';
     if (isSpecialNA) {
       await membersStore.assignDgroupLeader(editableMember.value.id, null);
-      editableMember.value.dgroupId = null;
+      // clear the leader pointer (use dgroupLeaderId as the canonical leader reference)
+      editableMember.value.dgroupLeaderId = null;
     } else {
       // Try to resolve leader id by name
       const leaderObj = leaders.value.find(l => `${l.firstName} ${l.lastName}` === selection);
       if (leaderObj && leaderObj.id) {
         await membersStore.assignDgroupLeader(editableMember.value.id, leaderObj.id);
-        // Ensure local copy has the leader's dgroupId so parent update doesn't overwrite it
-        editableMember.value.dgroupId = leaderObj.dgroupId || leaderObj.dgroupDetails?.dgroupId || editableMember.value.dgroupId || null;
+        // Ensure local copy has the leader's id pointer so parent update doesn't overwrite it
+        editableMember.value.dgroupLeaderId = leaderObj.id || leaderObj.dgroupLeaderId || editableMember.value.dgroupLeaderId || null;
       } else {
         // No leader id resolved — keep editableMember values and let parent update persist name
       }
