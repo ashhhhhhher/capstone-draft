@@ -2,7 +2,7 @@
 import { useAuthStore } from '../stores/auth'
 import { useRouter } from 'vue-router'
 import { watch, ref } from 'vue'
-import AboutUsOverlay from '../components/dgmComponents/About us.vue'
+import AboutUsOverlay from '../components/dgmComponents/AboutUs.vue'
 
 const authStore = useAuthStore()
 const router = useRouter()
