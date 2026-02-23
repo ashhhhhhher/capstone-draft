@@ -6,6 +6,7 @@ import { useRouter } from 'vue-router'
 import { MapPin, QrCode, BarChart2, Clock, Info, X, Sparkles, Plus, ClipboardCheck } from 'lucide-vue-next'
 import DgroupMeetingModal from '../components/memberComponents/DgroupMeetingModal.vue'
 import DgroupAttendanceModal from '../components/memberComponents/DgroupAttendanceModal.vue'
+import BackgroundHero from '../components/dgmComponents/Background.vue' // Added Background component
 import { useMembersStore } from '../stores/members'
 import { useDgroupEventsStore } from '../stores/dgroupevents'
 
@@ -136,6 +137,9 @@ function formatShortDate(dateStr) { if (!dateStr) return ''; return new Date(dat
 <template>
   <div class="home-view">
     
+    <!-- Hero Background Component -->
+    <BackgroundHero />
+
     <section v-if="isFirstTime" class="discovery-section">
       <div class="section-header">
         <div class="header-flex"><Sparkles :size="20" color="#FBC02D" class="pulse" /> <h3>Discover Your Community</h3></div>
@@ -299,6 +303,7 @@ function formatShortDate(dateStr) { if (!dateStr) return ''; return new Date(dat
 .home-view { display: flex; flex-direction: column; gap: 24px; padding-bottom: 30px; background: #F8FAFC; min-height: 100vh; }
 .header-flex { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
 .section-header h3 { font-size: 19px; color: #0F172A; font-weight: 800; letter-spacing: -0.02em; display: flex; align-items: center; gap: 8px; }
+.discovery-section, .quick-actions, .today-section, .upcoming-column, .section-header { padding: 0 32px; }
 .hero-stack { display: flex; flex-direction: column; gap: 16px; }
 .quick-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
 .action-card { background: #ffffff; padding: 20px 16px; border-radius: 24px; display: flex; flex-direction: column; align-items: center; gap: 14px; box-shadow: 0 4px 20px rgba(0,0,0,0.03); cursor: pointer; transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1); border: 1px solid rgba(0,0,0,0.04); position: relative; overflow: hidden; }
@@ -306,18 +311,14 @@ function formatShortDate(dateStr) { if (!dateStr) return ''; return new Date(dat
 .action-card span { font-size: 13px; font-weight: 700; color: #334155; text-align: center; line-height: 1.3; z-index: 2; }
 .icon-bg { width: 56px; height: 56px; border-radius: 20px; display: flex; align-items: center; justify-content: center; transition: transform 0.3s ease; z-index: 2; }
 .action-card:hover .icon-bg { transform: scale(1.1) rotate(5deg); }
-
-/* Colorful Action Cards */
 .icon-bg.blue { background: linear-gradient(135deg, #E3F2FD 0%, #BBDEFB 100%); color: #1976D2; }
 .icon-bg.green { background: linear-gradient(135deg, #E8F5E9 0%, #C8E6C9 100%); color: #388E3C; }
 .icon-bg.yellow { background: linear-gradient(135deg, #FFFDE7 0%, #FFF9C4 100%); color: #FBC02D; }
 .icon-bg.red { background: linear-gradient(135deg, #FFEBEE 0%, #FFCDD2 100%); color: #D32F2F; }
-
 .action-blue:hover { border-color: #BBDEFB; background: linear-gradient(to bottom, #fff, #F0F9FF); }
 .action-green:hover { border-color: #C8E6C9; background: linear-gradient(to bottom, #fff, #F1F8E9); }
 .action-yellow:hover { border-color: #FFF9C4; background: linear-gradient(to bottom, #fff, #FFFDE7); }
 .action-red:hover { border-color: #FFCDD2; background: linear-gradient(to bottom, #fff, #FFEBEE); }
-
 .today-section { display: flex; flex-direction: column; gap: 16px; }
 .today-card { border-radius: 28px; position: relative; overflow: hidden; min-height: 180px; cursor: pointer; box-shadow: 0 15px 35px rgba(0,0,0,0.1); border: 1px solid rgba(255,255,255,0.1); transition: transform 0.3s ease; }
 .today-card:hover { transform: scale(1.01); }
@@ -329,21 +330,16 @@ function formatShortDate(dateStr) { if (!dateStr) return ''; return new Date(dat
 .bg-yellow { background: rgba(251, 192, 45, 0.9); color: #1A237E; }
 .meeting-title { font-size: 24px; font-weight: 800; margin: 0 0 8px 0; text-shadow: 0 2px 4px rgba(0,0,0,0.1); }
 .dgroup-meta, .dgroup-venue { font-size: 14px; color: rgba(255,255,255,0.95); display: flex; align-items: center; gap: 8px; margin-bottom: 6px; font-weight: 500; }
-
 .empty-state { background: white; color: #64748B; padding: 48px 24px; text-align: center; border-radius: 24px; border: 2px dashed #E2E8F0; display: flex; flex-direction: column; align-items: center; justify-content: center; box-shadow: none; }
 .empty-icon { margin-bottom: 16px; opacity: 0.8; background: #F1F5F9; padding: 16px; border-radius: 50%; }
 .empty-state h3 { font-size: 18px; color: #334155; margin: 0 0 8px 0; font-weight: 700; }
 .empty-state p { font-size: 14px; margin: 0; max-width: 260px; line-height: 1.5; }
-
 .events-scroll-container { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; padding: 8px 4px 24px 4px; }
 .upcoming-card { border-radius: 24px; background: white; overflow: hidden; box-shadow: 0 10px 25px rgba(0,0,0,0.04); transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1); cursor: pointer; display: flex; flex-direction: column; height: 100%; border: 1px solid rgba(0,0,0,0.03); position: relative; }
 .upcoming-card:hover { transform: translateY(-8px); box-shadow: 0 20px 40px rgba(0,0,0,0.08); }
-
-/* Accent lines for cards */
 .upcoming-card::after { content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 4px; background: #E2E8F0; }
 .event-accent-blue::after { background: #2196F3; }
 .dgroup-accent-purple::after { background: #7E57C2; }
-
 .card-media { height: 160px; position: relative; overflow: hidden; }
 .card-media img { width: 100%; height: 100%; object-fit: cover; }
 .card-details { padding: 18px; flex: 1; display: flex; flex-direction: column; gap: 10px; }
@@ -354,7 +350,6 @@ function formatShortDate(dateStr) { if (!dateStr) return ''; return new Date(dat
 .card-tag.purple { background: #F3E5F5; color: #5E35B1; }
 .card-meta-row { display: flex; align-items: center; gap: 6px; font-size: 13px; color: #64748B; margin-top: auto; font-weight: 500; }
 .card-minor { font-size: 12px; color: #94A3B8; font-style: italic; margin-top: 4px; }
-
 .modal-overlay { position: fixed; inset: 0; background: rgba(13, 71, 161, 0.4); backdrop-filter: blur(8px); z-index: 200; display: flex; align-items: center; justify-content: center; padding: 20px; }
 .event-modal { background: white; width: 100%; max-width: 440px; border-radius: 32px; overflow: hidden; box-shadow: 0 25px 50px rgba(0,0,0,0.25); }
 .modal-hero { height: 240px; background-size: cover; background-position: center; position: relative; background-color: #1A237E; }
@@ -372,6 +367,6 @@ function formatShortDate(dateStr) { if (!dateStr) return ''; return new Date(dat
 .pulse { animation: pulse-animation 2s infinite; }
 @keyframes pulse-animation { 0% { transform: scale(1); } 50% { transform: scale(1.15); } 100% { transform: scale(1); } }
 @media (max-width: 1024px) { .events-scroll-container { grid-template-columns: repeat(2, 1fr); } }
-@media (max-width: 600px) { .events-scroll-container { grid-template-columns: 1fr; } .quick-actions { grid-template-columns: 1fr 1fr; } .action-card { padding: 16px 10px; } .today-card { min-height: 140px; } .meeting-title { font-size: 18px; } }
+@media (max-width: 600px) { .events-scroll-container { grid-template-columns: 1fr; } .quick-actions { grid-template-columns: 1fr 1fr; } .action-card { padding: 16px 10px; } .today-card { min-height: 140px; } .meeting-title { font-size: 18px; } .discovery-section, .quick-actions, .today-section, .upcoming-column, .section-header { padding: 0 16px; } }
 .action-card.disabled { opacity: 0.5; filter: grayscale(1); cursor: not-allowed; pointer-events: none; }
 </style>

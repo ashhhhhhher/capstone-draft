@@ -15,6 +15,9 @@ import AttendanceListModal from '../components/dgmComponents/AttendanceListModal
 import CalendarModal from '../components/dgmComponents/CalendarModal.vue' 
 import AbsenceMonitoring from '../components/dgmComponents/AbsenceMonitoring.vue'
 
+// --- NEW COMPONENT IMPORT ---
+import Background from '../components/dgmComponents/Background.vue'
+
 const router = useRouter()
 const notificationsStore = useNotificationsStore()
 const { members } = storeToRefs(useMembersStore())
@@ -121,6 +124,9 @@ async function handleEndCurrentEvent() {
       <AppHeader />
     </div>
 
+    <!-- HERO SECTION INJECTED HERE -->
+    <Background />
+
     <div class="main-content">
       <!-- Summary Section -->
       <div class="hero-layout">
@@ -191,16 +197,13 @@ async function handleEndCurrentEvent() {
     </div>
   </div>
   
+  <!-- Modals keep logic unchanged -->
   <Modal v-if="showCreateEventModal" @close="showCreateEventModal = false"><CreateEventForm :eventToEdit="eventToEdit" @close="showCreateEventModal = false" /></Modal>
   <Modal v-if="showAttendanceModal" @close="showAttendanceModal = false" size="xl"><AttendanceListModal :attendees="filteredAttendees" :filterTitle="selectedStatFilter" @close="showAttendanceModal = false" /></Modal>
   <Modal v-if="showCalendarModal" @close="showCalendarModal = false" size="xl"><CalendarModal @close="showCalendarModal = false" @createEvent="handleCreateEvent" @editEvent="handleEditEvent" /></Modal>
-
   <Modal v-if="showEventDetailsModal" @close="showEventDetailsModal = false" size="xl">
     <div class="event-details-content">
-      <div class="details-header">
-        <h3>{{ currentEvent?.name }}</h3>
-        <span class="badge">{{ currentEvent?.eventType }}</span>
-      </div>
+      <div class="details-header"><h3>{{ currentEvent?.name }}</h3><span class="badge">{{ currentEvent?.eventType }}</span></div>
       <div class="details-grid">
         <div class="info-item"><strong>Date:</strong> {{ formattedEventDate }}</div>
         <div class="info-item"><strong>Location:</strong> {{ currentEvent?.eventLocation }}</div>
@@ -218,8 +221,8 @@ async function handleEndCurrentEvent() {
 .dashboard-container { background: #fdfdfd; min-height: 100vh; color: #1e293b; position: relative; }
 .sticky-header { position: sticky; top: 0; z-index: 100; background: #ffffff; padding: 12px 32px; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); border-bottom: 1px solid #f1f5f9; }
 .sticky-header.scrolled { background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(12px); box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05); padding: 8px 32px; }
-.main-content { padding: 24px 32px 40px 32px; }
-.hero-layout { display: grid; grid-template-columns: 380px 1fr; gap: 24px; margin-bottom: 32px; align-items: stretch; }
+.main-content { padding: 0 32px 40px 32px; } /* Removed top padding to sit closer to hero */
+.hero-layout { display: grid; grid-template-columns: 380px 1fr; gap: 24px; margin-bottom: 32px; align-items: stretch; margin-top: 24px; }
 .total-attendance-card { background: #ffffff; border-radius: 24px; padding: 40px 32px; cursor: pointer; position: relative; overflow: hidden; border: 1px solid #f1f5f9; box-shadow: 0 10px 30px rgba(0,0,0,0.03); transition: transform 0.3s ease; }
 .total-attendance-card:hover { transform: translateY(-4px); }
 .card-accent-bg { position: absolute; top: -50%; right: -20%; width: 250px; height: 250px; background: radial-gradient(circle, rgba(15, 71, 161, 0.08) 0%, transparent 70%); }
