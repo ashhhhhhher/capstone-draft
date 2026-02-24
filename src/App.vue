@@ -66,35 +66,3 @@ watch(() => eventsStore.currentEvent, (newEvent, oldEvent) => {
     <ChatBox v-if="authStore.user" />
   </div>
 </template>
-
-<style>
-/* (Your global styles are all the same) */
-.loading-container {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  height: 100vh;
-  background-color: #fbfbfb;
-  color: #0D47A1;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-}
-.spinner {
-  width: 50px;
-  height: 50px;
-  border: 5px solid #CFD8DC;
-  border-top-color: #1976D2;
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
-}
-.loading-container p {
-  margin-top: 20px;
-  font-size: 16px;
-  font-weight: 500;
-}
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-</style>
