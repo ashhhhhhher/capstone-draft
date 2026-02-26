@@ -1,14 +1,18 @@
 <script setup>
-import { defineProps, defineEmits, ref } from 'vue'
+import { ref } from 'vue'
+
 const props = defineProps({ isOpen: { type: Boolean, default: false } })
 const emit = defineEmits(['close'])
+
 const scrollContainer = ref(null)
 const selectedFeature = ref(null)
+
 const features = {
   wknd: { title: 'ELEVATE WKND', desc: 'Unwind with us at our every other week gatherings!', longDesc: 'Our youth gathering! A service designed for high school, college students and singles to experience awesome worship, meet new friends, and hear life-changing messages.', info: 'Hotel Supreme | 5:00PM onwards', img: '/elevate logo.jpg' },
   groups: { title: 'DISCIPLESHIP GROUPS', desc: 'Find a group of friends you can grow with.', longDesc: 'Join a Dgroup! A Dgroup is a small group of students who meet to talk about life, study the Bible, and support one another. Where "big" services become "personal" friendships. No matter where you are in your journey.', info: 'how to join?', img: '/group2.jpg' },
   unite: { title: 'Campus UNITE', desc: 'Celebrating God’s faithfulness and ministry anniversary.', longDesc: 'Campus Unite is the massive annual anniversary celebration of Elevate! It brings together students from different campuses for a night of worship, powerful testimonies, and a shared vision to transform our nation. Our biggest event of the year with a purpose that lasts.', info: 'Happens around June - August', img: '/unitesm.jpg' }
 }
+
 function handleClose() { emit('close') }
 function scrollToSection(id) { const el = document.getElementById(id); if (el) el.scrollIntoView({ behavior: 'smooth' }) }
 function openFeature(key) { selectedFeature.value = features[key] }

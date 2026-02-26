@@ -1,30 +1,90 @@
 <script setup>
-defineProps({ title: { type: String, default: 'DGM HOME' } })
+import { ref, onMounted, onUnmounted } from 'vue';
+const props = defineProps({ title: { type: String, default: 'HOMEPAGE' } });
+
+const services = [
+  {
+    id: 'elevate',
+    badge: 'INTRODUCING',
+    bgImage: '/unitesm.jpg',
+    title: 'Elevating the',
+    highlight: 'Next Generation',
+    description: 'Empowering students through leadership, rooted in values, and committed to excellence.',
+    contact: '09176573341',
+    socials: '@ElevateBaguioPH',
+    email: 'elevatebaguio00@gmail.com',
+    color: '#D32F2F',
+    accent: '#0d47a1'
+  },
+  {
+    id: 'b1g',
+    badge: 'B1G Singles',
+    bgImage: '/group2.jpg', 
+    title: 'Be One with',
+    highlight: 'God',
+    description: 'A community where every student belongs. Experience faith, fun, and fellowship every week.',
+    contact: '09776342733',
+    socials: '@B1GBaguio',
+    color: '#1e88e5',
+    accent: '#ffd600'
+  },
+  {
+    id: 'wknd',
+    badge: 'WKND SERVICE',
+    bgImage: '/hugs.jpg',
+    title: 'Start your',
+    highlight: 'WKND Right',
+    description: 'Join our weekend gatherings for powerful worship and messages that resonate with your life.',
+    schedule: 'Saturdays at 5PM',
+    cta: 'Check out socials to be updated with future events',
+    color: '#43a047',
+    accent: '#ffffff'
+  }
+];
+
+const currentIndex = ref(0);
+let timer = null;
+
+const startCycle = () => { timer = setInterval(() => { currentIndex.value = (currentIndex.value + 1) % services.length; }, 5000); };
+
+onMounted(() => startCycle());
+onUnmounted(() => clearInterval(timer));
+
+const setSlide = (index) => { currentIndex.value = index; clearInterval(timer); startCycle(); };
 </script>
 
 <template>
   <div class="hero-wrapper">
-    <div class="elevate-hero-dark">
-      <div class="hero-overlay"></div>
-      <div class="hero-content">
-        <div class="brand-badge">INTRODUCING</div>
-        <div class="logo-area">
-          <img src="/elevate word.PNG" alt="ELEVATE" class="hero-logo" />
-          <div class="shimmer"></div>
-        </div>
-        <h1 class="hero-title">Elevating the <span class="text-red">Next Generation</span></h1>
-        <p class="hero-description">
-          Empowering students through leadership, rooted in values, and committed to excellence.
-        </p>
-        <div class="hero-footer-meta">
-          <span class="location-tag">📍 BAGUIO</span>
-          <span class="dot"></span>
-          <span class="status-tag">Live Dashboard</span>
-        </div>
-      </div>
+    <div class="elevate-hero-dark" :style="{ backgroundImage: `url(${services[currentIndex].bgImage})` }">
+      <div class="hero-overlay" :style="{ background: `linear-gradient(90deg, rgba(10,10,11,0.85) 0%, rgba(10,10,11,0.3) 100%), radial-gradient(circle at 20% 50%, ${services[currentIndex].color}33 0%, transparent 50%)` }"></div>
       <div class="hero-visual-accents">
-        <div class="circle c1"></div>
-        <div class="circle c2"></div>
+        <div class="circle c1" :style="{ background: services[currentIndex].color }"></div>
+        <div class="circle c2" :style="{ background: services[currentIndex].accent }"></div>
+      </div>
+      <div class="shimmer-container"><div class="shimmer"></div></div>
+      <Transition name="hero-fade" mode="out-in">
+        <div :key="currentIndex" class="hero-content">
+          <div class="brand-badge" :style="{ color: services[currentIndex].color, borderColor: `${services[currentIndex].color}4d`, background: `${services[currentIndex].color}33` }">{{ services[currentIndex].badge }}</div>
+          <h1 class="hero-title">{{ services[currentIndex].title }} <span class="text-highlight" :style="{ color: services[currentIndex].color }">{{ services[currentIndex].highlight }}</span></h1>
+          <p class="hero-description">{{ services[currentIndex].description }}</p>
+          
+          <div class="info-details-container">
+            <template v-if="services[currentIndex].id === 'wknd'">
+              <div class="info-row"><span class="info-label">SCHEDULE</span> {{ services[currentIndex].schedule }}</div>
+              <div class="info-row italic">{{ services[currentIndex].cta }}</div>
+            </template>
+            <template v-else>
+              <div class="info-row" v-if="services[currentIndex].socials"><span class="info-label">SOCIALS</span> {{ services[currentIndex].socials }}</div>
+              <div class="info-row" v-if="services[currentIndex].contact"><span class="info-label">CONTACT</span> {{ services[currentIndex].contact }}</div>
+              <div class="info-row" v-if="services[currentIndex].email"><span class="info-label">EMAIL</span> {{ services[currentIndex].email }}</div>
+            </template>
+          </div>
+
+          <div class="hero-footer-meta"><span class="location-tag">📍 BAGUIO</span><span class="dot"></span><span class="status-tag">Live Dashboard</span></div>
+        </div>
+      </Transition>
+      <div class="hero-nav">
+        <button v-for="(s, idx) in services" :key="s.id" @click="setSlide(idx)" :class="['nav-dot', { active: currentIndex === idx }]" :style="currentIndex === idx ? { background: services[currentIndex].color } : {}"></button>
       </div>
     </div>
   </div>
@@ -32,24 +92,32 @@ defineProps({ title: { type: String, default: 'DGM HOME' } })
 
 <style scoped>
 .hero-wrapper { padding: 24px 32px 0 32px; width: 100%; box-sizing: border-box; }
-.elevate-hero-dark { position: relative; width: 100%; min-height: 240px; height: auto; background: #0a0a0b; border-radius: 24px; display: flex; align-items: center; padding: 40px; overflow: hidden; color: #fff; box-shadow: 0 20px 40px rgba(0,0,0,0.2); border: 1px solid #1e1e20; box-sizing: border-box; }
-.hero-overlay { position: absolute; inset: 0; background: radial-gradient(circle at 20% 50%, rgba(211, 47, 47, 0.12) 0%, transparent 50%); z-index: 1; }
-.hero-content { position: relative; z-index: 10; max-width: 100%; animation: slideIn 0.8s ease-out; }
-.brand-badge { display: inline-block; padding: 4px 10px; background: rgba(211, 47, 47, 0.2); border: 1px solid rgba(211, 47, 47, 0.3); color: #ff5252; font-size: 9px; font-weight: 900; letter-spacing: 2.5px; border-radius: 4px; margin-bottom: 8px; }
-.logo-area { position: relative; margin-bottom: 4px; display: inline-block; }
-.hero-logo { height: clamp(32px, 5vw, 48px); filter: drop-shadow(0 0 15px rgba(255, 255, 255, 0.1)); width: auto; }
-.shimmer { position: absolute; top: 0; left: -100%; width: 50%; height: 100%; background: linear-gradient(90deg, transparent, rgba(255,255,255,0.15), transparent); animation: sweep 3s infinite; }
-.hero-title { font-size: clamp(20px, 4vw, 24px); font-weight: 800; letter-spacing: -0.5px; margin: 4px 0; line-height: 1.1; }
-.text-red { color: #D32F2F; }
-.hero-description { font-size: clamp(13px, 2vw, 14px); color: #a1a1aa; line-height: 1.4; max-width: 420px; margin-top: 8px; }
-.hero-footer-meta { margin-top: 20px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; font-size: 10px; font-weight: 700; color: #71717a; text-transform: uppercase; letter-spacing: 1px; }
-.dot { width: 4px; height: 4px; background: #3f3f46; border-radius: 50%; }
-.hero-visual-accents .circle { position: absolute; border-radius: 50%; filter: blur(60px); opacity: 0.25; z-index: 2; pointer-events: none; }
-.c1 { width: clamp(150px, 30vw, 220px); height: clamp(150px, 30vw, 220px); background: #D32F2F; top: -10%; right: -5%; }
-.c2 { width: clamp(100px, 20vw, 160px); height: clamp(100px, 20vw, 160px); background: #0d47a1; bottom: -5%; right: 15%; }
+.elevate-hero-dark { position: relative; width: 100%; min-height: 380px; background-size: cover; background-position: center; border-radius: 24px; display: flex; align-items: center; padding: 40px; overflow: hidden; color: #fff; box-shadow: 0 20px 40px rgba(0,0,0,0.3); border: 1px solid #1e1e20; box-sizing: border-box; transition: background-image 1s ease-in-out; }
+.hero-overlay { position: absolute; inset: 0; z-index: 1; transition: background 1s ease; }
+.shimmer-container { position: absolute; inset: 0; z-index: 2; pointer-events: none; }
+.shimmer { position: absolute; top: 0; left: -100%; width: 50%; height: 100%; background: linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent); animation: sweep 4s infinite; }
+.hero-content { position: relative; z-index: 10; max-width: 100%; width: 100%; }
+.brand-badge { display: inline-block; padding: 4px 10px; font-size: 9px; font-weight: 900; letter-spacing: 2.5px; border-radius: 4px; margin-bottom: 12px; transition: all 0.5s ease; border: 1px solid; backdrop-filter: blur(4px); }
+.hero-title { font-size: clamp(24px, 5vw, 32px); font-weight: 800; letter-spacing: -0.5px; margin: 8px 0; line-height: 1.1; text-shadow: 0 2px 10px rgba(0,0,0,0.6); }
+.text-highlight { transition: color 0.5s ease; }
+.hero-description { font-size: clamp(14px, 2vw, 15px); color: #f4f4f5; line-height: 1.5; max-width: 480px; margin-top: 12px; text-shadow: 0 1px 5px rgba(0,0,0,0.6); }
+.info-details-container { margin-top: 20px; display: flex; flex-direction: column; gap: 6px; }
+.info-row { font-size: 13px; font-weight: 500; color: rgba(255,255,255,0.9); display: flex; align-items: center; gap: 10px; }
+.info-label { font-size: 10px; font-weight: 800; color: rgba(255,255,255,0.5); letter-spacing: 0.1em; width: 70px; }
+.italic { font-style: italic; color: rgba(255,255,255,0.7); font-size: 12px; }
+.hero-footer-meta { margin-top: 24px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; font-size: 10px; font-weight: 700; color: #d4d4d8; text-transform: uppercase; letter-spacing: 1px; }
+.dot { width: 4px; height: 4px; background: #71717a; border-radius: 50%; }
+.hero-visual-accents .circle { position: absolute; border-radius: 50%; filter: blur(80px); opacity: 0.3; z-index: 2; pointer-events: none; transition: background 1s ease; }
+.c1 { width: 250px; height: 250px; top: -10%; right: -5%; }
+.c2 { width: 200px; height: 200px; bottom: -5%; right: 15%; }
+.hero-nav { position: absolute; bottom: 25px; right: 40px; display: flex; gap: 10px; z-index: 20; }
+.nav-dot { width: 10px; height: 10px; border-radius: 50%; background: rgba(255,255,255,0.2); border: none; cursor: pointer; transition: all 0.3s ease; padding: 0; }
+.nav-dot.active { transform: scale(1.4); }
 @keyframes sweep { 100% { left: 200%; } }
-@keyframes slideIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
-@media (max-width: 1024px) { .hero-wrapper { padding: 20px 24px 0 24px; } .elevate-hero-dark { padding: 32px; min-height: 220px; } }
-@media (max-width: 768px) { .hero-wrapper { padding: 16px 16px 0 16px; } .elevate-hero-dark { padding: 24px; border-radius: 20px; } .hero-content { text-align: left; } .hero-footer-meta { margin-top: 16px; } }
-@media (max-width: 480px) { .hero-wrapper { padding: 12px 12px 0 12px; } .elevate-hero-dark { padding: 20px; min-height: 200px; border-radius: 16px; } .hero-description { max-width: 100%; } .hero-visual-accents .circle { opacity: 0.15; } }
+.hero-fade-enter-active, .hero-fade-leave-active { transition: all 0.6s cubic-bezier(0.4, 0, 0.2, 1); }
+.hero-fade-enter-from { opacity: 0; transform: translateY(10px); }
+.hero-fade-leave-to { opacity: 0; transform: translateY(-10px); }
+@media (max-width: 1024px) { .hero-wrapper { padding: 20px 24px 0 24px; } .elevate-hero-dark { padding: 32px; min-height: 280px; } }
+@media (max-width: 768px) { .hero-wrapper { padding: 16px 16px 0 16px; } .elevate-hero-dark { padding: 24px; border-radius: 20px; } .hero-nav { right: 50%; transform: translateX(50%); bottom: 20px; } }
+@media (max-width: 480px) { .hero-wrapper { padding: 12px 12px 0 12px; } .elevate-hero-dark { padding: 20px; min-height: 300px; } }
 </style>

@@ -49,19 +49,21 @@ function openDetails() { emit('open-details') }
 </template>
 
 <style scoped>
-.event-snapshot { border-radius: 20px; padding: 20px 32px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05); display: flex; justify-content: space-between; align-items: center; position: relative; overflow: hidden; height: 82%; transition: all 0.3s ease; cursor: pointer; border: 1px solid #fecaca; }
-.event-snapshot.red-bg { background-color: #fff1f2; border: 1px solid #fee2e2; }
-.event-info { flex-grow: 1; margin-right: 12px; position: relative; z-index: 2; display: flex; flex-direction: column; justify-content: center; }
-.event-type-tag { display: inline-block; background: rgba(255, 255, 255, 0.2); color: white; padding: 2px 10px; border-radius: 100px; font-size: 9px; font-weight: 800; margin-bottom: 8px; text-transform: uppercase; width: fit-content; }
-.event-type-tag.light { background: #ef4444; color: #ffffff; }
-.event-info .date { font-size: 13px; color: #991b1b; font-weight: 600; display: block; margin-bottom: 2px; opacity: 0.8; }
-.event-info .event-name { font-size: 24px; font-weight: 800; color: #7f1d1d; margin: 0; letter-spacing: -0.01em; line-height: 1.2; }
-.button-wrapper { flex-shrink: 0; position: relative; z-index: 2; }
-.manage-btn { background-color: #ef4444; color: white; border: none; border-radius: 10px; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: 0 4px 10px rgba(239, 68, 68, 0.2); transition: all 0.2s ease; }
+/* Main Container */
+.event-snapshot { border-radius: 20px; padding: 24px 32px; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.06); display: flex; flex-direction: row; justify-content: space-between; align-items: center; position: relative; overflow: hidden; min-height: 140px; transition: all 0.3s ease; cursor: pointer; border: 1px solid #fee2e2; }
+.event-snapshot.red-bg { background-color: #fef2f2; }
+/* Text Content Area */
+.event-info { position: relative; z-index: 2; display: flex; flex-direction: column; gap: 4px; flex-grow: 1; text-align: left; }
+.event-type-tag { display: inline-block; background: #ef4444; color: white; padding: 4px 12px; border-radius: 100px; font-size: 10px; font-weight: 800; text-transform: uppercase; margin-bottom: 6px; width: fit-content; }
+.event-info .date { font-size: 14px; color: #991b1b; font-weight: 600; opacity: 0.7; letter-spacing: 0.01em; }
+.event-info .event-name { font-size: 26px; font-weight: 800; color: #7f1d1d; margin: 0; line-height: 1.2; letter-spacing: -0.02em; }
+/* Button Area */
+.button-wrapper { position: relative; z-index: 2; flex-shrink: 0; margin-left: 20px; }
+.manage-btn { background-color: #ef4444; color: white; border: none; border-radius: 12px; width: 52px; height: 52px; display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: 0 6px 15px rgba(239, 68, 68, 0.25); transition: 0.2s ease; }
 .manage-btn:hover { background-color: #dc2626; transform: scale(1.05); }
-.event-snapshot.has-photo { background-size: cover; background-position: center; color: white; border: none; }
-.has-photo .overlay { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: linear-gradient(90deg, rgba(127, 29, 29, 0.9) 0%, rgba(127, 29, 29, 0.4) 100%); z-index: 1; }
-.has-photo .event-info .date { color: rgba(255, 255, 255, 0.9); }
-.has-photo .event-info .event-name { color: #fff; }
-.has-photo .manage-btn { background-color: rgba(255, 255, 255, 0.2); border: 1px solid rgba(255, 255, 255, 0.3); box-shadow: none; backdrop-filter: blur(4px); }
+/* Photo State Overrides */
+.event-snapshot.has-photo { background-size: cover; background-position: center; border: none; }
+.has-photo .overlay { position: absolute; inset: 0; background: linear-gradient(90deg, rgba(127, 29, 29, 0.9) 0%, rgba(127, 29, 29, 0.2) 100%); z-index: 1; }
+.has-photo .event-info .date, .has-photo .event-info .event-name { color: white; }
+.has-photo .manage-btn { background: rgba(255, 255, 255, 0.2); backdrop-filter: blur(8px); border: 1px solid rgba(255, 255, 255, 0.3); box-shadow: none; }
 </style>

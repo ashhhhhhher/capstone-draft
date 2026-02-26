@@ -14,9 +14,8 @@ import CreateEventForm from '../components/dgmComponents/CreateEventForm.vue'
 import AttendanceListModal from '../components/dgmComponents/AttendanceListModal.vue'
 import CalendarModal from '../components/dgmComponents/CalendarModal.vue' 
 import AbsenceMonitoring from '../components/dgmComponents/AbsenceMonitoring.vue'
-
-// --- NEW COMPONENT IMPORT ---
 import Background from '../components/dgmComponents/Background.vue'
+import EventCard from '../components/dgmComponents/EventCard.vue'
 
 const router = useRouter()
 const notificationsStore = useNotificationsStore()
@@ -88,7 +87,6 @@ const upcomingEvents = computed(() => {
   return allEvents.value.filter(e => e.date > todayStr).sort((a, b) => new Date(a.date) - new Date(b.date))
 })
 
-function formatShortDate(dateStr) { return new Date(dateStr + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) }
 const absenceMonitorRef = ref(null)
 function openAttendanceList(filter) { selectedStatFilter.value = filter; showAttendanceModal.value = true; }
 function openCalendar() { showCalendarModal.value = true; }
@@ -120,15 +118,13 @@ async function handleEndCurrentEvent() {
 
 <template>
   <div class="dashboard-container">
-    <div class="sticky-header" :class="{ 'scrolled': isScrolled }">
+    <div class="sticky-header" :class="{ 'at-top': !isScrolled }">
       <AppHeader />
     </div>
 
-    <!-- HERO SECTION INJECTED HERE -->
     <Background />
 
     <div class="main-content">
-      <!-- Summary Section -->
       <div class="hero-layout">
         <div class="total-attendance-card" @click="openAttendanceList('All')">
           <div class="card-accent-bg"></div>
@@ -147,7 +143,6 @@ async function handleEndCurrentEvent() {
         </div>
       </div>
 
-      <!-- Stats Breakdown -->
       <div class="stats-section">
         <div class="stats-grid">
           <AttendanceStats 
@@ -161,7 +156,6 @@ async function handleEndCurrentEvent() {
         </div>
       </div>
 
-      <!-- Upcoming Events Section -->
       <div class="upcoming-section">
         <div class="section-header">
           <h3>Upcoming Gatherings</h3>
@@ -169,23 +163,12 @@ async function handleEndCurrentEvent() {
         </div>
         
         <div v-if="upcomingEvents.length > 0" class="events-grid">
-          <div v-for="event in upcomingEvents" :key="event.id" class="event-card" @click="handleEditEvent(event)">
-            <div class="event-image">
-              <img v-if="event.photoURL" :src="event.photoURL" alt="Event" />
-              <div v-else class="event-placeholder"></div>
-              <div class="event-badge" :class="event.eventType">
-                {{ event.eventType === 'service' ? 'WKND' : (event.eventType === 'b1g_event' ? 'B1G' : 'CCF') }}
-              </div>
-            </div>
-            <div class="event-details">
-              <div class="event-date-row">
-                <span class="event-day">{{ formatShortDate(event.date) }}</span>
-                <span v-if="event.time" class="event-time">{{ event.time }}</span>
-              </div>
-              <h4 class="event-title">{{ event.name }}</h4>
-              <div class="event-loc"><strong>Location: </strong>{{ event.eventLocation || 'Online' }}</div>
-            </div>
-          </div>
+          <EventCard 
+            v-for="event in upcomingEvents" 
+            :key="event.id" 
+            :event="event" 
+            @click="handleEditEvent" 
+          />
         </div>
         
         <div v-else class="empty-state">
@@ -197,7 +180,6 @@ async function handleEndCurrentEvent() {
     </div>
   </div>
   
-  <!-- Modals keep logic unchanged -->
   <Modal v-if="showCreateEventModal" @close="showCreateEventModal = false"><CreateEventForm :eventToEdit="eventToEdit" @close="showCreateEventModal = false" /></Modal>
   <Modal v-if="showAttendanceModal" @close="showAttendanceModal = false" size="xl"><AttendanceListModal :attendees="filteredAttendees" :filterTitle="selectedStatFilter" @close="showAttendanceModal = false" /></Modal>
   <Modal v-if="showCalendarModal" @close="showCalendarModal = false" size="xl"><CalendarModal @close="showCalendarModal = false" @createEvent="handleCreateEvent" @editEvent="handleEditEvent" /></Modal>
@@ -219,11 +201,11 @@ async function handleEndCurrentEvent() {
 
 <style scoped>
 .dashboard-container { background: #fdfdfd; min-height: 100vh; color: #1e293b; position: relative; }
-.sticky-header { position: sticky; top: 0; z-index: 100; background: #ffffff; padding: 12px 32px; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); border-bottom: 1px solid #f1f5f9; }
-.sticky-header.scrolled { background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(12px); box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05); padding: 8px 32px; }
-.main-content { padding: 0 32px 40px 32px; } /* Removed top padding to sit closer to hero */
+.sticky-header { position: sticky; top: 0; z-index: 100; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); background: rgba(255, 255, 255, 0.95); }
+.sticky-header.at-top { background: #1976D2; }
+.main-content { padding: 0 32px 40px 32px; }
 .hero-layout { display: grid; grid-template-columns: 380px 1fr; gap: 24px; margin-bottom: 32px; align-items: stretch; margin-top: 24px; }
-.total-attendance-card { background: #ffffff; border-radius: 24px; padding: 40px 32px; cursor: pointer; position: relative; overflow: hidden; border: 1px solid #f1f5f9; box-shadow: 0 10px 30px rgba(0,0,0,0.03); transition: transform 0.3s ease; }
+.total-attendance-card { background: #b4d0e3; border-radius: 24px; padding: 40px 32px; cursor: pointer; position: relative; overflow: hidden; border: 1px solid #f1f5f9; box-shadow: 0 10px 30px rgba(0,0,0,0.03); transition: transform 0.3s ease; }
 .total-attendance-card:hover { transform: translateY(-4px); }
 .card-accent-bg { position: absolute; top: -50%; right: -20%; width: 250px; height: 250px; background: radial-gradient(circle, rgba(15, 71, 161, 0.08) 0%, transparent 70%); }
 .total-attendance-card .label { font-weight: 800; font-size: 12px; text-transform: uppercase; letter-spacing: 0.1em; color: #64748b; }
@@ -244,22 +226,11 @@ async function handleEndCurrentEvent() {
 .calendar-btn { background: #f1f5f9; border: none; padding: 10px 20px; border-radius: 12px; font-weight: 700; color: #475569; cursor: pointer; transition: 0.2s; }
 .calendar-btn:hover { background: #e2e8f0; }
 .events-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 24px; }
-.event-card { background: #fff; border-radius: 20px; overflow: hidden; border: 1px solid #f1f5f9; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); cursor: pointer; }
-.event-card:hover { transform: scale(1.02); box-shadow: 0 20px 40px rgba(0,0,0,0.06); }
-.event-image { position: relative; height: 180px; background: #f8fafc; }
-.event-image img { width: 100%; height: 100%; object-fit: cover; }
-.event-placeholder { height: 100%; background: linear-gradient(135deg, #0d47a1 0%, #3b82f6 100%); opacity: 0.9; }
-.event-badge { position: absolute; top: 12px; left: 12px; padding: 6px 12px; border-radius: 10px; font-size: 11px; font-weight: 900; color: #fff; backdrop-filter: blur(8px); }
-.event-badge.service { background: rgba(59, 130, 246, 0.8); } .event-badge.b1g_event { background: rgba(239, 68, 68, 0.8); }
-.event-details { padding: 20px; }
-.event-date-row { display: flex; gap: 12px; font-size: 13px; font-weight: 700; text-transform: uppercase; color: #3b82f6; margin-bottom: 8px; }
-.event-title { margin: 0 0 12px 0; font-size: 19px; font-weight: 800; line-height: 1.2; color: #0f172a; }
-.event-loc { font-size: 14px; color: #64748b; }
 .empty-state { text-align: center; padding: 80px 20px; background: #fff; border-radius: 24px; border: 2px dashed #e2e8f0; }
 .empty-art { font-size: 48px; margin-bottom: 16px; }
 .create-btn { background: #0d47a1; color: #fff; border: none; padding: 12px 28px; border-radius: 12px; font-weight: 700; margin-top: 16px; cursor: pointer; box-shadow: 0 4px 12px rgba(13, 71, 161, 0.2); }
 @media (max-width: 1200px) { .hero-layout { grid-template-columns: 1fr; } .stats-grid { grid-template-columns: 1fr 1fr; } }
-@media (max-width: 640px) { .dashboard-container { padding: 0; } .sticky-header { padding: 12px 16px; } .sticky-header.scrolled { padding: 8px 16px; } .main-content { padding: 16px; } .stats-grid { grid-template-columns: 1fr; } .events-grid { grid-template-columns: 1fr; } }
+@media (max-width: 640px) { .dashboard-container { padding: 0; } .main-content { padding: 16px; } .stats-grid { grid-template-columns: 1fr; } .events-grid { grid-template-columns: 1fr; } }
 .event-details-content { padding: 12px; }
 .details-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; }
 .details-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; background: #f8fafc; padding: 20px; border-radius: 16px; margin-bottom: 24px; }
