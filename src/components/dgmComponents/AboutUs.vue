@@ -9,7 +9,7 @@ const selectedFeature = ref(null)
 
 const features = {
   wknd: { title: 'ELEVATE WKND', desc: 'Unwind with us at our every other week gatherings!', longDesc: 'Our youth gathering! A service designed for high school, college students and singles to experience awesome worship, meet new friends, and hear life-changing messages.', info: 'Hotel Supreme | 5:00PM onwards', img: '/elevate logo.jpg' },
-  groups: { title: 'DISCIPLESHIP GROUPS', desc: 'Find a group of friends you can grow with.', longDesc: 'Join a Dgroup! A Dgroup is a small group of students who meet to talk about life, study the Bible, and support one another. Where "big" services become "personal" friendships. No matter where you are in your journey.', info: 'how to join?', img: '/group2.jpg' },
+  groups: { title: 'DISCIPLESHIP GROUPS', desc: 'Find a group of friends you can grow with.', longDesc: 'Join a Dgroup! A Dgroup is a small group of students who meet to talk about life, study the Bible, and support one another. Where "big" services become "personal" friendships. No matter where you are in your journey.', info: 'Join by simply going to the Dgroup section and clicking on the "Find a Dgroup" button', img: '/group2.jpg' },
   unite: { title: 'Campus UNITE', desc: 'Celebrating God’s faithfulness and ministry anniversary.', longDesc: 'Campus Unite is the massive annual anniversary celebration of Elevate! It brings together students from different campuses for a night of worship, powerful testimonies, and a shared vision to transform our nation. Our biggest event of the year with a purpose that lasts.', info: 'Happens around June - August', img: '/unitesm.jpg' }
 }
 
@@ -98,8 +98,8 @@ function closeFeature() { selectedFeature.value = null }
             <h2 class="section-title white-text">Contact Us</h2>
             <div class="contact-grid">
               <div class="contact-card"><h4>EMAIL</h4><p>elevatebaguio00@gmail.com</p></div>
-              <div class="contact-card"><h4>SOCIALS</h4><p>ElevateBaguioPH</p></div>
-              <div class="contact-card"><h4>LOCATION</h4><p>0917 657 3341</p></div>
+              <div class="contact-card"><h4>SOCIALS</h4><p>@ElevateBaguioPH</p></div>
+              <div class="contact-card"><h4>CONTACT</h4><p>0917 657 3341</p></div>
             </div>
           </div>
         </section>
