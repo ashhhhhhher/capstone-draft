@@ -162,12 +162,16 @@ const recommendedDgroups = computed(() => {
 function toggleInterest(id) {
   const idx = seekerPrefs.interests.indexOf(id)
   if (idx === -1) seekerPrefs.interests.push(id)
-  else seekerPrefs.interests.splice(idx, 1)
+   if (idx !== -1) {
+    seekerPrefs.interests.splice(idx, 1)
+    return
+  }
+  if (seekerPrefs.interests.length >= 2) {
+    return
+  }
 }
 
-function selectLifeStage(id) {
-  seekerPrefs.lifeStage = id
-}
+
 
 function toggleTime(label) {
   const idx = seekerPrefs.meetingTime.indexOf(label)
@@ -212,7 +216,7 @@ async function handleAssignMe() {
 }
 
 const isNextDisabled = computed(() => {
-  if (seekerStep.value === 1) return seekerPrefs.interests.length < 2
+  if (seekerStep.value === 1) return seekerPrefs.interests.length !== 2
   if (seekerStep.value === 2) return seekerPrefs.meetingTime.length === 0 || seekerPrefs.daysAvailable.length === 0
   return false
 })
@@ -242,7 +246,7 @@ const isNextDisabled = computed(() => {
             <Sparkles :size="40" class="sparkle-blue" />
           </div>
           <h1>What are you into?</h1>
-          <p>Pick at least 2 interests to find your vibe</p>
+          <p>Pick 2 interests to find your vibe</p>
         </div>
         
         <div class="interest-grid-four">
@@ -250,7 +254,10 @@ const isNextDisabled = computed(() => {
             v-for="opt in INTEREST_OPTIONS" 
             :key="opt.id"
             class="interest-card" 
-            :class="{ selected: seekerPrefs.interests.includes(opt.id) }"
+            :class="{
+              selected: seekerPrefs.interests.includes(opt.id),
+              disabled: seekerPrefs.interests.length >= 2 && !seekerPrefs.interests.includes(opt.id)
+            }"
             @click="toggleInterest(opt.id)"
           >
             <div class="icon-wrapper" :style="{ background: opt.color + '15', color: opt.color }">
@@ -546,6 +553,11 @@ h1 { font-size: 32px; font-weight: 900; margin: 0 0 10px; color: #0F172A; letter
   background: #EFF6FF;
   border-color: #3B82F6;
   box-shadow: 0 10px 20px -5px rgba(59, 130, 246, 0.15);
+}
+
+.disabled {
+  opacity: 0.4;
+  pointer-events: none;
 }
 
 .icon-wrapper {
