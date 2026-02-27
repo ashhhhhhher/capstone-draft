@@ -33,6 +33,7 @@ const firstName = ref('')
 const lastName = ref('')
 const birthday = ref('')
 const gender = ref('')
+const lifeStage = ref('')
 
 async function handleSignup() {
   errorMessage.value = ''
@@ -49,7 +50,7 @@ async function handleSignup() {
     return
   }
 
-  if (!firstName.value || !lastName.value || !birthday.value || !gender.value || !email.value) {
+  if (!firstName.value || !lastName.value || !birthday.value || !gender.value || !lifeStage.value || !email.value) {
     errorMessage.value = "Please fill in all required fields."
     return
   }
@@ -62,9 +63,10 @@ async function handleSignup() {
         firstName: firstName.value,
         lastName: lastName.value,
         birthday: birthday.value,
-        gender: gender.value
+        gender: gender.value,
+        lifeStage: lifeStage.value
       }
-    }
+}
 
     //  Signup (creates account and pending profile)
     await authStore.signup(email.value, password.value, userData)
@@ -154,6 +156,15 @@ function clearTcError() {
                   <option value="" disabled>Select...</option>
                   <option value="Male">Male</option>
                   <option value="Female">Female</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label for="lifeStage">Life Stage *</label>
+                <select id="lifeStage" v-model="lifeStage" required>
+                  <option value="" disabled>Select...</option>
+                  <option value="high-school">High School</option>
+                  <option value="college-university">College/University</option>
+                  <option value="young-professional">Young Professional</option>
                 </select>
               </div>
             </div>

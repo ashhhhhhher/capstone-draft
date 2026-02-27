@@ -18,10 +18,10 @@ const emit = defineEmits(['close'])
 const authStore = useAuthStore()
 const membersStore = useMembersStore()
 
-const seekerStep = ref(1) // 1: Interests, 2: Life Stage, 3: Schedule, 4: Recommendations
+const seekerStep = ref(1) 
+// 1: Interests, 2: Schedule, 3: Recommendations
 const seekerPrefs = reactive({
   interests: [],
-  lifeStage: '',
   meetingTime: [],
   daysAvailable: []
 })
@@ -40,12 +40,6 @@ const INTEREST_OPTIONS = [
   { id: 'dancing', label: 'Dancing', icon: Activity, color: '#F43F5E' }
 ]
 
-const LIFE_STAGE_OPTIONS = [
-  { id: 'high-school', label: 'High School', icon: School, color: '#F59E0B' },
-  { id: 'college', label: 'College/University', icon: GraduationCap, color: '#3B82F6' },
-  { id: 'professional', label: 'Young Professional', icon: Briefcase, color: '#10B981' }
-]
-
 const TIME_OPTIONS = [
   { id: 'morning', label: '8:00 AM - 10:00 AM', icon: Clock },
   { id: 'mid-day', label: '10:00 AM - 12:00 PM', icon: Clock },
@@ -61,13 +55,29 @@ const DAY_OPTIONS = [
   { id: 'flexible', label: 'Flexible', icon: Sparkles }
 ]
 
+  function formatLifeStage(value) {
+    if (!value) return ''
+    if (value === 'high-school') return 'High School'
+    if (value === 'college') return 'College/University'
+    if (value === 'professional') return 'Young Professionals'
+    return value
+  }
+
 // Matching Logic
 const recommendedDgroups = computed(() => {
-  if (seekerStep.value !== 4) return []
-  
+  if (seekerStep.value !== 3) return []
+
+  const seekerLifeStage =
+    myProfile.value?.finalTags?.lifeStage ||
+    myProfile.value?.lifeStage ||
+    null
+
   const leaders = membersStore.leaders.filter(l => {
     if (l.gender && myProfile.value?.gender && l.gender !== myProfile.value.gender) return false
-    const currentCount = membersStore.activeMembers.filter(m => m.dgroupLeader === `${l.firstName} ${l.lastName}`).length
+
+    const currentCount = membersStore.activeMembers
+      .filter(m => m.dgroupLeader === `${l.firstName} ${l.lastName}`).length
+
     const capacity = l.dgroupCapacity || 12
     return currentCount < capacity
   })
@@ -76,30 +86,56 @@ const recommendedDgroups = computed(() => {
     let score = 0
     let reasons = []
 
-    const leaderLifeStage = l.finalTags?.ageCategory || 'Mixed'
-    if (seekerPrefs.lifeStage && leaderLifeStage.includes(seekerPrefs.lifeStage)) {
-        score += 40
-        reasons.push('Life Stage Match')
-    }
+    const groupMembers = membersStore.activeMembers
+      .filter(m => m.dgroupLeader === `${l.firstName} ${l.lastName}`)
 
+    // 🔥 LIFE STAGE SCORING BASED ON MEMBERS (NOT LEADER)
+      let sameLifeStageCount = 0
+
+      if (seekerLifeStage) {
+        sameLifeStageCount = groupMembers.filter(m =>
+          m.finalTags?.lifeStage === seekerLifeStage ||
+          m.lifeStage === seekerLifeStage
+        ).length
+
+        if (groupMembers.length > 0) {
+          const ratio = sameLifeStageCount / groupMembers.length
+          const lifeStageScore = Math.round(ratio * 40)
+
+          score += lifeStageScore
+
+          if (sameLifeStageCount > 0) {
+            reasons.push(`${sameLifeStageCount} members share your life stage`)
+          }
+        }
+      }
+
+    // INTEREST MATCHING
     const groupInterests = l.dgroupDetails?.interests || []
     const myInterests = seekerPrefs.interests || []
+
     if (myInterests.length > 0 && groupInterests.length > 0) {
       const intersection = groupInterests.filter(i => myInterests.includes(i))
       if (intersection.length > 0) {
-        score += Math.min(30, (intersection.length / myInterests.length) * 30 + 10)
+        const interestScore = Math.min(
+          30,
+          (intersection.length / myInterests.length) * 30 + 10
+        )
+        score += interestScore
         reasons.push(`${intersection.length} Shared Interests`)
       }
     }
 
+    // SCHEDULE MATCHING
     const groupTime = l.dgroupDetails?.meetingTime || 'Anytime'
-    if (seekerPrefs.meetingTime.includes('Anytime') || groupTime === 'Anytime') {
-      score += 30, reasons.push('Schedule Match')
-    } else if (seekerPrefs.meetingTime.includes(groupTime)) {
-      score += 30, reasons.push('Exact Time Match')
-    }
 
-    const groupMembers = membersStore.activeMembers.filter(m => m.dgroupLeader === `${l.firstName} ${l.lastName}`)
+    if (seekerPrefs.meetingTime.includes('Anytime') || groupTime === 'Anytime') {
+      score += 30
+      reasons.push('Schedule Match')
+    } else if (seekerPrefs.meetingTime.includes(groupTime)) {
+      score += 30
+      reasons.push('Exact Time Match')
+    }
 
     return {
       leaderId: l.id,
@@ -114,9 +150,13 @@ const recommendedDgroups = computed(() => {
       memberCount: groupMembers.length,
       avgAge: l.age || 25,
       meetingTime: groupTime,
-      meetingDays: l.dgroupDetails?.meetingDays || 'Flexible'
+      meetingDays: l.dgroupDetails?.meetingDays || 'Flexible',
+      sameLifeStageCount,
+      seekerLifeStage
     }
-  }).sort((a, b) => b.score - a.score).slice(0, 5)
+  })
+  .sort((a, b) => b.score - a.score)
+  .slice(0, 5)
 })
 
 function toggleInterest(id) {
@@ -173,8 +213,7 @@ async function handleAssignMe() {
 
 const isNextDisabled = computed(() => {
   if (seekerStep.value === 1) return seekerPrefs.interests.length < 2
-  if (seekerStep.value === 2) return !seekerPrefs.lifeStage
-  if (seekerStep.value === 3) return seekerPrefs.meetingTime.length === 0 || seekerPrefs.daysAvailable.length === 0
+  if (seekerStep.value === 2) return seekerPrefs.meetingTime.length === 0 || seekerPrefs.daysAvailable.length === 0
   return false
 })
 </script>
@@ -232,49 +271,10 @@ const isNextDisabled = computed(() => {
         </div>
       </div>
 
-      <!-- STEP 2: LIFE STAGE -->
+      <!-- STEP 2: SCHEDULE -->
       <div v-if="seekerStep === 2" class="step-content">
         <div class="step-header">
            <button class="back-link" @click="seekerStep = 1">
-             <ChevronLeft :size="16" /> Back
-           </button>
-           <div class="sparkle-icon">
-            <Users :size="40" class="sparkle-blue" />
-          </div>
-          <h1>Which best describes you?</h1>
-          <p>This helps us match you with a group in your life stage</p>
-        </div>
-
-        <div class="lifestage-grid">
-          <button 
-            v-for="opt in LIFE_STAGE_OPTIONS" 
-            :key="opt.id"
-            class="lifestage-card"
-            :class="{ selected: seekerPrefs.lifeStage === opt.id }"
-            @click="selectLifeStage(opt.id)"
-          >
-            <div class="icon-wrapper-lg" :style="{ background: opt.color + '15', color: opt.color }">
-              <component :is="opt.icon" :size="32" />
-            </div>
-            <span class="card-label-lg">{{ opt.label }}</span>
-          </button>
-        </div>
-
-        <div class="footer-actions">
-          <button 
-            @click="seekerStep = 3" 
-            class="btn-next-step" 
-            :disabled="isNextDisabled"
-          >
-            Almost there <ArrowRight :size="18" />
-          </button>
-        </div>
-      </div>
-
-      <!-- STEP 3: SCHEDULE -->
-      <div v-if="seekerStep === 3" class="step-content">
-        <div class="step-header">
-           <button class="back-link" @click="seekerStep = 2">
              <ChevronLeft :size="16" /> Back
            </button>
            <div class="sparkle-icon">
@@ -324,7 +324,7 @@ const isNextDisabled = computed(() => {
 
         <div class="footer-actions">
           <button 
-            @click="seekerStep = 4" 
+            @click="seekerStep = 3" 
             class="btn-next-step" 
             :disabled="isNextDisabled"
           >
@@ -333,10 +333,10 @@ const isNextDisabled = computed(() => {
         </div>
       </div>
 
-      <!-- STEP 4: RECOMMENDATIONS -->
-      <div v-if="seekerStep === 4" class="step-content">
+      <!-- STEP 3: RECOMMENDATIONS -->
+      <div v-if="seekerStep === 3" class="step-content">
         <div class="step-header">
-          <button class="back-link" @click="seekerStep = 3">
+          <button class="back-link" @click="seekerStep = 2">
              <ChevronLeft :size="16" /> Back
            </button>
           <div class="sparkle-icon">
@@ -370,9 +370,24 @@ const isNextDisabled = computed(() => {
                   </div>
 
                   <div class="stats-row">
-                    <div class="stat-item"><Users :size="14" /> {{ group.memberCount }} members</div>
-                    <div class="stat-item">Avg age: {{ group.avgAge }} <span>👍</span></div>
+                  <div class="stat-item">
+                    <Users :size="14" />
+                    {{ group.memberCount }} members
                   </div>
+
+                  <div 
+                    v-if="group.sameLifeStageCount > 0"
+                    class="stat-item"
+                  >
+                    {{ group.sameLifeStageCount }}
+                    in the same life stage
+                    
+                  </div>
+
+                  <div class="stat-item">
+                    Avg age: {{ group.avgAge }} <span>👍</span>
+                  </div>
+                </div>
                   
                   <div class="schedule-info-row">
                     <Clock :size="14" /> {{ group.meetingTime }} • {{ group.meetingDays }}

@@ -112,55 +112,6 @@ async function signup(email, password, basicData) {
   }
 }
 
-
-  async function createMemberProfile(uid, branchId, basicData, memberId) {
-    const age = new Date().getFullYear() - new Date(basicData.birthday).getFullYear(); 
-    const ageCategory = (age >= 12 && age <= 21) ? 'Elevate' : (age >= 22 ? 'B1G' : 'N/A');
-    const todayISO = new Date().toISOString();
-
-    // Default to First Timer, NOT Seeker yet
-    const memberData = {
-      id: memberId,         
-      authUid: uid, 
-      createdAt: todayISO,  
-
-      role: 'member',
-      branchId: branchId,
-      displayName: `${toTitleCase(basicData.firstName.trim())} ${toTitleCase(basicData.lastName.trim())}`,
-
-      
-      lastName: toTitleCase(basicData.lastName.trim()),
-      firstName: toTitleCase(basicData.firstName.trim()),
-      middleInitial: '',
-      birthday: basicData.birthday,
-      age: age,
-      gender: basicData.gender,
-      email: auth.currentUser.email,
-      
-      // Empty fields for later
-      school: '', 
-      contactNumber: '', 
-      fbAccount: '', 
-      profilePicture: '', 
-      
-      dgroupLeader: '', 
-      dgroupDetails: null, 
-
-      finalTags: {
-        isRegular: false, 
-        isVolunteer: false, 
-        volunteerMinistry: [],
-        isDgroupLeader: false, 
-        isSeeker: false,    // Starts false, set to true via Dgroup tab questionnaire
-        isFirstTimer: true, // Default true
-        ageCategory: ageCategory
-      }
-    }
-    
-    const memberRef = doc(db, "branches", branchId, "members", memberId);
-    await setDoc(memberRef, memberData);
-  }
-
   // --- Create PENDING profile (awaiting admin approval) ---
   async function createPendingProfile(uid, branchId, basicData, memberId) {
     const age = new Date().getFullYear() - new Date(basicData.birthday).getFullYear(); 
@@ -198,7 +149,8 @@ async function signup(email, password, basicData) {
         isDgroupLeader: false,
         isSeeker: false,
         isFirstTimer: true,
-        ageCategory: ageCategory
+        ageCategory: ageCategory,
+        lifeStage: basicData.lifeStage
       }
     }
 
