@@ -1,7 +1,11 @@
 <script setup>
+
 import { reactive, onMounted, watch, ref, computed } from 'vue'
+
 import { useAttendanceStore } from '../../stores/attendance'
+
 import { useMembersStore } from '../../stores/members'
+
 import { useAuthStore } from '../../stores/auth'
 import { ClipboardCheck } from 'lucide-vue-next'
 
@@ -14,7 +18,9 @@ const props = defineProps({
 const emit = defineEmits(['close','saved'])
 
 const attendanceStore = useAttendanceStore()
+
 const membersStore = useMembersStore()
+
 const authStore = useAuthStore()
 
 const isLeader = computed(() => {
@@ -25,6 +31,7 @@ const isLeader = computed(() => {
 })
 
 const show = ref(true)
+
 const showConfirm = ref(false)
 
 const attendanceForm = reactive({
@@ -167,6 +174,8 @@ async function confirmEndMeeting() {
 }
 
 </script>
+
+
 
 <template>
 	<div v-if="show" class="modal-overlay">

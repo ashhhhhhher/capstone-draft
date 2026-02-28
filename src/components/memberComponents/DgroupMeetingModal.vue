@@ -1,4 +1,5 @@
 <script setup>
+
 import { ref, computed } from 'vue'
 import Modal from '../dgmComponents/Modal.vue'
 import DatePicker from '../dgmComponents/DatePicker.vue'
@@ -7,10 +8,13 @@ import { useDgroupEventsStore } from '../../stores/dgroupevents'
 
 const show = ref(true)
 const scheduleDate = ref('')
+
 const scheduleTime = ref('')
+
 const scheduleVenue = ref('')
 const scheduleDescription = ref('')
 const scheduleTitle = ref('')
+
 const scheduleStatus = ref({ type: '', message: '' })
 
 const emit = defineEmits(['close','scheduled'])
@@ -29,10 +33,12 @@ function close() {
 }
 
 async function handleScheduleSubmit() {
+
   if (!isLeader.value) {
     scheduleStatus.value = { type: 'error', message: 'Only Dgroup leaders can schedule meetings.' }
     return
   }
+
   if (!scheduleDate.value || !scheduleTime.value || !scheduleVenue.value) {
     scheduleStatus.value = { type: 'error', message: 'Please fill required fields (date, time, venue).' }
     return
@@ -78,8 +84,12 @@ const dgroupLeaderId = authStore.userProfile?.id
 }
 </script>
 
+
+
 <template>
+
   <Modal @close="close">
+
     <div class="form-container">
       <div class="form-header">
         <h2>Schedule Weekly Dgroup Meeting</h2>
@@ -119,8 +129,12 @@ const dgroupLeaderId = authStore.userProfile?.id
         <div v-if="!isLeader" style="margin-top:8px;color:#607D8B;font-weight:600;">Only Dgroup leaders can schedule meetings.</div>
       </form>
     </div>
+
   </Modal>
+
 </template>
+
+
 
 <style scoped>
 /* reuse styles from MemberHome's modal form if needed; minimal local styles */

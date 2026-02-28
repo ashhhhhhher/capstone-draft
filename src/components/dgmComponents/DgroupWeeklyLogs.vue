@@ -1,31 +1,52 @@
 <script setup>
+
 import { ref, onMounted, computed } from 'vue'
+
 import { useMembersStore } from '../../stores/members'
+
 import { db } from '../../firebase'
+
 import { collectionGroup, onSnapshot } from 'firebase/firestore'
+
 import { useAuthStore } from '../../stores/auth'
+
 import { Download, Users, ClipboardList, MessageCircle, Heart, UserPlus, TrendingUp } from 'lucide-vue-next'
+
 import jsPDF from 'jspdf'
+
 import autoTable from 'jspdf-autotable'
 
+
+
 const logs = ref([])
+
 const loading = ref(true)
 const selectedWeekStart = ref('') // YYYY-MM-DD (Sunday)
 const membersStore = useMembersStore()
 
 // local YYYY-MM-DD helper to avoid UTC shift issues
 function localYMD(input) {
+
   const dt = input ? new Date(input) : new Date()
+
   const y = dt.getFullYear()
+
   const m = String(dt.getMonth() + 1).padStart(2, '0')
+
   const d = String(dt.getDate()).padStart(2, '0')
+
   return `${y}-${m}-${d}`
+
 }
 
+
+
 onMounted(() => {
+
   const authStore = useAuthStore()
   const cg = collectionGroup(db, 'meetings')
   onSnapshot(cg, (snapshot) => {
+
     const items = []
     const today = localYMD()
     snapshot.forEach(docSnap => {
@@ -39,16 +60,23 @@ onMounted(() => {
     })
     // sort by meetingDate desc
     items.sort((a,b) => (b.meetingDate || '').localeCompare(a.meetingDate || ''))
+
     logs.value = items
+
     loading.value = false
     // initialize selected week to latest meeting week or current week
     if (!selectedWeekStart.value) {
       const initDate = items.length > 0 ? items[0].meetingDate : localYMD()
       selectedWeekStart.value = getWeekStartISO(initDate)
     }
+
   })
+
   membersStore.fetchMembers()
+
 })
+
+
 
   function toISODate(d) {
     const yyyy = d.getFullYear()
@@ -157,6 +185,7 @@ const exportLogs = () => {
     }
 
     return [
+
       formatDateISO(log.meetingDate),
       log.submittedBy,
       countTag('DL') || '',
@@ -184,7 +213,9 @@ const exportLogs = () => {
   ];
 
   autoTable(doc, {
+
     startY: 30,
+
     head: headers,
     body: [...rows, grandTotalRow],
     theme: 'grid',
@@ -207,15 +238,23 @@ const exportLogs = () => {
   // filename: use ISO range for safe filename characters
   doc.save(`DGM_Weekly_Report_${weekStart}_to_${weekEnd}.pdf`);
 }
+
 </script>
 
+
+
 <template>
+
   <div class="insights-container">
     
     <div class="stats-section" v-if="logs.length > 0">
+
       <div class="section-title">
+
         <TrendingUp :size="18" color="#455A64" />
+
         <h4>Weekly Dgroup Meet Attendance</h4>
+
       </div>
       
       <div class="summary-grid">
@@ -248,9 +287,13 @@ const exportLogs = () => {
           </div>
         </div>
       </div>
+
     </div>
 
+
+
     <div class="logs-card">
+
       <div class="logs-header">
           <div class="title-area">
             <ClipboardList :size="20" color="#1976D2" />
@@ -282,95 +325,100 @@ const exportLogs = () => {
 
           <div v-else class="table-container">
         <table class="custom-table">
+
           <thead>
+
             <tr>
+
               <th>Date</th>
+
               <th>Leader</th>
               <th class="text-center">C-E-G</th>
               <th class="text-center">Attendance</th>
+
             </tr>
+
           </thead>
+
           <tbody>
+
             <tr v-for="log in filteredLogs" :key="log.id">
+
               <td class="date-cell">{{ formatDateISO(log.meetingDate) }}</td>
+
               <td class="leader-cell">{{ log.submittedBy }}</td>
+
               <td class="text-center">
+
                 <div class="ceg-badges">
                   <span class="ceg-b c" title="Conversations">{{ log.conversations || 0 }}</span>
                   <span class="ceg-b e" title="Evangelized">{{ log.evangelized || 0 }}</span>
                   <span class="ceg-b g" title="Guests">{{ log.guests || 0 }}</span>
                 </div>
+
               </td>
+
               <td class="text-center">
+
                 <span class="attendance-pill">
                   {{ Object.values(log.attendance || {}).filter(a => a.isPresent).length }} / {{ Object.keys(log.attendance || {}).length }}
                 </span>
+
               </td>
+
             </tr>
+
           </tbody>
+
         </table>
+
       </div>
+
     </div>
+
   </div>
+
 </template>
 
+
+
 <style scoped>
-.insights-container { display: flex; flex-direction: column; gap: 20px; }
-
-.section-title { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; padding-left: 4px; }
-.section-title h4 { margin: 0; font-size: 14px; text-transform: uppercase; letter-spacing: 0.5px; color: #455A64; font-weight: 700; }
-
-.summary-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 8px; }
-
-@media (max-width: 900px) {
-  .summary-grid { grid-template-columns: repeat(2, 1fr); }
-}
-
-.stat-card { background: white; padding: 16px; border-radius: 12px; display: flex; align-items: center; gap: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
-.stat-icon { width: 36px; height: 36px; border-radius: 8px; display: flex; align-items: center; justify-content: center; }
-
-.purple .stat-icon { background: #F3E5F5; color: #7B1FA2; }
-.blue .stat-icon { background: #E3F2FD; color: #1976D2; }
-.green .stat-icon { background: #E8F5E9; color: #2E7D32; }
-.orange .stat-icon { background: #FFF3E0; color: #F57C00; }
-
-.stat-content { display: flex; flex-direction: column; }
-.stat-content .value { font-size: 20px; font-weight: 800; color: #263238; line-height: 1.2; }
-.stat-content .label { font-size: 11px; color: #78909C; font-weight: 600; text-transform: uppercase; }
-
-.logs-card { background: white; border-radius: 12px; padding: 24px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
-.logs-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
-.title-area { display: flex; align-items: center; gap: 8px; }
-.title-area h3 { margin: 0; font-size: 18px; font-weight: 600; }
-.mini-export-btn { display: flex; align-items: center; gap: 4px; padding: 6px 12px; background: #E8F5E9; color: #2E7D32; border: none; border-radius: 6px; font-weight: 600; cursor: pointer; font-size: 12px; }
-
-.table-container { overflow-x: auto; }
-.custom-table { width: 100%; border-collapse: collapse; font-size: 14px; }
-th { text-align: left; padding: 12px; color: #546E7A; border-bottom: 2px solid #F5F7F9; font-weight: 700; text-transform: uppercase; font-size: 11px; }
-td { padding: 12px; border-bottom: 1px solid #F5F7F9; }
-.text-center { text-align: center; }
-
-.date-cell { font-weight: 600; color: #1976D2; white-space: nowrap; }
-.leader-cell { color: #37474F; font-weight: 500; }
-
-.ceg-badges { display: flex; justify-content: center; gap: 4px; }
-.ceg-b { width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; border-radius: 6px; font-size: 11px; font-weight: 800; }
-.ceg-b.c { background: #E3F2FD; color: #1976D2; }
-.ceg-b.e { background: #E8F5E9; color: #2E7D32; }
-.ceg-b.g { background: #FFF3E0; color: #F57C00; }
-
-.attendance-pill { background: #F5F7F9; color: #546E7A; padding: 4px 10px; border-radius: 20px; font-weight: 700; font-size: 12px; border: 1px solid #ECEFF1; }
-.placeholder { padding: 40px; text-align: center; color: #90A4AE; }
-
-/* Week picker styles */
-.week-picker { display: flex; align-items: center; gap: 8px; margin-left: 16px; }
-.week-btn { background: #F5F7F9; border: 1px solid #E0E0E0; border-radius: 6px; padding: 4px 6px; font-size: 12px; height: 28px; width: 28px; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; }
-.week-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-.week-label { font-size: 12px; color: #546E7A; padding: 4px 8px; background: transparent; border-radius: 6px; min-width: 140px; text-align: center; }
-
-@media (max-width: 900px) {
-  .week-picker { margin-left: 0; margin-top: 8px; }
-  .week-label { min-width: 120px; font-size: 11px; }
-  .week-btn { height: 26px; width: 26px; padding: 3px 5px; font-size: 11px; }
-}
+.insights-container{display:flex;flex-direction:column;gap:20px}
+.section-title{display:flex;align-items:center;gap:8px;margin-bottom:12px;padding-left:4px}
+.section-title h4{margin:0;font-size:14px;text-transform:uppercase;letter-spacing:.5px;color:#455A64;font-weight:700}
+.summary-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:8px}
+@media (max-width:900px){.summary-grid{grid-template-columns:repeat(2,1fr)}}
+.stat-card{background:#fff;padding:16px;border-radius:12px;display:flex;align-items:center;gap:12px;box-shadow:0 4px 12px rgba(0,0,0,.05)}
+.stat-icon{width:36px;height:36px;border-radius:8px;display:flex;align-items:center;justify-content:center}
+.purple .stat-icon{background:#F3E5F5;color:#7B1FA2}
+.blue .stat-icon{background:#E3F2FD;color:#1976D2}
+.green .stat-icon{background:#E8F5E9;color:#2E7D32}
+.orange .stat-icon{background:#FFF3E0;color:#F57C00}
+.stat-content{display:flex;flex-direction:column}
+.stat-content .value{font-size:20px;font-weight:800;color:#263238;line-height:1.2}
+.stat-content .label{font-size:11px;color:#78909C;font-weight:600;text-transform:uppercase}
+.logs-card{background:#fff;border-radius:12px;padding:24px;box-shadow:0 4px 12px rgba(0,0,0,.05)}
+.logs-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px}
+.title-area{display:flex;align-items:center;gap:8px}
+.title-area h3{margin:0;font-size:18px;font-weight:600}
+.mini-export-btn{display:flex;align-items:center;gap:4px;padding:6px 12px;background:#E8F5E9;color:#2E7D32;border:none;border-radius:6px;font-weight:600;cursor:pointer;font-size:12px}
+.table-container{overflow-x:auto}
+.custom-table{width:100%;border-collapse:collapse;font-size:14px}
+th{text-align:left;padding:12px;color:#546E7A;border-bottom:2px solid #F5F7F9;font-weight:700;text-transform:uppercase;font-size:11px}
+td{padding:12px;border-bottom:1px solid #F5F7F9}
+.text-center{text-align:center}
+.date-cell{font-weight:600;color:#1976D2;white-space:nowrap}
+.leader-cell{color:#37474F;font-weight:500}
+.ceg-badges{display:flex;justify-content:center;gap:4px}
+.ceg-b{width:24px;height:24px;display:flex;align-items:center;justify-content:center;border-radius:6px;font-size:11px;font-weight:800}
+.ceg-b.g{background:#E3F2FD;color:#1976D2}
+.ceg-b.cd{background:#E8F5E9;color:#2E7D32}
+.ceg-b.e{background:#FFF3E0;color:#F57C00}
+.attendance-pill{background:#F5F7F9;color:#546E7A;padding:4px 10px;border-radius:20px;font-weight:700;font-size:12px;border:1px solid #ECEFF1}
+.placeholder{padding:40px;text-align:center;color:#90A4AE}
+.week-picker{display:flex;align-items:center;gap:8px;margin-left:16px}
+.week-btn{background:#F5F7F9;border:1px solid #E0E0E0;border-radius:6px;padding:4px 6px;font-size:12px;height:28px;width:28px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer}
+.week-btn:disabled{opacity:.5;cursor:not-allowed}
+.week-label{font-size:12px;color:#546E7A;padding:4px 8px;background:transparent;border-radius:6px;min-width:140px;text-align:center}
+@media (max-width:900px){.week-picker{margin-left:0;margin-top:8px}.week-label{min-width:120px;font-size:11px}.week-btn{height:26px;width:26px;padding:3px 5px;font-size:11px}}
 </style>

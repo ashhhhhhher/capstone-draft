@@ -7,36 +7,55 @@ import { MapPin, QrCode, BarChart2, Clock, Info, X, Sparkles, Plus, ClipboardChe
 import DgroupMeetingModal from '../components/memberComponents/DgroupMeetingModal.vue'
 import DgroupAttendanceModal from '../components/memberComponents/DgroupAttendanceModal.vue'
 import BackgroundHero from '../components/dgmComponents/Background.vue'
-import EventCard from '../components/dgmComponents/EventCard.vue' 
+import EventCard from '../components/dgmComponents/EventCard.vue'
 import { useMembersStore } from '../stores/members'
 import { useDgroupEventsStore } from '../stores/dgroupevents'
 
 const router = useRouter()
+
 const authStore = useAuthStore()
+
 const eventsStore = useEventsStore()
 
 function localYMD(input) {
+
   const dt = input ? new Date(input) : new Date()
+
   const y = dt.getFullYear()
+
   const m = String(dt.getMonth() + 1).padStart(2, '0')
+
   const d = String(dt.getDate()).padStart(2, '0')
+
   return `${y}-${m}-${d}`
+
 }
 
+
+
 const memberProfile = computed(() => authStore.userProfile)
+
 const isFirstTime = computed(() => !memberProfile.value?.dgroupId)
+
 const showEventModal = ref(false)
+
 const selectedEvent = ref(null)
 
 const todayEvent = computed(() => {
   const todayStr = localYMD()
+
   const ageCat = memberProfile.value?.finalTags?.ageCategory
   return eventsStore.allEvents.find(e => {
     if (!e.date) return false
+
     const eDate = localYMD(e.date)
+
     if (eDate !== todayStr) return false
+
     if (e.ended) return false
+
     if (!e.allowedAgeCategories || e.allowedAgeCategories.length === 0) return true
+
     return ageCat && e.allowedAgeCategories.includes(ageCat)
   })
 })
@@ -46,6 +65,7 @@ const dgroupEventsStore = useDgroupEventsStore()
 const membersStore = useMembersStore()
 
 const isDgroupLeader = computed(() => {
+
   const user = authStore.userProfile
   if (user?.finalTags?.isDgroupLeader) return true
   const me = membersStore.activeMembers.find(m => m.id === user?.id)
@@ -71,13 +91,16 @@ const dgroupMembersForModal = computed(() => {
 })
 
 const upcomingDgroupMeetings = computed(() => {
+
   const today = localYMD()
   return (dgroupMeetings.value || [])
     .filter(m => m && m.meetingDate && m.meetingDate > today && !m.ended)
     .sort((a, b) => (a.meetingDate || '').localeCompare(b.meetingDate || ''))
+
 })
 
 function stopMeetingsListener() { if (typeof meetingsUnsub === 'function') { meetingsUnsub(); meetingsUnsub = null } }
+
 function startMeetingsListener(dgroupLeaderId) {
   stopMeetingsListener()
   if (!dgroupLeaderId) { dgroupMeetings.value = []; return }
@@ -85,7 +108,9 @@ function startMeetingsListener(dgroupLeaderId) {
   meetingsUnsub = dgroupEventsStore.listenToDgroupMeetings(dgroupLeaderId, (items) => {
     dgroupMeetings.value = items || []
     meetingsLoading.value = false
+
   })
+
 }
 
 function resolveMeetingLeaderId() {
@@ -104,6 +129,7 @@ onMounted(() => {
   const leaderId = resolveMeetingLeaderId()
   startMeetingsListener(leaderId)
   membersStore.fetchMembers()
+
 })
 
 watch(() => authStore.userProfile, () => {
@@ -129,11 +155,17 @@ const upcomingEvents = computed(() => {
 })
 
 function openEventDetails(event) { selectedEvent.value = event; showEventModal.value = true }
+
 function formatShortDate(dateStr) { if (!dateStr) return ''; return new Date(dateStr).toLocaleString('default', { month: 'short', day: 'numeric' }) }
+
 </script>
 
+
+
 <template>
+
   <div class="home-view">
+
     <BackgroundHero />
 
     <section v-if="isFirstTime" class="discovery-section">
@@ -171,6 +203,7 @@ function formatShortDate(dateStr) { if (!dateStr) return ''; return new Date(dat
     <DgroupMeetingModal v-if="showScheduleDgroupModal" @close="showScheduleDgroupModal = false" />
 
     <div class="section-header"><h3><Calendar :size="18" /> Happening Today</h3></div>
+
     <section class="today-section">
       <div v-if="todayEvent" class="today-banner main-event" :style="todayEvent.photoURL ? { backgroundImage: `url(${todayEvent.photoURL})` } : {}" @click="openEventDetails(todayEvent)">
         <div class="banner-overlay">
@@ -196,16 +229,21 @@ function formatShortDate(dateStr) { if (!dateStr) return ''; return new Date(dat
     </section>
 
     <div class="section-header"><h3>Upcoming Events</h3></div>
+
     <section class="upcoming-column">
       <div v-if="upcomingEvents.length > 0" class="events-grid">
         <EventCard v-for="event in upcomingEvents" :key="event.id" :event="event" @click="openEventDetails" />
       </div>
       <div v-else class="empty-placeholder">No upcoming events found.</div>
+
     </section>
 
     <div class="section-header"><h3>Upcoming Dgroups</h3></div>
+
     <section class="upcoming-column">
+
       <div v-if="meetingsLoading" class="loading-state">Syncing meetings...</div>
+
       <div v-else-if="upcomingDgroupMeetings.length > 0" class="events-grid">
         <div v-for="m in upcomingDgroupMeetings" :key="m.id || m.meetingDate" class="mini-meeting-card">
           <div class="meeting-card-image">
@@ -219,14 +257,18 @@ function formatShortDate(dateStr) { if (!dateStr) return ''; return new Date(dat
             <div class="meeting-time-pill" v-if="m.meetingTime">{{ m.meetingTime }}</div>
           </div>
         </div>
+
       </div>
+
       <div v-else class="empty-placeholder">No scheduled Dgroups.</div>
+
     </section>
 
     <DgroupAttendanceModal v-if="showAttendanceModal && isDgroupLeader" :group="{ dgroupId: memberProfile.value?.dgroupId }" :meeting="todayMeeting" @close="showAttendanceModal = false" />
 
     <!-- Event Detail Modal -->
     <div v-if="showEventModal && selectedEvent" class="modal-backdrop" @click.self="showEventModal = false">
+
       <div class="modern-modal">
         <div class="modal-cover" :style="selectedEvent.photoURL ? { backgroundImage: `url(${selectedEvent.photoURL})` } : {}">
           <div class="modal-cover-overlay"></div>
@@ -245,9 +287,14 @@ function formatShortDate(dateStr) { if (!dateStr) return ''; return new Date(dat
           </div>
         </div>
       </div>
+
     </div>
+
   </div>
+
 </template>
+
+
 
 <style scoped>
 .home-view { display: flex; flex-direction: column; gap: 20px; padding-bottom: 60px; background: transparent; min-height: 100vh; font-family: 'Inter', system-ui, sans-serif; max-width: 1400px; margin: 0 auto; width: 100%; }
