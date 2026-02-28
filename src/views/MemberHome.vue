@@ -12,21 +12,14 @@ import { useMembersStore } from '../stores/members'
 import { useDgroupEventsStore } from '../stores/dgroupevents'
 
 const router = useRouter()
-
 const authStore = useAuthStore()
-
 const eventsStore = useEventsStore()
 
 function localYMD(input) {
-
   const dt = input ? new Date(input) : new Date()
-
   const y = dt.getFullYear()
-
   const m = String(dt.getMonth() + 1).padStart(2, '0')
-
   const d = String(dt.getDate()).padStart(2, '0')
-
   return `${y}-${m}-${d}`
 
 }
@@ -163,9 +156,7 @@ function formatShortDate(dateStr) { if (!dateStr) return ''; return new Date(dat
 
 
 <template>
-
   <div class="home-view">
-
     <BackgroundHero />
 
     <section v-if="isFirstTime" class="discovery-section">
@@ -203,7 +194,6 @@ function formatShortDate(dateStr) { if (!dateStr) return ''; return new Date(dat
     <DgroupMeetingModal v-if="showScheduleDgroupModal" @close="showScheduleDgroupModal = false" />
 
     <div class="section-header"><h3><Calendar :size="18" /> Happening Today</h3></div>
-
     <section class="today-section">
       <div v-if="todayEvent" class="today-banner main-event" :style="todayEvent.photoURL ? { backgroundImage: `url(${todayEvent.photoURL})` } : {}" @click="openEventDetails(todayEvent)">
         <div class="banner-overlay">
@@ -229,7 +219,6 @@ function formatShortDate(dateStr) { if (!dateStr) return ''; return new Date(dat
     </section>
 
     <div class="section-header"><h3>Upcoming Events</h3></div>
-
     <section class="upcoming-column">
       <div v-if="upcomingEvents.length > 0" class="events-grid">
         <EventCard v-for="event in upcomingEvents" :key="event.id" :event="event" @click="openEventDetails" />
@@ -239,11 +228,8 @@ function formatShortDate(dateStr) { if (!dateStr) return ''; return new Date(dat
     </section>
 
     <div class="section-header"><h3>Upcoming Dgroups</h3></div>
-
     <section class="upcoming-column">
-
       <div v-if="meetingsLoading" class="loading-state">Syncing meetings...</div>
-
       <div v-else-if="upcomingDgroupMeetings.length > 0" class="events-grid">
         <div v-for="m in upcomingDgroupMeetings" :key="m.id || m.meetingDate" class="mini-meeting-card">
           <div class="meeting-card-image">
@@ -257,18 +243,14 @@ function formatShortDate(dateStr) { if (!dateStr) return ''; return new Date(dat
             <div class="meeting-time-pill" v-if="m.meetingTime">{{ m.meetingTime }}</div>
           </div>
         </div>
-
       </div>
-
       <div v-else class="empty-placeholder">No scheduled Dgroups.</div>
-
     </section>
 
     <DgroupAttendanceModal v-if="showAttendanceModal && isDgroupLeader" :group="{ dgroupId: memberProfile.value?.dgroupId }" :meeting="todayMeeting" @close="showAttendanceModal = false" />
 
     <!-- Event Detail Modal -->
     <div v-if="showEventModal && selectedEvent" class="modal-backdrop" @click.self="showEventModal = false">
-
       <div class="modern-modal">
         <div class="modal-cover" :style="selectedEvent.photoURL ? { backgroundImage: `url(${selectedEvent.photoURL})` } : {}">
           <div class="modal-cover-overlay"></div>
@@ -287,14 +269,9 @@ function formatShortDate(dateStr) { if (!dateStr) return ''; return new Date(dat
           </div>
         </div>
       </div>
-
     </div>
-
   </div>
-
 </template>
-
-
 
 <style scoped>
 .home-view { display: flex; flex-direction: column; gap: 20px; padding-bottom: 60px; background: transparent; min-height: 100vh; font-family: 'Inter', system-ui, sans-serif; max-width: 1400px; margin: 0 auto; width: 100%; }
