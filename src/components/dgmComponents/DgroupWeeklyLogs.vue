@@ -108,7 +108,7 @@ onMounted(() => {
       acc.c += (log.conversations || 0)
       acc.e += (log.evangelized || 0)
       acc.g += (log.guests || 0)
-      const entries = Object.entries(log.attendance || {})
+      const entries = Object.entries(log.attendees || {})
       const presentEntries = entries.filter(([id, a]) => a && a.isPresent)
       acc.attendance += presentEntries.length
       presentEntries.forEach(([id]) => {
@@ -149,7 +149,7 @@ const exportLogs = () => {
   const headers = [["Date", "Dgroup Leaders", "DL", "DM", "New", "G", "NW", "E", "C", "Total"]];
 
   const rows = filteredLogs.value.map(log => {
-    const presentEntries = Object.entries(log.attendance || {}).filter(([id, a]) => a && a.isPresent)
+    const presentEntries = Object.entries(log.attendees || {}).filter(([id, a]) => a && a.isPresent)
     const countTag = (tag) => {
       if (tag === 'DL') return presentEntries.filter(([id]) => (membersStore.activeMembers.find(m => m.id === id)?.finalTags?.isDgroupLeader)).length
       if (tag === 'DM') return presentEntries.filter(([id]) => !(membersStore.activeMembers.find(m => m.id === id)?.finalTags?.isDgroupLeader)).length
@@ -303,7 +303,7 @@ const exportLogs = () => {
               </td>
               <td class="text-center">
                 <span class="attendance-pill">
-                  {{ Object.values(log.attendance || {}).filter(a => a.isPresent).length }} / {{ Object.keys(log.attendance || {}).length }}
+                  {{ Object.values(log.attendees || {}).filter(a => a.isPresent).length }} / {{ Object.keys(log.attendees || {}).length }}
                 </span>
               </td>
             </tr>

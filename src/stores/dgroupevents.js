@@ -124,7 +124,7 @@ export const useDgroupEventsStore = defineStore('dgroupevents', () => {
       const refDoc = doc(db, 'branches', authStore.branchId, 'dgroupEvents', dgroupLeaderId, 'meetings', meetingDate)
       const snap = await getDoc(refDoc)
       // Only update allowed meeting fields to avoid overwriting schedule data
-      const allowed = ['attendance', 'guests', 'evangelized', 'conversations', 'locked', 'ended', 'submittedBy', 'submittedById']
+      const allowed = ['attendees', 'guests', 'evangelized', 'conversations', 'locked', 'ended', 'submittedBy', 'submittedById']
       const updateObj = { submittedAt: serverTimestamp() }
       allowed.forEach((k) => {
         if (updates[k] !== undefined) updateObj[k] = updates[k]

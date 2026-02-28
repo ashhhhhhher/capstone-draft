@@ -78,7 +78,11 @@ const upcomingDgroupMeetings = computed(() => {
 })
 
 function stopMeetingsListener() { if (typeof meetingsUnsub === 'function') { meetingsUnsub(); meetingsUnsub = null } }
+
+const currentLeaderId = ref(null)
+
 function startMeetingsListener(dgroupLeaderId) {
+  currentLeaderId.value = dgroupLeaderId
   stopMeetingsListener()
   if (!dgroupLeaderId) { dgroupMeetings.value = []; return }
   meetingsLoading.value = true
@@ -223,8 +227,13 @@ function formatShortDate(dateStr) { if (!dateStr) return ''; return new Date(dat
       <div v-else class="empty-placeholder">No scheduled Dgroups.</div>
     </section>
 
-    <DgroupAttendanceModal v-if="showAttendanceModal && isDgroupLeader" :group="{ dgroupId: memberProfile.value?.dgroupId }" :meeting="todayMeeting" @close="showAttendanceModal = false" />
-
+    <DgroupAttendanceModal
+      v-if="showAttendanceModal && isDgroupLeader"
+      :group="todayMeeting"
+      :leaderId="memberProfile.value?.id"
+      :meeting="todayMeeting"
+      @close="showAttendanceModal = false"
+    />
     <!-- Event Detail Modal -->
     <div v-if="showEventModal && selectedEvent" class="modal-backdrop" @click.self="showEventModal = false">
       <div class="modern-modal">

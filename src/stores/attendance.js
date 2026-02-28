@@ -82,110 +82,91 @@ export const useAttendanceStore = defineStore('attendance', () => {
     }
   }
 
-  /**
-   * WEEKLY LOCKING LOGIC
-   */
-  async function checkIfLogged(dgroupId, ministryWeekKey) {
-    const authStore = useAuthStore()
-    if (!authStore.branchId || !dgroupId) return false
-
-    try {
-      const q = query(
-        collection(db, 'branches', authStore.branchId, 'dgroupAttendance'),
-        where('dgroupId', '==', dgroupId),
-        where('ministryWeek', '==', ministryWeekKey),
-        limit(1)
-      )
-      const snapshot = await getDocs(q)
-      const exists = !snapshot.empty
-      currentGroupHasLogged.value = exists
-      return exists
-    } catch (error) {
-      console.error("Error checking weekly log status:", error)
-      return false
-    }
-  }
 
   /**
    * Log Weekly DGroup Meeting
    */
-  async function logDgroupMeeting(meetingData) {
-    const authStore = useAuthStore()
-    if (!authStore.branchId) return { status: 'error', message: 'Branch ID missing' }
-    console.debug('logDgroupMeeting called with:', meetingData)
-    // write weekly meeting logs into the dgroupEvents -> {dgroupId}/meetings/{meetingDate}
-    if (!meetingData) return { status: 'error', message: 'Missing meeting data' }
-    // Resolve target dgroupId. We primarily accept an explicit dgroupId, but
-    // also allow a leader pointer (dgroupLeaderId / leaderId) and resolve it
-    // to the leader's dgroupId when possible for backwards compatibility.
-    let dgroupId = meetingData.dgroupId || meetingData.dgroup || meetingData.groupId || meetingData.group?.dgroupId
-    const leaderId = meetingData.dgroupLeaderId || meetingData.leaderId || meetingData.leader || null
-
-    if (!dgroupId && leaderId) {
-      // Try to resolve leader's dgroupId from members store
-      try {
-        const membersStore = useMembersStore()
-        const leader = (membersStore.activeMembers || []).find(m => m.id === leaderId)
-        if (leader && leader.dgroupId) dgroupId = leader.dgroupId
-        else {
-          // Fallback: use leaderId as collection key to avoid failure (keeps data accessible)
-          dgroupId = leaderId
-        }
-      } catch (e) {
-        console.warn('Failed to resolve leader -> dgroupId, falling back to leaderId as dgroupId', e)
-        dgroupId = leaderId
-      }
-    }
-
-    if (!dgroupId) {
-      console.error('Missing dgroupId or leaderId in meeting data:', meetingData)
-      return { status: 'error', message: 'Missing dgroupId or leaderId in meeting data' }
-    }
-
-    try {
-      const membersStore = useMembersStore()
-      const rawAttendees = meetingData.attendees || {}
-      const attendanceMap = {}
-      Object.keys(rawAttendees).forEach(memberId => {
-        const a = rawAttendees[memberId] || {}
-        let displayName = a.name || ''
-        if (!displayName) {
-          const m = (membersStore.activeMembers || []).find(x => x.id === memberId)
-          if (m) displayName = `${m.firstName || ''} ${m.lastName || ''}`.trim()
-        }
-        attendanceMap[memberId] = {
-          isPresent: !!a.isPresent,
-          name: displayName || 'Unknown'
-        }
-      })
-
-      const meetingDate = meetingData.meetingDate || new Date().toISOString().split('T')[0]
-
-      // Only include attendance map and stats — do not overwrite schedule fields like venue/time/date
-      const payload = {
-        attendance: attendanceMap,
-        guests: typeof meetingData.guests === 'number' ? meetingData.guests : 0,
-        evangelized: typeof meetingData.evangelized === 'number' ? meetingData.evangelized : 0,
-        conversations: typeof meetingData.conversations === 'number' ? meetingData.conversations : 0,
-        locked: !!meetingData.locked,
-        // mark meeting as ended when logging the report
-        ended: true,
-        submittedBy: `${authStore.userProfile?.firstName || ''} ${authStore.userProfile?.lastName || ''}`.trim(),
-        submittedById: authStore.userProfile?.id || 'unknown'
-      }
-
-      const dgroupStore = useDgroupEventsStore()
-      const res = await dgroupStore.updateDgroupMeeting(dgroupId, meetingDate, payload)
-      if (res && res.status === 'success') {
-        currentGroupHasLogged.value = true
-        return { status: 'success', message: 'DGroup attendance recorded in dgroupEvents.' }
-      }
-      return { status: 'error', message: res?.message || 'Failed to update meeting.' }
-    } catch (error) {
-      console.error('DGroup Log Error:', error)
-      return { status: 'error', message: error.message }
-    }
+ async function logDgroupMeeting(meetingData) {
+  const authStore = useAuthStore()
+  if (!authStore.branchId) {
+    return { status: 'error', message: 'Branch ID missing' }
   }
+
+  if (!meetingData || !meetingData.dgroupLeaderId) {
+    return { status: 'error', message: 'Missing dgroupLeaderId in meeting data' }
+  }
+
+  try {
+    const membersStore = useMembersStore()
+    const rawAttendees = meetingData.attendees || {}
+    const attendanceMap = {}
+
+    Object.keys(rawAttendees).forEach(memberId => {
+      const a = rawAttendees[memberId] || {}
+
+      let displayName = a.name || ''
+      if (!displayName) {
+        const m = (membersStore.activeMembers || [])
+          .find(x => x.id === memberId)
+        if (m) displayName =
+          `${m.firstName || ''} ${m.lastName || ''}`.trim()
+      }
+
+      attendanceMap[memberId] = {
+        isPresent: !!a.isPresent,
+        name: displayName || 'Unknown'
+      }
+    })
+
+    const meetingDate =
+      meetingData.meetingDate ||
+      new Date().toISOString().split('T')[0]
+
+    const payload = {
+      attendees: attendanceMap,   // ⚠ match createDgroupEvent field name
+      guests: typeof meetingData.guests === 'number' ? meetingData.guests : 0,
+      evangelized: typeof meetingData.evangelized === 'number' ? meetingData.evangelized : 0,
+      conversations: typeof meetingData.conversations === 'number' ? meetingData.conversations : 0,
+      locked: !!meetingData.locked,
+      ended: true,
+      submittedBy:
+        `${authStore.userProfile?.firstName || ''} ${authStore.userProfile?.lastName || ''}`.trim(),
+      submittedById: authStore.userProfile?.id || 'unknown'
+    }
+
+    const dgroupStore = useDgroupEventsStore()
+
+    console.log(
+      "Updating meeting for leader:",
+      meetingData.dgroupLeaderId,
+      "date:",
+      meetingDate
+    )
+
+    const res = await dgroupStore.updateDgroupMeeting(
+      meetingData.dgroupLeaderId,
+      meetingDate,
+      payload
+    )
+
+    if (res && res.status === 'success') {
+      currentGroupHasLogged.value = true
+      return {
+        status: 'success',
+        message: 'DGroup attendance recorded in dgroupEvents.'
+      }
+    }
+
+    return {
+      status: 'error',
+      message: res?.message || 'Failed to update meeting.'
+    }
+
+  } catch (error) {
+    console.error('DGroup Log Error:', error)
+    return { status: 'error', message: error.message }
+  }
+}
 
   /**
    * Fetch attendance records by date
@@ -334,7 +315,6 @@ export const useAttendanceStore = defineStore('attendance', () => {
     fetchSpeakers,
     addNewSpeaker,
     deleteSpeaker,
-    checkIfLogged,
     getAttendanceByDate, 
     markAttendance,
     logDgroupMeeting,

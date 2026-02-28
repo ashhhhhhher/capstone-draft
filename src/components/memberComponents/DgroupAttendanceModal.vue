@@ -113,13 +113,7 @@ async function submitAttendance() {
 		return
 	}
 		// determine leaderId: prefer explicit prop, then group fields, then auth profile
-		const resolvedLeaderId =
-		props.leaderId ||
-		props.group?.leaderId ||
-		props.group?.dgroupLeaderId ||
-		props.group?.id ||
-		authStore.userProfile?.dgroupLeaderId ||
-		authStore.userProfile?.id; // if leader logging own group
+		const resolvedLeaderId = props.group?.dgroupLeaderId
 
 		const payload = {
 		dgroupLeaderId: resolvedLeaderId,
