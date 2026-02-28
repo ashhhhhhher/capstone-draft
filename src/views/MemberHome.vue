@@ -7,7 +7,7 @@ import { MapPin, QrCode, BarChart2, Clock, Info, X, Sparkles, Plus, ClipboardChe
 import DgroupMeetingModal from '../components/memberComponents/DgroupMeetingModal.vue'
 import DgroupAttendanceModal from '../components/memberComponents/DgroupAttendanceModal.vue'
 import BackgroundHero from '../components/dgmComponents/Background.vue'
-import EventCard from '../components/dgmComponents/EventCard.vue'
+import EventCard from '../components/dgmComponents/EventCard.vue' 
 import { useMembersStore } from '../stores/members'
 import { useDgroupEventsStore } from '../stores/dgroupevents'
 
@@ -21,34 +21,22 @@ function localYMD(input) {
   const m = String(dt.getMonth() + 1).padStart(2, '0')
   const d = String(dt.getDate()).padStart(2, '0')
   return `${y}-${m}-${d}`
-
 }
 
-
-
 const memberProfile = computed(() => authStore.userProfile)
-
 const isFirstTime = computed(() => !memberProfile.value?.dgroupId)
-
 const showEventModal = ref(false)
-
 const selectedEvent = ref(null)
 
 const todayEvent = computed(() => {
   const todayStr = localYMD()
-
   const ageCat = memberProfile.value?.finalTags?.ageCategory
   return eventsStore.allEvents.find(e => {
     if (!e.date) return false
-
     const eDate = localYMD(e.date)
-
     if (eDate !== todayStr) return false
-
     if (e.ended) return false
-
     if (!e.allowedAgeCategories || e.allowedAgeCategories.length === 0) return true
-
     return ageCat && e.allowedAgeCategories.includes(ageCat)
   })
 })
@@ -58,7 +46,6 @@ const dgroupEventsStore = useDgroupEventsStore()
 const membersStore = useMembersStore()
 
 const isDgroupLeader = computed(() => {
-
   const user = authStore.userProfile
   if (user?.finalTags?.isDgroupLeader) return true
   const me = membersStore.activeMembers.find(m => m.id === user?.id)
@@ -84,16 +71,13 @@ const dgroupMembersForModal = computed(() => {
 })
 
 const upcomingDgroupMeetings = computed(() => {
-
   const today = localYMD()
   return (dgroupMeetings.value || [])
     .filter(m => m && m.meetingDate && m.meetingDate > today && !m.ended)
     .sort((a, b) => (a.meetingDate || '').localeCompare(b.meetingDate || ''))
-
 })
 
 function stopMeetingsListener() { if (typeof meetingsUnsub === 'function') { meetingsUnsub(); meetingsUnsub = null } }
-
 function startMeetingsListener(dgroupLeaderId) {
   stopMeetingsListener()
   if (!dgroupLeaderId) { dgroupMeetings.value = []; return }
@@ -101,9 +85,7 @@ function startMeetingsListener(dgroupLeaderId) {
   meetingsUnsub = dgroupEventsStore.listenToDgroupMeetings(dgroupLeaderId, (items) => {
     dgroupMeetings.value = items || []
     meetingsLoading.value = false
-
   })
-
 }
 
 function resolveMeetingLeaderId() {
@@ -122,7 +104,6 @@ onMounted(() => {
   const leaderId = resolveMeetingLeaderId()
   startMeetingsListener(leaderId)
   membersStore.fetchMembers()
-
 })
 
 watch(() => authStore.userProfile, () => {
@@ -148,12 +129,8 @@ const upcomingEvents = computed(() => {
 })
 
 function openEventDetails(event) { selectedEvent.value = event; showEventModal.value = true }
-
 function formatShortDate(dateStr) { if (!dateStr) return ''; return new Date(dateStr).toLocaleString('default', { month: 'short', day: 'numeric' }) }
-
 </script>
-
-
 
 <template>
   <div class="home-view">
@@ -224,7 +201,6 @@ function formatShortDate(dateStr) { if (!dateStr) return ''; return new Date(dat
         <EventCard v-for="event in upcomingEvents" :key="event.id" :event="event" @click="openEventDetails" />
       </div>
       <div v-else class="empty-placeholder">No upcoming events found.</div>
-
     </section>
 
     <div class="section-header"><h3>Upcoming Dgroups</h3></div>
