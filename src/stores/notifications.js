@@ -169,6 +169,67 @@ async function notifyMemberApproved(branchId, memberId, displayName) {
   });
 }
 
+//DGROUP MATCHING NOTIFS FOR DLEADERS AND MEMBERS: REQUEST TO JOIN, APPROVAL, REJECTION
+async function notifyLeaderOfJoinRequest(branchId, leaderMemberId, requesterName, dgroupName) {
+  await sendToUser({
+    branchId,
+    targetUid: leaderMemberId,
+    roleTarget: "member",
+    type: "DGROUP_JOIN_REQUEST",
+    header: "New DGroup Join Request",
+    body: `${requesterName} has requested to join ${dgroupName}.`,
+    focus: "leaderRequests"
+  });
+}
+
+async function notifyMemberJoinApproved(branchId, memberId, leaderName) {
+  await sendToUser({
+    branchId,
+    targetUid: memberId,
+    roleTarget: "member",
+    type: "DGROUP_JOIN_APPROVED",
+    header: "Join Request Approved",
+    body: `Welcome! You have been accepted into ${leaderName}'s DGroup.`,
+    focus: "memberDgroup"
+  });
+}
+
+async function notifyMemberJoinRejected(branchId, memberId) {
+  await sendToUser({
+    branchId,
+    targetUid: memberId,
+    roleTarget: "member",
+    type: "DGROUP_REQUEST_REJECTED",
+    header: "Join Request Declined",
+    body: "Your request was declined. Please try another group or contact an admin.",
+    focus: "matching"
+  });
+}
+
+// Additional notification when a member is assigned to a DGroup by an admin not through requests
+async function notifyLeaderMemberAssigned(branchId, leaderMemberId, memberName, dgroupName) {
+  await sendToUser({
+    branchId,
+    targetUid: leaderMemberId,
+    roleTarget: "member",
+    type: "DGROUP_MEMBER_ASSIGNED",
+    header: "New Member Assigned",
+    body: `${memberName} has been added to your DGroup (${dgroupName}).`,
+    focus: "leaderRequests"
+  });
+}
+// also for force approve
+async function notifyMemberAssigned(branchId, memberId, dgroupName) {
+  await sendToUser({
+    branchId,
+    targetUid: memberId,
+    roleTarget: "member",
+    type: "DGROUP_MEMBER_ASSIGNED",
+    header: "You’ve Been Assigned to a DGroup",
+    body: `You have been added to ${dgroupName}.`,
+    focus: "memberDgroup"
+  });
+}
 
   return {
     localNotifications,
@@ -178,6 +239,11 @@ async function notifyMemberApproved(branchId, memberId, displayName) {
     markAsRead,
     clearLocalNotifications,
     notifyAdminsOfPending,
-    notifyMemberApproved
+    notifyMemberApproved,
+    notifyLeaderOfJoinRequest,
+    notifyMemberJoinApproved,
+    notifyMemberJoinRejected,
+    notifyLeaderMemberAssigned,
+    notifyMemberAssigned
   }
 })

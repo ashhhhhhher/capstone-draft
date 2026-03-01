@@ -384,100 +384,115 @@ async function assignDgroupLeader(memberId, leaderId) {
 
 
   // --- NEW FEATURE: Join Request Logic (Now using correct Paths) ---
+// 1. Request to Join (Seeker Side)
+async function requestJoinDgroup(memberId, dgroupData, preferences) {
+  const notifStore = useNotificationsStore();
+  const authStore = useAuthStore();
 
-  // 1. Request to Join (Seeker Side)
-  async function requestJoinDgroup(memberId, dgroupData, preferences) {
-    const notifStore = useNotificationsStore();
-    try {
-      const memberRef = doc(getMemberCollection(), memberId);
-      
-      // Update member with preferences and the request
+  try {
+    const memberRef = doc(getMemberCollection(), memberId);
+
+    // Update member with preferences and request
+    await updateDoc(memberRef, {
+      seekerPreferences: preferences,
+      joinRequest: {
+        dgroupLeaderId: dgroupData.leaderId || dgroupData.dgroupLeaderId || null,
+        leaderId: dgroupData.leaderId,
+        leaderName: dgroupData.leaderName,
+        dgroupName: dgroupData.dgroupName,
+        status: 'pending',
+        requestedAt: new Date().toISOString()
+      },
+      'finalTags.isSeeker': true
+    });
+
+    // 🔔 Notify Leader (NEW SYSTEM)
+    if (dgroupData.leaderId) {
+
+      // Get requester's display name
+      const requester = members.value.find(m => m.id === memberId);
+      const requesterName = requester?.displayName || "A member";
+
+      await notifStore.notifyLeaderOfJoinRequest(
+        authStore.branchId,
+        dgroupData.leaderId,   // leader memberId
+        requesterName,
+        dgroupData.dgroupName
+      );
+    }
+
+  } catch (error) {
+    console.error("Error requesting join:", error);
+    throw error;
+  }
+}
+
+async function respondToJoinRequest(memberId, action, dgroupData = null) {
+  const notifStore = useNotificationsStore();
+  const authStore = useAuthStore();
+
+  try {
+    const memberRef = doc(getMemberCollection(), memberId);
+
+    if (action === 'approve') {
+
+      const member = members.value.find(m => m.id === memberId);
+      if (!member || !member.joinRequest) throw new Error("Request not found");
+
+      const leaderName =
+        dgroupData?.leaderName || member.joinRequest.leaderName;
+
+      const dgroupLeaderId =
+        dgroupData?.leaderId ||
+        dgroupData?.dgroupLeaderId ||
+        member.joinRequest.dgroupLeaderId ||
+        member.joinRequest.leaderId;
+
       await updateDoc(memberRef, {
-        seekerPreferences: preferences, // Save analytics data
-        joinRequest: {
-          // prefer explicit leader id (dgroupLeaderId) instead of relying on a group code
-          dgroupLeaderId: dgroupData.leaderId || dgroupData.dgroupLeaderId || null,
-          leaderId: dgroupData.leaderId,
-          leaderName: dgroupData.leaderName,
-          dgroupName: dgroupData.dgroupName,
-          status: 'pending',
-          requestedAt: new Date().toISOString()
-        },
-        'finalTags.isSeeker': true // Mark as seeker in the interim
+        dgroupLeader: leaderName,
+        dgroupLeaderId: dgroupLeaderId,
+        joinRequest: null,
+        'finalTags.isSeeker': false,
+        'finalTags.isRegular': true,
+        'finalTags.isFirstTimer': false
       });
 
-      // Notify Leader
-      if (dgroupData.leaderId) {
-        if(notifStore && notifStore.sendNotification) {
-          await notifStore.sendNotification(
-            dgroupData.leaderId, 
-            'New DGroup Join Request', 
-            'A member has requested to join your DGroup. Please review.', 
-            'info'
-          );
-        }
+      // 🔔 Notify Member
+      await notifStore.notifyMemberJoinApproved(
+        authStore.branchId,
+        memberId,
+        leaderName
+      );
+
+      // 🔔 Notify Leader ONLY if admin override
+      if (authStore.userRole === 'admin') {
+        const memberName = member.displayName || "A member";
+
+        await notifStore.notifyLeaderMemberAssigned(
+          authStore.branchId,
+          dgroupLeaderId,
+          memberName,
+          leaderName
+        );
       }
-    } catch (error) {
-      console.error("Error requesting join:", error);
-      throw error;
+
+    } else if (action === 'reject') {
+
+      await updateDoc(memberRef, {
+        joinRequest: null
+      });
+
+      await notifStore.notifyMemberJoinRejected(
+        authStore.branchId,
+        memberId
+      );
     }
+
+  } catch (error) {
+    console.error("Error responding to request:", error);
+    throw error;
   }
-
-  // 2. Respond to Request (Leader/Admin Side)
-  async function respondToJoinRequest(memberId, action, dgroupData = null) {
-    // action: 'approve' | 'reject'
-    const notifStore = useNotificationsStore();
-    
-    try {
-      const memberRef = doc(getMemberCollection(), memberId);
-      
-      if (action === 'approve') {
-        // Find member to get request details if dgroupData not passed
-        const member = members.value.find(m => m.id === memberId);
-        if (!member || !member.joinRequest) throw new Error("Request not found");
-
-        const leaderName = dgroupData?.leaderName || member.joinRequest.leaderName;
-        // prefer leader id (dgroupLeaderId) as the canonical pointer to the leader
-        const dgroupLeaderId = dgroupData?.leaderId || dgroupData?.dgroupLeaderId || member.joinRequest.dgroupLeaderId || member.joinRequest.leaderId;
-
-        await updateDoc(memberRef, {
-          dgroupLeader: leaderName,
-          dgroupLeaderId: dgroupLeaderId,
-          joinRequest: null,
-          'finalTags.isSeeker': false,
-          'finalTags.isRegular': true,
-          'finalTags.isFirstTimer': false
-        });
-
-
-        if (notifStore && notifStore.sendNotification) {
-          await notifStore.sendNotification(
-            memberId,
-            'Join Request Approved',
-            `Welcome! You have been accepted into ${leaderName}'s Dgroup.`,
-            'success'
-          );
-        }
-
-      } else if (action === 'reject') {
-        await updateDoc(memberRef, {
-          joinRequest: null // Just clear the request, remains a seeker
-        });
-
-        if (notifStore && notifStore.sendNotification) {
-          await notifStore.sendNotification(
-            memberId,
-            'Join Request Declined',
-            `Your request to join the Dgroup was declined. Please try another group or contact an admin.`,
-            'warning'
-          );
-        }
-      }
-    } catch (error) {
-      console.error("Error responding to request:", error);
-      throw error;
-    }
-  }
+}
   
   return { 
     members, activeMembers, archivedMembers, isLoading,
