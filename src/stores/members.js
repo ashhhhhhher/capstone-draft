@@ -14,7 +14,6 @@ import {
 } from "firebase/firestore";
 import { useAuthStore } from './auth';
 import { useNotificationsStore } from './notifications';
-
 export const useMembersStore = defineStore('members', () => {
   const members = ref([])
   const pendingMembers = ref([])
@@ -156,26 +155,38 @@ export const useMembersStore = defineStore('members', () => {
   }
 
   // --- APPROVE PENDING REGISTRATION ---
-  async function approvePending(memberId) {
-    try {
-      const pendingRef = doc(getPendingCollection(), memberId);
-      const snap = await getDoc(pendingRef);
-      if (!snap.exists()) throw new Error('Pending registration not found');
-      const data = snap.data();
+async function approvePending(memberId) {
+  try {
+    const pendingRef = doc(getPendingCollection(), memberId);
+    const snap = await getDoc(pendingRef);
+    if (!snap.exists()) throw new Error('Pending registration not found');
 
-      const memberRef = doc(getMemberCollection(), memberId);
-      if (!data.createdAt) data.createdAt = new Date().toISOString();
-      // Ensure the transferred record becomes active immediately on approval.
-      data.status = 'active';
-      if (!data.monitoringState) data.monitoringState = { msgSentDate: null, leaderNotifiedDate: null };
+    const data = snap.data();
 
-      await setDoc(memberRef, data);
-      await deleteDoc(pendingRef);
-    } catch (error) {
-      console.error('Error approving pending member:', error);
-      throw error;
-    }
+    const memberRef = doc(getMemberCollection(), memberId);
+
+    if (!data.createdAt) data.createdAt = new Date().toISOString();
+    data.status = 'active';
+    if (!data.monitoringState)
+      data.monitoringState = { msgSentDate: null, leaderNotifiedDate: null };
+
+    await setDoc(memberRef, data);
+    await deleteDoc(pendingRef);
+
+    // ✅ MOVE THIS INSIDE TRY
+    const notificationsStore = useNotificationsStore();
+
+    await notificationsStore.notifyMemberApproved(
+      data.branchId,
+      memberId,        // correct (member doc id)
+      data.displayName
+    );
+
+  } catch (error) {
+    console.error('Error approving pending member:', error);
+    throw error;
   }
+}
 
   // --- REJECT PENDING REGISTRATION ---
   async function rejectPending(memberId) {

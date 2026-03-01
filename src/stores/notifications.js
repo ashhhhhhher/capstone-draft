@@ -27,33 +27,35 @@ export const useNotificationsStore = defineStore('notifications', () => {
 
   // 🔹 Resolve correct notification collection based on role
   function getUserNotifCollection() {
-    const authStore = useAuthStore()
-    const { branchId, userRole, user } = authStore
+  const authStore = useAuthStore()
+  const { branchId, userRole, user, userProfile } = authStore
 
-    if (!branchId || !user?.uid) return null
+  if (!branchId || !user?.uid) return null
 
-    if (userRole === 'admin') {
-      return collection(
-        db,
-        "branches",
-        branchId,
-        "dgms",
-        user.uid,
-        "notifications"
-      )
-    }
-
-    // members + dleaders
+  // Admin: docId = authUid
+  if (userRole === 'admin') {
     return collection(
       db,
       "branches",
       branchId,
-      "members",
+      "dgms",
       user.uid,
       "notifications"
     )
   }
 
+  // Member: docId = memberId
+  if (!userProfile?.id) return null
+
+  return collection(
+    db,
+    "branches",
+    branchId,
+    "members",
+    userProfile.id,
+    "notifications"
+  )
+}
   // 🔹 Initialize real-time listener
   function initUserNotifications() {
     const colRef = getUserNotifCollection()
@@ -155,6 +157,18 @@ async function notifyAdminsOfPending(branchId, newMemberId, displayName) {
   }
 }
 
+async function notifyMemberApproved(branchId, memberId, displayName) {
+  await sendToUser({
+    branchId,
+    targetUid: memberId,   // this now means memberId
+    roleTarget: "member",
+    type: "MEMBER_APPROVED",
+    header: "You're Approved!",
+    body: `Welcome ${displayName}! Your membership has been approved.`,
+    focus: "memberDgroup"
+  });
+}
+
 
   return {
     localNotifications,
@@ -163,6 +177,7 @@ async function notifyAdminsOfPending(branchId, newMemberId, displayName) {
     sendToUser,
     markAsRead,
     clearLocalNotifications,
-    notifyAdminsOfPending
+    notifyAdminsOfPending,
+    notifyMemberApproved
   }
 })
