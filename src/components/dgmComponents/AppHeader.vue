@@ -65,10 +65,9 @@ function openNotificationFocus(focusKey) {
 onMounted(() => {
   document.addEventListener('click', closeDropdown)
   window.addEventListener('scroll', handleScroll)
+
   if (authStore.user) {
-    notificationsStore.initUserNotifications(authStore.user.uid, authStore.userProfile?.id);
-    if (authStore.userRole === 'admin') { notificationsStore.cleanupOldNotifications(); notificationsStore.initSeekerListener() } 
-    else { notificationsStore.initMemberListeners(authStore.user.uid) }
+    notificationsStore.initUserNotifications()
   }
 })
 onUnmounted(() => { 

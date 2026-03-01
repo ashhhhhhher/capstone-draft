@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { auth, db } from '../firebase'
+import { useNotificationsStore } from './notifications'
 import { 
   signInWithEmailAndPassword, 
   signOut, 
@@ -156,7 +157,16 @@ async function signup(email, password, basicData) {
 
     const pendingRef = doc(db, "branches", branchId, "pendingMembers", memberId);
     await setDoc(pendingRef, pendingData);
+    const notificationsStore = useNotificationsStore()
+
+    await notificationsStore.notifyAdminsOfPending(
+      branchId,
+      memberId,
+      pendingData.displayName
+    )
   }
+
+  
 
   async function updateExtendedProfile(data) {
     if (!userProfile.value || !branchId.value) return;
@@ -216,7 +226,7 @@ async function login(email, password) {
     }
 
     // Throw a plain object with code + message so Login.vue's switch works.
-    throw { code, message: msg, original: error };
+    throw { code, body: msg, original: error };
   } finally {
     isLoading.value = false
   }

@@ -4,7 +4,6 @@ import { storeToRefs } from 'pinia'
 import { useMembersStore } from '../stores/members'
 import { useEventsStore } from '../stores/events'
 import { useAttendanceStore } from '../stores/attendance'
-import { useNotificationsStore } from '../stores/notifications'
 import { useRouter } from 'vue-router'
 import AppHeader from '../components/dgmComponents/AppHeader.vue'
 import CurrentEvent from '../components/dgmComponents/CurrentEvent.vue'
@@ -13,12 +12,10 @@ import Modal from '../components/dgmComponents/Modal.vue'
 import CreateEventForm from '../components/dgmComponents/CreateEventForm.vue'
 import AttendanceListModal from '../components/dgmComponents/AttendanceListModal.vue'
 import CalendarModal from '../components/dgmComponents/CalendarModal.vue' 
-import AbsenceMonitoring from '../components/dgmComponents/AbsenceMonitoring.vue'
 import Background from '../components/dgmComponents/Background.vue'
 import EventCard from '../components/dgmComponents/EventCard.vue'
 
 const router = useRouter()
-const notificationsStore = useNotificationsStore()
 const { members } = storeToRefs(useMembersStore())
 const eventsStore = useEventsStore()
 const { currentEvent, allEvents } = storeToRefs(useEventsStore())
