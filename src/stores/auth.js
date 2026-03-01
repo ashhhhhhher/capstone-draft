@@ -168,14 +168,38 @@ async function signup(email, password, basicData) {
 
   
 
-  async function updateExtendedProfile(data) {
-    if (!userProfile.value || !branchId.value) return;
-    
-    userProfile.value = { ...userProfile.value, ...data };
-    
-    const memberRef = doc(db, "branches", branchId.value, "members", userProfile.value.id);
-    await updateDoc(memberRef, data);
+async function updateExtendedProfile(data) {
+  if (!userProfile.value || !branchId.value) return;
+
+  const notifStore = useNotificationsStore();
+
+  // Merge locally first
+  const updatedProfile = { ...userProfile.value, ...data };
+  userProfile.value = updatedProfile;
+
+  const memberRef = doc(
+    db,
+    "branches",
+    branchId.value,
+    "members",
+    updatedProfile.id
+  );
+
+  await updateDoc(memberRef, data);
+
+  // 🔔 MATCHING POOL ENTRY CHECK
+  const isSeeker = updatedProfile.finalTags?.isSeeker === true;
+  const hasLeader = !!updatedProfile.dgroupLeaderId;
+  const hasJoinRequest = !!updatedProfile.joinRequest;
+
+  if (isSeeker && !hasLeader && !hasJoinRequest) {
+    await notifStore.notifyAdminsMatchingPending(
+      branchId.value,
+      updatedProfile.id,
+      updatedProfile.displayName || "A member"
+    );
   }
+}
 
 async function login(email, password) {
   isLoading.value = true

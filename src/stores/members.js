@@ -49,6 +49,7 @@ export const useMembersStore = defineStore('members', () => {
   
   const seekers = computed(() => {
     return activeMembers.value.filter(m => m.finalTags.isSeeker)
+
   })
 
   // New: Members requesting to join a specific leader
@@ -315,6 +316,8 @@ async function approvePending(memberId) {
 
 // --- Assign Dgroup Leader (DOES NOT modify dgroupId) ---
 async function assignDgroupLeader(memberId, leaderId) {
+  const notifStore = useNotificationsStore();
+  const authStore = useAuthStore();
   try {
     const memberRef = doc(getMemberCollection(), memberId);
 
@@ -376,6 +379,20 @@ async function assignDgroupLeader(memberId, leaderId) {
 
     await updateDoc(memberRef, updatePayload);
 
+    await notifStore.notifyMemberAssigned(
+      authStore.branchId,
+      memberId,
+      leader.dgroupName || "your DGroup"
+    );
+
+    // 🔔 Notify Leader
+    await notifStore.notifyLeaderMemberAssigned(
+      authStore.branchId,
+      leaderId,
+      member.displayName,
+      leader.dgroupName || "your DGroup"
+    );
+
   } catch (error) {
     console.error('Error assigning dgroup leader:', error);
     throw error;
@@ -392,7 +409,6 @@ async function requestJoinDgroup(memberId, dgroupData, preferences) {
   try {
     const memberRef = doc(getMemberCollection(), memberId);
 
-    // Update member with preferences and request
     await updateDoc(memberRef, {
       seekerPreferences: preferences,
       joinRequest: {
@@ -406,16 +422,22 @@ async function requestJoinDgroup(memberId, dgroupData, preferences) {
       'finalTags.isSeeker': true
     });
 
-    // 🔔 Notify Leader (NEW SYSTEM)
+    // 🔔 Get requester info
+    const requester = members.value.find(m => m.id === memberId);
+    const requesterName = requester?.displayName || "A member";
+
+    // 🔔 Notify Admins (Matching Pending)
+    await notifStore.notifyAdminsMatchingPending(
+      authStore.branchId,
+      memberId,
+      requesterName
+    );
+
+    // 🔔 Notify Leader
     if (dgroupData.leaderId) {
-
-      // Get requester's display name
-      const requester = members.value.find(m => m.id === memberId);
-      const requesterName = requester?.displayName || "A member";
-
       await notifStore.notifyLeaderOfJoinRequest(
         authStore.branchId,
-        dgroupData.leaderId,   // leader memberId
+        dgroupData.leaderId,
         requesterName,
         dgroupData.dgroupName
       );
@@ -457,14 +479,14 @@ async function respondToJoinRequest(memberId, action, dgroupData = null) {
         'finalTags.isFirstTimer': false
       });
 
-      // 🔔 Notify Member
+      // Notify Member
       await notifStore.notifyMemberJoinApproved(
         authStore.branchId,
         memberId,
         leaderName
       );
 
-      // 🔔 Notify Leader ONLY if admin override
+      // Notify Leader ONLY if admin override
       if (authStore.userRole === 'admin') {
         const memberName = member.displayName || "A member";
 
@@ -498,9 +520,9 @@ async function respondToJoinRequest(memberId, action, dgroupData = null) {
     members, activeMembers, archivedMembers, isLoading,
     pendingMembers,
     leaderNames, leaders, seekers, joinRequests,
-    fetchMembers, registerNewMember, updateMember, 
+    fetchMembers, registerNewMember, updateMember,
     archiveMember, restoreMember, purgeOldArchives,
-    checkAndAutoRestore, 
+    checkAndAutoRestore,
     fetchPendingRegistrations, approvePending, rejectPending,
     logMonitoringAction,
     removeDgroupMember,

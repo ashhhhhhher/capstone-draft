@@ -231,6 +231,23 @@ async function notifyMemberAssigned(branchId, memberId, dgroupName) {
   });
 }
 
+async function notifyAdminsMatchingPending(branchId, memberId, memberName) {
+  const dgmsRef = collection(db, "branches", branchId, "dgms");
+  const snapshot = await getDocs(dgmsRef);
+
+  for (const adminDoc of snapshot.docs) {
+    await sendToUser({
+      branchId,
+      targetUid: adminDoc.id, // admin authUid
+      roleTarget: "admin",
+      type: "DGROUP_MATCHING_PENDING",
+      header: "Member Needs DGroup Matching",
+      body: `${memberName} is waiting to be matched to a DGroup.`,
+      focus: "matching"
+    });
+  }
+}
+
   return {
     localNotifications,
     unreadCount,
@@ -244,6 +261,7 @@ async function notifyMemberAssigned(branchId, memberId, dgroupName) {
     notifyMemberJoinApproved,
     notifyMemberJoinRejected,
     notifyLeaderMemberAssigned,
-    notifyMemberAssigned
+    notifyMemberAssigned,
+    notifyAdminsMatchingPending
   }
 })
