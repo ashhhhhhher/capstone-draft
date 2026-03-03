@@ -7,7 +7,9 @@ import {
   onSnapshot,
   doc,
   updateDoc,
+  deleteDoc,
   serverTimestamp,
+  writeBatch,
   query,
   orderBy
 } from "firebase/firestore"
@@ -120,6 +122,16 @@ export const useNotificationsStore = defineStore('notifications', () => {
         : doc(db, "branches", branchId, "members", user.uid, "notifications", notifId)
 
     await updateDoc(notifDoc, { read: true })
+  }
+
+  // 🔹 Delete a single notification document
+  async function deleteNotification(notifId) {
+    const colRef = getUserNotifCollection()
+    if (!colRef || !notifId) return
+
+    const docRef = doc(colRef.firestore, ...colRef.path.split('/'), notifId)
+    // The above constructs a doc ref using the collection path and notifId
+    await deleteDoc(docRef)
   }
 
   // 🔹 Keep old function name so AppHeader doesn't break
@@ -248,6 +260,26 @@ async function notifyAdminsMatchingPending(branchId, memberId, memberName) {
   }
 }
 
+  // 🔹 Permanently delete all notifications in user's collection
+  async function clearAllNotifications() {
+    const colRef = getUserNotifCollection()
+    if (!colRef) return
+
+    const snap = await getDocs(colRef)
+    if (snap.empty) {
+      localNotifications.value = []
+      return
+    }
+
+    const batch = writeBatch(db)
+    snap.forEach(docSnap => {
+      batch.delete(docSnap.ref)
+    })
+
+    await batch.commit()
+    localNotifications.value = []
+  }
+
   return {
     localNotifications,
     unreadCount,
@@ -255,6 +287,8 @@ async function notifyAdminsMatchingPending(branchId, memberId, memberName) {
     sendToUser,
     markAsRead,
     clearLocalNotifications,
+    deleteNotification,
+    clearAllNotifications,
     notifyAdminsOfPending,
     notifyMemberApproved,
     notifyLeaderOfJoinRequest,

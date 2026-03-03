@@ -38,6 +38,35 @@ function handleProfileClick() {
   isDropdownOpen.value = false
 }
 
+async function dismissAll() {
+  // ask for confirmation before deleting all notifications permanently
+  const ok = confirm('Are you sure you want to dismiss ALL notifications? This will permanently remove them.')
+  if (!ok) return
+
+  try {
+    await notificationsStore.clearAllNotifications()
+    showNotifications.value = false
+  } catch (err) {
+    console.error('Failed to clear notifications', err)
+    // fallback: mark as read locally
+    try { await notificationsStore.clearLocalNotifications() } catch(e){}
+    showNotifications.value = false
+  }
+}
+
+// confirm and delete a single notification
+async function confirmDelete(notifId) {
+  const ok = confirm('Are you sure you want to delete this notification?')
+  if (!ok) return
+  try {
+    await notificationsStore.deleteNotification(notifId)
+  } catch (err) {
+    console.error('Failed to delete notification', err)
+    // if deletion fails, optionally mark as read locally
+    try { await notificationsStore.markAsRead(notifId) } catch(e){}
+  }
+}
+
 const memberDisplayRole = computed(() => {
   if (authStore.userRole === 'admin') return 'Administrator'
   const profile = authStore.userProfile
@@ -100,11 +129,13 @@ onUnmounted(() => {
               <div v-if="!notificationsStore.localNotifications.length" class="empty-notif">No new updates</div>
               <div v-else class="notif-list">
                 <div v-for="n in notificationsStore.localNotifications" :key="n.id" class="notif-card" @click="n.focus ? openNotificationFocus(n.focus) : null" :class="{ clickable: !!n.focus }">
-                  <div class="notif-header">{{ n.header }}</div><div class="notif-body">{{ n.body }}</div>
+                  <button class="notif-delete" @click.stop="confirmDelete(n.id)" title="Delete">−</button>
+                  <div class="notif-header">{{ n.header }}</div>
+                  <div class="notif-body">{{ n.body }}</div>
                   <div class="notif-action" v-if="n.focus"><button class="notif-cta" @click.stop="openNotificationFocus(n.focus)">View details →</button></div>
                 </div>
               </div>
-              <div class="panel-footer"><button class="clear-btn" @click="notificationsStore.clearLocalNotifications(); showNotifications=false">Dismiss All</button></div>
+              <div class="panel-footer"><button class="clear-btn" @click="dismissAll">Dismiss All</button></div>
             </div>
           </aside>
         </div>
@@ -175,12 +206,14 @@ onUnmounted(() => {
 .panel-header { padding: 20px; border-bottom: 1px solid #f1f5f9; display: flex; justify-content: space-between; align-items: center; }
 .panel-header h4 { margin: 0; font-weight: 800; color: #1e293b; }
 .panel-body { flex: 1; overflow-y: auto; padding: 16px; background: #f8fafc; }
-.notif-card { padding: 14px; border-radius: 16px; border: 1px solid rgba(0,0,0,0.03); background: white; margin-bottom: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.02); transition: transform 0.2s; }
+.notif-card { position: relative; padding: 14px; border-radius: 16px; border: 1px solid rgba(0,0,0,0.03); background: white; margin-bottom: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.02); transition: transform 0.2s; }
 .notif-card.clickable:active { transform: scale(0.98); }
 .notif-header { font-weight: 800; color: #1e293b; margin-bottom: 4px; font-size: 14px; }
 .notif-body { color: #64748b; font-size: 13px; line-height: 1.4; }
 .notif-action { margin-top: 10px; display: flex; justify-content: flex-end; }
 .notif-cta { background: #1976D2; color: white; border: none; padding: 6px 12px; border-radius: 8px; font-size: 12px; font-weight: 700; cursor: pointer; }
+.notif-delete { position: absolute; top: 8px; right: 8px; width: 28px; height: 28px; border-radius: 8px; border: none; background: #f1f5f9; color: #475569; font-weight: 800; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+.notif-delete:hover { background: #ffecec; color: #b91c1c; }
 .panel-footer { padding: 16px; background: white; border-top: 1px solid #f1f5f9; display: flex; justify-content: center; }
 .clear-btn { background: #f1f5f9; border: none; color: #64748b; padding: 10px 20px; border-radius: 12px; font-weight: 700; font-size: 13px; cursor: pointer; width: 100%; transition: all 0.2s; }
 .clear-btn:hover { background: #BBDEFB; color: #1976D2; }
