@@ -561,7 +561,7 @@ const volunteerTrackingReport = computed(() => {
             </div>
         </div>
 
-        <HistoricalAttendance />
+        <HistoricalAttendance eventType="service" />
         
     </div>
 
@@ -615,36 +615,9 @@ const volunteerTrackingReport = computed(() => {
             </div>
         </div>
 
-        <!-- Attendance Graph (Inline) -->
-        <div class="chart-card-full">
-            <div class="section-header">
-                <div class="header-left">
-                    <h3>Historical B1G Attendance</h3>
-                    <div class="date-text">Select a date range to view historical B1G attendance</div>
-                </div>
-                <div class="header-actions">
-                    <button class="view-overview-btn" @click="showB1GAttendanceOverview = true">View History</button>
-                    <ExportButton exportType="events" :eventsList="b1gEventsInRange" />
-                </div>
-            </div>
-
-            <div class="date-controls">
-                <div class="controls-inline">
-                    <label class="date-label">From<input type="date" v-model="b1gFromDate" /></label>
-                    <label class="date-label">To<input type="date" v-model="b1gToDate" :max="todayStr" /></label>
-                </div>
-            </div>
-
-            <div class="chart-wrapper" style="height: 350px;">
-                <BarChart v-if="b1gChartData.labels.length > 0" :chartData="b1gChartData" :chartOptions="b1gChartOptions" />
-                <p v-else class="no-data-text">No B1G event data found in the selected date range.</p>
-            </div>
-        </div>
+        <HistoricalAttendance eventType="b1g" />
 
     </div>
-
-    <!-- Modals -->
-    <Modal v-if="showDgroupModal" @close="showDgroupModal = false" size="xl"><DgroupMatchingModal @close="showDgroupModal = false" /></Modal>
     
     <!-- WKND Attendance Modal -->
     <Modal v-if="showAttendanceOverview" @close="showAttendanceOverview = false" size="xl">
