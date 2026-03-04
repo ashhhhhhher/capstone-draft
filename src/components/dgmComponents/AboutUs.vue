@@ -32,7 +32,7 @@ const features = {
     longDesc: 'Campus Unite is the massive annual anniversary celebration of Elevate! It brings together students from different campuses for a night of worship, powerful testimonies, and a shared vision to transform our nation. Our biggest event of the year with a purpose that lasts.', 
     info: 'Happens around June - August', 
     img: '/unitesm.jpg',
-    gallery: ['/unite1.jpg', '/unite2.jpg', '/unite3.jpg', '/unite4.jpg', '/unite5.jpg', '/unite6.jpg']
+    gallery: ['/unite6.jpg', '/unite1.jpg', '/unite2.jpg', '/unite3.jpg', '/unite4.jpg', '/unite5.jpg']
   }
 }
 
@@ -249,30 +249,30 @@ function closeFeature() { selectedFeature.value = null }
 .modal-close-circle:hover { background: #D32F2F; color: #fff; transform: rotate(90deg); border-color: #D32F2F; }
 .modal-flex-container { display: flex; height: 100%; width: 100%; flex-direction: row; overflow: hidden; }
 .modal-visual-pane { flex: 1.5; background: #f9f9f9; padding: 60px; display: flex; flex-direction: column; border-right: 1px solid #eee; overflow: hidden; min-width: 0; }
-.gallery-label { font-size: 11px; font-weight: 900; color: #D32F2F; letter-spacing: 4px; display: flex; align-items: center; gap: 15px; margin-bottom: 40px; }
+.gallery-label { font-size: 11px; font-weight: 900; color: #D32F2F; letter-spacing: 4px; display: flex; align-items: center; gap: 15px; margin-bottom: 40px; flex-shrink: 0; }
 .red-dash { width: 40px; height: 2px; background: #D32F2F; }
 .modal-gallery-wrapper { flex: 1; display: flex; gap: 30px; overflow-x: auto; padding: 10px 0 30px; snap-type: x mandatory; }
-.gallery-card-large { min-width: 450px; height: 100%; position: relative; border-radius: 30px; overflow: hidden; snap-align: center; box-shadow: 0 30px 60px rgba(0,0,0,0.15); transition: 0.5s; }
+.gallery-card-large { min-width: 450px; height: 100%; position: relative; border-radius: 30px; overflow: hidden; snap-align: center; box-shadow: 0 30px 60px rgba(0,0,0,0.15); transition: 0.5s; flex-shrink: 0; }
 .gallery-card-large img { width: 100%; height: 100%; object-fit: cover; transition: 0.8s; }
 .gallery-card-large:hover img { transform: scale(1.1); }
 .card-number { position: absolute; top: 30px; left: 30px; background: #D32F2F; color: #fff; padding: 8px 15px; border-radius: 12px; font-weight: 900; font-size: 14px; box-shadow: 0 10px 20px rgba(211,47,47,0.3); }
-.gallery-footer-info { display: flex; justify-content: space-between; align-items: center; margin-top: 20px; }
+.gallery-footer-info { display: flex; justify-content: space-between; align-items: center; margin-top: 20px; flex-shrink: 0; }
 .scroll-dots { display: flex; gap: 8px; }
 .dot { width: 8px; height: 8px; border-radius: 50%; background: #ddd; }
 .dot.active { width: 30px; border-radius: 10px; background: #D32F2F; }
 .hint-text { font-size: 10px; font-weight: 800; color: #bbb; text-transform: uppercase; letter-spacing: 2px; }
-.modal-info-pane { flex: 1; padding: 80px 60px; display: flex; flex-direction: column; justify-content: center; min-width: 0; }
-.header-stack { margin-bottom: 40px; }
-.title-main { font-size: 4rem; font-weight: 900; line-height: 0.9; text-transform: uppercase; }
-.title-sub { font-size: 4rem; font-weight: 900; line-height: 0.9; color: #D32F2F; text-transform: uppercase; margin-top: 5px; }
-.title-accent { width: 60px; height: 8px; background: #000; margin-top: 30px; border-radius: 4px; }
-.scrollable-body-text { flex: 1; overflow-y: auto; padding-right: 15px; margin-bottom: 40px; }
+.modal-info-pane { flex: 1; padding: 60px; display: flex; flex-direction: column; justify-content: flex-start; min-width: 0; overflow: hidden; }
+.header-stack { margin-bottom: 30px; flex-shrink: 0; }
+.title-main { font-size: 3.5rem; font-weight: 900; line-height: 0.9; text-transform: uppercase; }
+.title-sub { font-size: 3.5rem; font-weight: 900; line-height: 0.9; color: #D32F2F; text-transform: uppercase; margin-top: 5px; }
+.title-accent { width: 60px; height: 8px; background: #000; margin-top: 20px; border-radius: 4px; }
+.scrollable-body-text { flex: 1; overflow-y: auto; padding-right: 15px; margin-bottom: 30px; }
 .premium-desc { font-size: 1.15rem; line-height: 1.7; color: #666; font-weight: 500; margin-bottom: 30px; }
 .premium-info-card { background: #fcfcfc; border: 1px solid #eee; padding: 25px; border-radius: 20px; display: flex; gap: 20px; align-items: center; }
-.icon-wrap { font-size: 1.5rem; width: 50px; height: 50px; background: #fff0f0; display: flex; align-items: center; justify-content: center; border-radius: 15px; }
+.icon-wrap { font-size: 1.5rem; width: 50px; height: 50px; background: #fff0f0; display: flex; align-items: center; justify-content: center; border-radius: 15px; flex-shrink: 0; }
 .text-wrap .label { display: block; font-size: 10px; font-weight: 900; color: #D32F2F; letter-spacing: 2px; margin-bottom: 5px; }
 .text-wrap p { font-size: 1rem; font-weight: 700; color: #333; }
-.btn-cta-red { width: 100%; padding: 22px; background: #D32F2F; color: #fff; border: none; border-radius: 20px; font-weight: 900; text-transform: uppercase; letter-spacing: 3px; cursor: pointer; transition: 0.3s; box-shadow: 0 20px 40px rgba(211,47,47,0.2); flex-shrink: 0; }
+.btn-cta-red { width: 100%; padding: 22px; background: #D32F2F; color: #fff; border: none; border-radius: 20px; font-weight: 900; text-transform: uppercase; letter-spacing: 3px; cursor: pointer; transition: 0.3s; box-shadow: 0 20px 40px rgba(211,47,47,0.2); flex-shrink: 0; margin-top: auto; }
 .btn-cta-red:hover { background: #000; transform: translateY(-5px); box-shadow: 0 20px 40px rgba(0,0,0,0.2); }
 .contact-section { background: #0a0a0a; padding: 120px 5%; border-top: 1px solid #222; }
 .contact-grid { display: flex; flex-wrap: wrap; gap: 20px; justify-content: center; margin-top: 50px; }
@@ -287,6 +287,6 @@ function closeFeature() { selectedFeature.value = null }
 .slide-up-enter-from, .slide-up-leave-to { transform: translateY(100%); opacity: 0; }
 .fade-enter-active, .fade-leave-active { transition: opacity 0.3s; }
 .fade-enter-from, .fade-leave-to { opacity: 0; }
-@media (max-width: 1024px) { .modal-flex-container { flex-direction: column; overflow-y: auto; } .modal-visual-pane { flex: none; height: 50vh; padding: 30px; border-right: none; border-bottom: 1px solid #eee; } .modal-info-pane { flex: none; padding: 40px 30px; } .gallery-card-large { min-width: 300px; } .title-main, .title-sub { font-size: 2.5rem; } .feature-modal-content.premium-layout { height: 95vh; border-radius: 20px; } }
-@media (min-width: 1025px) { .feature-col { min-width: 33.333%; } }
+@media (max-width: 1024px) { .modal-flex-container { flex-direction: column; overflow-y: auto; } .modal-visual-pane { flex: none; height: 50vh; padding: 30px; border-right: none; border-bottom: 1px solid #eee; } .modal-info-pane { flex: none; padding: 40px 30px; overflow: visible; } .gallery-card-large { min-width: 300px; } .title-main, .title-sub { font-size: 2.5rem; } .feature-modal-content.premium-layout { height: 95vh; border-radius: 20px; } }
+@media (min-width: 1025px) { .feature-col { min-width: 33.333%; } .modal-info-pane { max-height: 100%; } }
 </style>
