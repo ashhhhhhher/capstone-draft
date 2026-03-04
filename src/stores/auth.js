@@ -39,36 +39,40 @@ export const useAuthStore = defineStore('auth', () => {
   // --- 1. PATTERNED ID GENERATION (YYMM##) ---
   // Example: Jan 2026 -> 260101, 260102...
   async function generateMemberID(branchId) {
+    // New ID format: fixed year prefix '26' followed by 6 random uppercase alphanumeric characters
     const now = new Date();
     const year = now.getFullYear().toString().slice(-2); // e.g., "26"
     const month = String(now.getMonth() + 1).padStart(2, '0'); // e.g., "01"
     const prefix = `${year}${month}`; // "2601"
 
-    const membersRef = collection(db, "branches", branchId, "members");
-    
-    // Find the latest ID starting with prefix
-    const q = query(
-      membersRef, 
-      where("id", ">=", prefix), 
-      where("id", "<=", prefix + "\uf8ff"),
-      orderBy("id", "desc"),
-      limit(1)
-    );
-
-    const snapshot = await getDocs(q);
-    
-    let nextOrder = 1;
-    if (!snapshot.empty) {
-      const lastId = snapshot.docs[0].data().id; // e.g., "260101"
-      const suffix = lastId.substring(4); // "01"
-      if (!isNaN(suffix)) {
-        nextOrder = parseInt(suffix) + 1;
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
+    function randomSix() {
+      let s = ''
+      for (let i = 0; i < 6; i++) {
+        s += chars.charAt(Math.floor(Math.random() * chars.length))
       }
+      return s
     }
 
-    // Pad order with zeros (01, 02... 99)
-    const orderStr = String(nextOrder).padStart(2, '0');
-    return `${prefix}${orderStr}`; // "260102"
+    // Try to generate a unique ID (check both members and pendingMembers to avoid collisions)
+    let candidate = ''
+    let attempts = 0
+    while (attempts < 10) {
+      candidate = prefix + randomSix()
+      const memberDoc = doc(db, 'branches', branchId, 'members', candidate)
+      const memberSnap = await getDoc(memberDoc)
+      if (!memberSnap.exists()) {
+        const pendingDoc = doc(db, 'branches', branchId, 'pendingMembers', candidate)
+        const pendingSnap = await getDoc(pendingDoc)
+        if (!pendingSnap.exists()) {
+          return candidate
+        }
+      }
+      attempts++
+    }
+
+    // Fallback: use timestamp slice to ensure uniqueness if random collisions occur
+    return prefix + String(Date.now()).slice(-6)
   }
 
   // --- FETCH PROFILE ---
