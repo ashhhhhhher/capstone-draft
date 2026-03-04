@@ -1,20 +1,46 @@
 <script setup>
 import { ref } from 'vue'
 
-const props = defineProps({ isOpen: { type: Boolean, default: false } })
+const props = defineProps({
+  isOpen: { type: Boolean, default: false }
+})
 const emit = defineEmits(['close'])
 
 const scrollContainer = ref(null)
 const selectedFeature = ref(null)
 
 const features = {
-  wknd: { title: 'ELEVATE WKND', desc: 'Unwind with us at our every other week gatherings!', longDesc: 'Our youth gathering! A service designed for high school, college students and singles to experience awesome worship, meet new friends, and hear life-changing messages.', info: 'Hotel Supreme | 5:00PM onwards', img: '/elevate logo.jpg' },
-  groups: { title: 'DISCIPLESHIP GROUPS', desc: 'Find a group of friends you can grow with.', longDesc: 'Join a Dgroup! A Dgroup is a small group of students who meet to talk about life, study the Bible, and support one another. Where "big" services become "personal" friendships. No matter where you are in your journey.', info: 'Join by simply going to the Dgroup section and clicking on the "Find a Dgroup" button', img: '/group2.jpg' },
-  unite: { title: 'Campus UNITE', desc: 'Celebrating God’s faithfulness and ministry anniversary.', longDesc: 'Campus Unite is the massive annual anniversary celebration of Elevate! It brings together students from different campuses for a night of worship, powerful testimonies, and a shared vision to transform our nation. Our biggest event of the year with a purpose that lasts.', info: 'Happens around June - August', img: '/unitesm.jpg' }
+  wknd: { 
+    title: 'ELEVATE WKND', 
+    desc: 'Unwind with us at our every other week gatherings!', 
+    longDesc: 'Our youth gathering! A service designed for high school, college students and singles to experience awesome worship, meet new friends, and hear life-changing messages.', 
+    info: 'Hotel Supreme | 5:00PM onwards', 
+    img: '/elevate logo.jpg',
+    gallery: ['/wknd1.jpg', '/wknd2.jpg', '/wknd3.jpg', '/wknd4.jpg']
+  },
+  groups: { 
+    title: 'DISCIPLESHIP GROUPS', 
+    desc: 'Find a group of friends you can grow with.', 
+    longDesc: 'Join a Dgroup! A Dgroup is a small group of students who meet to talk about life, study the Bible, and support one another. Where "big" services become "personal" friendships. No matter where you are in your journey.', 
+    info: 'Join by simply going to the Dgroup section and clicking on the "Find a Dgroup" button', 
+    img: '/group2.jpg',
+    gallery: ['/dgroup1.jpg', '/dgroup2.jpg', '/dgroup3.jpg', '/dgroup4.jpg', '/dgroup5.jpg']
+  },
+  unite: { 
+    title: 'Campus UNITE', 
+    desc: 'Celebrating God’s faithfulness and ministry anniversary.', 
+    longDesc: 'Campus Unite is the massive annual anniversary celebration of Elevate! It brings together students from different campuses for a night of worship, powerful testimonies, and a shared vision to transform our nation. Our biggest event of the year with a purpose that lasts.', 
+    info: 'Happens around June - August', 
+    img: '/unitesm.jpg',
+    gallery: ['/unite1.jpg', '/unite2.jpg', '/unite3.jpg', '/unite4.jpg', '/unite5.jpg', '/unite6.jpg']
+  }
 }
 
 function handleClose() { emit('close') }
-function scrollToSection(id) { const el = document.getElementById(id); if (el) el.scrollIntoView({ behavior: 'smooth' }) }
+function scrollToSection(id) { 
+  const el = document.getElementById(id); 
+  if (el) el.scrollIntoView({ behavior: 'smooth' }) 
+}
 function openFeature(key) { selectedFeature.value = features[key] }
 function closeFeature() { selectedFeature.value = null }
 </script>
@@ -24,14 +50,53 @@ function closeFeature() { selectedFeature.value = null }
     <div v-if="isOpen" class="about-view-overlay">
       <transition name="fade">
         <div v-if="selectedFeature" class="feature-modal-backdrop" @click.self="closeFeature">
-          <div class="feature-modal-content">
-            <button class="modal-close" @click="closeFeature">✕</button>
-            <div class="modal-scroll-area">
-              <div class="modal-body">
-                <h2 class="highlight-red">{{ selectedFeature.title }}</h2>
-                <div class="modal-divider"></div>
-                <p class="modal-long-desc">{{ selectedFeature.longDesc }}</p>
-                <div class="modal-info-box"><p><strong>DETAILS:</strong> {{ selectedFeature.info }}</p></div>
+          <div class="feature-modal-content premium-layout">
+            <button class="modal-close-circle" @click="closeFeature">✕</button>
+            
+            <div class="modal-flex-container">
+              <div class="modal-visual-pane">
+                <div class="gallery-label">
+                  <span class="red-dash"></span>
+                  EXPERIENCE THE MOVEMENT
+                </div>
+                
+                <div class="modal-gallery-wrapper custom-scrollbar">
+                  <div v-for="(photo, index) in selectedFeature.gallery" :key="index" class="gallery-card-large">
+                    <img :src="photo" alt="Gallery Image" />
+                    <div class="card-number">0{{ index + 1 }}</div>
+                  </div>
+                </div>
+                
+                <div class="gallery-footer-info">
+                  <div class="scroll-dots">
+                    <span class="dot active"></span>
+                    <span class="dot"></span>
+                    <span class="dot"></span>
+                  </div>
+                  <span class="hint-text">Scroll or Swipe to explore →</span>
+                </div>
+              </div>
+
+              <div class="modal-info-pane">
+                <div class="header-stack">
+                  <h2 class="title-main">{{ selectedFeature.title.split(' ')[0] }}</h2>
+                  <h2 class="title-sub">{{ selectedFeature.title.split(' ').slice(1).join(' ') }}</h2>
+                  <div class="title-accent"></div>
+                </div>
+
+                <div class="scrollable-body-text custom-scrollbar">
+                  <p class="premium-desc">{{ selectedFeature.longDesc }}</p>
+                  
+                  <div class="premium-info-card">
+                    <div class="icon-wrap">📍</div>
+                    <div class="text-wrap">
+                      <span class="label">LOCATION & TIME</span>
+                      <p>{{ selectedFeature.info }}</p>
+                    </div>
+                  </div>
+                </div>
+
+                <button class="btn-cta-red" @click="closeFeature">CLOSE PREVIEW</button>
               </div>
             </div>
           </div>
@@ -77,19 +142,37 @@ function closeFeature() { selectedFeature.value = null }
         </section>
 
         <section class="verse-section" style="background-image: url('/bible.jpg')">
-          <div class="content-overlay black-tint"><blockquote class="bible-verse">"Go therefore and make disciples of all the nations..."</blockquote><cite class="citation-red">— Matthew 28:19-20</cite></div>
+          <div class="content-overlay black-tint">
+            <blockquote class="bible-verse">"Go therefore and make disciples of all the nations..."</blockquote>
+            <cite class="citation-red">— Matthew 28:19-20</cite>
+          </div>
         </section>
 
         <section class="info-section white-bg">
-          <div class="info-content"><h2 class="section-title">Life Connected</h2><p class="section-desc">A community of people meeting together each week to talk about life, God, and to pray for one another.</p></div>
+          <div class="info-content">
+            <h2 class="section-title">Life Connected</h2>
+            <p class="section-desc">A community of people meeting together each week to talk about life, God, and to pray for one another.</p>
+          </div>
         </section>
 
-        <div id="whatwedo" class="divider-header"><h2>WHAT WE DO</h2><span class="red-line"></span></div>
+        <div id="whatwedo" class="divider-header">
+          <h2>WHAT WE DO</h2>
+          <span class="red-line"></span>
+        </div>
 
         <section class="what-we-do-grid">
-          <div v-for="(f, k) in features" :key="k" class="feature-col" :style="{ backgroundImage: `url('${f.img}')` }" @click="openFeature(k)">
-            <div class="col-overlay-static"><h3 class="feature-title">{{ f.title }}</h3><p class="feature-desc">{{ f.desc }}</p></div>
-            <div class="col-overlay-hover"><span class="view-btn">View Details</span></div>
+          <div v-for="(f, k) in features" 
+               :key="k" 
+               class="feature-col" 
+               :style="{ backgroundImage: `url('${f.img}')` }" 
+               @click="openFeature(k)">
+            <div class="col-overlay-static">
+              <h3 class="feature-title">{{ f.title }}</h3>
+              <p class="feature-desc">{{ f.desc }}</p>
+            </div>
+            <div class="col-overlay-hover">
+              <span class="view-btn">View Details</span>
+            </div>
           </div>
         </section>
 
@@ -117,6 +200,9 @@ function closeFeature() { selectedFeature.value = null }
 <style scoped>
 .about-view-overlay { position: fixed; inset: 0; background: #0a0a0a; z-index: 3000; overflow: hidden; display: flex; flex-direction: column; font-family: 'Inter', sans-serif; color: #fff; }
 .about-scroll-container { flex: 1; overflow-y: auto; scroll-behavior: smooth; }
+.custom-scrollbar::-webkit-scrollbar { height: 6px; width: 4px; }
+.custom-scrollbar::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 10px; }
+.custom-scrollbar::-webkit-scrollbar-thumb { background: #D32F2F; border-radius: 10px; }
 .about-internal-nav { position: absolute; top: 0; left: 0; right: 0; z-index: 3100; height: 80px; display: flex; align-items: center; padding: 0 5%; background: linear-gradient(to bottom, rgba(0,0,0,0.8), transparent); justify-content: space-between; }
 .nav-back-circle { width: 45px; height: 45px; border-radius: 50%; border: 1px solid rgba(255,255,255,0.2); background: rgba(0,0,0,0.3); color: white; cursor: pointer; backdrop-filter: blur(5px); transition: 0.3s; display: flex; align-items: center; justify-content: center; }
 .nav-back-circle:hover { background: #D32F2F; border-color: #D32F2F; transform: scale(1.1); }
@@ -138,9 +224,9 @@ function closeFeature() { selectedFeature.value = null }
 .divider-header { background: #0a0a0a; padding: 100px 20px 40px; text-align: center; }
 .divider-header h2 { font-size: 2.5rem; font-weight: 900; color: #fff; }
 .red-line { display: block; width: 60px; height: 4px; background: #D32F2F; margin: 20px auto; }
-.what-we-do-grid { display: flex; flex-wrap: wrap; background: #000; }
-.feature-col { flex: 1; min-width: 300px; min-height: 550px; background-size: cover; background-position: center; position: relative; cursor: pointer; transition: 0.5s cubic-bezier(0.2, 1, 0.3, 1); overflow: hidden; }
-.feature-col:hover { flex-grow: 1.3; }
+.what-we-do-grid { display: flex; flex-wrap: wrap; background: #000; width: 100%; }
+.feature-col { flex: 1; min-width: 33.333%; min-height: 550px; background-size: cover; background-position: center; position: relative; cursor: pointer; transition: 0.5s cubic-bezier(0.2, 1, 0.3, 1); overflow: hidden; }
+.feature-col:hover { flex-grow: 1.2; }
 .col-overlay-static { inset: 0; position: absolute; background: linear-gradient(to top, rgba(0,0,0,0.9), transparent); display: flex; flex-direction: column; justify-content: flex-end; padding: 50px 30px; transition: 0.4s; z-index: 1; }
 .col-overlay-hover { inset: 0; position: absolute; background: rgba(211, 47, 47, 0.85); display: flex; flex-direction: column; justify-content: center; align-items: center; opacity: 0; transition: 0.4s; z-index: 2; }
 .feature-col:hover .col-overlay-hover { opacity: 1; }
@@ -155,9 +241,39 @@ function closeFeature() { selectedFeature.value = null }
 .mv-hover-accent { position: absolute; bottom: 0; left: 0; width: 100%; height: 0; background: #D32F2F; transition: 0.5s ease; z-index: -1; opacity: 0.05; }
 .mv-card:hover { transform: translateY(-20px) rotateX(5deg); box-shadow: 0 30px 60px rgba(0,0,0,0.4), 0 0 20px rgba(211, 47, 47, 0.2); border-color: #D32F2F; }
 .mv-card:hover .mv-hover-accent { height: 100%; opacity: 0.1; }
-.mv-card:hover h3 { transform: scale(1.1); }
 .mv-card h3 { color: #D32F2F; font-weight: 900; font-size: 2.2rem; margin-bottom: 25px; transition: 0.5s; text-transform: uppercase; }
 .mv-card p { font-size: 1.1rem; line-height: 1.6; transition: 0.5s; }
+.feature-modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.95); backdrop-filter: blur(20px); z-index: 4000; display: flex; align-items: center; justify-content: center; padding: 20px; }
+.feature-modal-content.premium-layout { background: #fff; width: 100%; max-width: 1200px; height: 85vh; border-radius: 40px; overflow: hidden; position: relative; color: #000; box-shadow: 0 50px 100px rgba(0,0,0,0.5); display: flex; flex-direction: column; }
+.modal-close-circle { position: absolute; top: 30px; right: 30px; width: 50px; height: 50px; background: #fff; border: 1px solid #eee; border-radius: 50%; color: #000; font-size: 1.2rem; cursor: pointer; z-index: 50; transition: 0.3s; display: flex; align-items: center; justify-content: center; box-shadow: 0 10px 20px rgba(0,0,0,0.05); }
+.modal-close-circle:hover { background: #D32F2F; color: #fff; transform: rotate(90deg); border-color: #D32F2F; }
+.modal-flex-container { display: flex; height: 100%; width: 100%; flex-direction: row; overflow: hidden; }
+.modal-visual-pane { flex: 1.5; background: #f9f9f9; padding: 60px; display: flex; flex-direction: column; border-right: 1px solid #eee; overflow: hidden; min-width: 0; }
+.gallery-label { font-size: 11px; font-weight: 900; color: #D32F2F; letter-spacing: 4px; display: flex; align-items: center; gap: 15px; margin-bottom: 40px; }
+.red-dash { width: 40px; height: 2px; background: #D32F2F; }
+.modal-gallery-wrapper { flex: 1; display: flex; gap: 30px; overflow-x: auto; padding: 10px 0 30px; snap-type: x mandatory; }
+.gallery-card-large { min-width: 450px; height: 100%; position: relative; border-radius: 30px; overflow: hidden; snap-align: center; box-shadow: 0 30px 60px rgba(0,0,0,0.15); transition: 0.5s; }
+.gallery-card-large img { width: 100%; height: 100%; object-fit: cover; transition: 0.8s; }
+.gallery-card-large:hover img { transform: scale(1.1); }
+.card-number { position: absolute; top: 30px; left: 30px; background: #D32F2F; color: #fff; padding: 8px 15px; border-radius: 12px; font-weight: 900; font-size: 14px; box-shadow: 0 10px 20px rgba(211,47,47,0.3); }
+.gallery-footer-info { display: flex; justify-content: space-between; align-items: center; margin-top: 20px; }
+.scroll-dots { display: flex; gap: 8px; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: #ddd; }
+.dot.active { width: 30px; border-radius: 10px; background: #D32F2F; }
+.hint-text { font-size: 10px; font-weight: 800; color: #bbb; text-transform: uppercase; letter-spacing: 2px; }
+.modal-info-pane { flex: 1; padding: 80px 60px; display: flex; flex-direction: column; justify-content: center; min-width: 0; }
+.header-stack { margin-bottom: 40px; }
+.title-main { font-size: 4rem; font-weight: 900; line-height: 0.9; text-transform: uppercase; }
+.title-sub { font-size: 4rem; font-weight: 900; line-height: 0.9; color: #D32F2F; text-transform: uppercase; margin-top: 5px; }
+.title-accent { width: 60px; height: 8px; background: #000; margin-top: 30px; border-radius: 4px; }
+.scrollable-body-text { flex: 1; overflow-y: auto; padding-right: 15px; margin-bottom: 40px; }
+.premium-desc { font-size: 1.15rem; line-height: 1.7; color: #666; font-weight: 500; margin-bottom: 30px; }
+.premium-info-card { background: #fcfcfc; border: 1px solid #eee; padding: 25px; border-radius: 20px; display: flex; gap: 20px; align-items: center; }
+.icon-wrap { font-size: 1.5rem; width: 50px; height: 50px; background: #fff0f0; display: flex; align-items: center; justify-content: center; border-radius: 15px; }
+.text-wrap .label { display: block; font-size: 10px; font-weight: 900; color: #D32F2F; letter-spacing: 2px; margin-bottom: 5px; }
+.text-wrap p { font-size: 1rem; font-weight: 700; color: #333; }
+.btn-cta-red { width: 100%; padding: 22px; background: #D32F2F; color: #fff; border: none; border-radius: 20px; font-weight: 900; text-transform: uppercase; letter-spacing: 3px; cursor: pointer; transition: 0.3s; box-shadow: 0 20px 40px rgba(211,47,47,0.2); flex-shrink: 0; }
+.btn-cta-red:hover { background: #000; transform: translateY(-5px); box-shadow: 0 20px 40px rgba(0,0,0,0.2); }
 .contact-section { background: #0a0a0a; padding: 120px 5%; border-top: 1px solid #222; }
 .contact-grid { display: flex; flex-wrap: wrap; gap: 20px; justify-content: center; margin-top: 50px; }
 .contact-card { background: #151515; padding: 40px; border: 1px solid #222; flex: 1; min-width: 250px; text-align: center; border-radius: 8px; }
@@ -166,19 +282,11 @@ function closeFeature() { selectedFeature.value = null }
 .footer-logo { max-width: 150px; margin-bottom: 20px; opacity: 0.8; }
 .btn-close-large { background: transparent; color: #fff; padding: 15px 40px; border: 1px solid #D32F2F; cursor: pointer; margin-top: 40px; font-weight: 700; text-transform: uppercase; letter-spacing: 2px; transition: 0.3s; }
 .btn-close-large:hover { background: #D32F2F; }
-.feature-modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.9); backdrop-filter: blur(15px); z-index: 4000; display: flex; align-items: center; justify-content: center; padding: 20px; }
-.feature-modal-content { background: #111; width: 100%; max-width: 700px; max-height: 85vh; border: 1px solid #333; position: relative; display: flex; flex-direction: column; overflow: hidden; border-radius: 12px; }
-.modal-scroll-area { overflow-y: auto; padding: 60px 40px; }
-.modal-close { position: absolute; top: 20px; right: 20px; background: none; border: none; color: #666; font-size: 1.5rem; cursor: pointer; z-index: 10; transition: 0.2s; }
-.modal-close:hover { color: #D32F2F; }
-.modal-divider { width: 40px; height: 3px; background: #D32F2F; margin: 15px auto 30px; }
-.modal-long-desc { font-size: 1.1rem; line-height: 1.8; color: #bbb; text-align: center; }
-.modal-info-box { background: #000; padding: 25px; margin-top: 40px; border-left: 3px solid #D32F2F; }
-.scroll-indicator { margin-top: 40px; font-size: 2rem; animation: bounce 2s infinite; color: #D32F2F; cursor: pointer; }
 @keyframes bounce { 0%, 20%, 50%, 80%, 100% { transform: translateY(0); } 40% { transform: translateY(-10px); } 60% { transform: translateY(-5px); } }
 .slide-up-enter-active, .slide-up-leave-active { transition: all 0.6s cubic-bezier(0.16, 1, 0.3, 1); }
 .slide-up-enter-from, .slide-up-leave-to { transform: translateY(100%); opacity: 0; }
 .fade-enter-active, .fade-leave-active { transition: opacity 0.3s; }
 .fade-enter-from, .fade-leave-to { opacity: 0; }
-@media (max-width: 768px) { .section-title { font-size: 2.2rem; } .hero-text { font-size: 1.1rem; } .modal-scroll-area { padding: 40px 20px; } .feature-col { min-height: 400px; } .mv-card:hover { transform: translateY(-10px); } }
+@media (max-width: 1024px) { .modal-flex-container { flex-direction: column; overflow-y: auto; } .modal-visual-pane { flex: none; height: 50vh; padding: 30px; border-right: none; border-bottom: 1px solid #eee; } .modal-info-pane { flex: none; padding: 40px 30px; } .gallery-card-large { min-width: 300px; } .title-main, .title-sub { font-size: 2.5rem; } .feature-modal-content.premium-layout { height: 95vh; border-radius: 20px; } }
+@media (min-width: 1025px) { .feature-col { min-width: 33.333%; } }
 </style>

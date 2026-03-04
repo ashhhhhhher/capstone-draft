@@ -1,5 +1,7 @@
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue';
+import AboutUs from './AboutUs.vue'; // Importing AboutUs component
+
 const props = defineProps({ title: { type: String, default: 'HOMEPAGE' } });
 
 const services = [
@@ -43,6 +45,7 @@ const services = [
 ];
 
 const currentIndex = ref(0);
+const isAboutOpen = ref(false); // State for About Us visibility
 let timer = null;
 
 const startCycle = () => { timer = setInterval(() => { currentIndex.value = (currentIndex.value + 1) % services.length; }, 5000); };
@@ -51,11 +54,16 @@ onMounted(() => startCycle());
 onUnmounted(() => clearInterval(timer));
 
 const setSlide = (index) => { currentIndex.value = index; clearInterval(timer); startCycle(); };
+
+// Functions to handle About Us navigation
+const openAbout = () => { isAboutOpen.value = true; };
+const closeAbout = () => { isAboutOpen.value = false; };
 </script>
 
 <template>
   <div class="hero-wrapper">
-    <div class="elevate-hero-dark" :style="{ backgroundImage: `url(${services[currentIndex].bgImage})` }">
+    <!-- Click event added to the main section -->
+    <div class="elevate-hero-dark clickable-section" :style="{ backgroundImage: `url(${services[currentIndex].bgImage})` }" @click="openAbout">
       <div class="hero-overlay" :style="{ background: `linear-gradient(90deg, rgba(10,10,11,0.85) 0%, rgba(10,10,11,0.3) 100%), radial-gradient(circle at 20% 50%, ${services[currentIndex].color}33 0%, transparent 50%)` }"></div>
       <div class="hero-visual-accents">
         <div class="circle c1" :style="{ background: services[currentIndex].color }"></div>
@@ -84,15 +92,21 @@ const setSlide = (index) => { currentIndex.value = index; clearInterval(timer); 
         </div>
       </Transition>
       <div class="hero-nav">
-        <button v-for="(s, idx) in services" :key="s.id" @click="setSlide(idx)" :class="['nav-dot', { active: currentIndex === idx }]" :style="currentIndex === idx ? { background: services[currentIndex].color } : {}"></button>
+        <!-- Added .stop to prevent triggering openAbout when clicking dots -->
+        <button v-for="(s, idx) in services" :key="s.id" @click.stop="setSlide(idx)" :class="['nav-dot', { active: currentIndex === idx }]" :style="currentIndex === idx ? { background: services[currentIndex].color } : {}"></button>
       </div>
     </div>
+
+    <!-- AboutUs Component integration -->
+    <AboutUs :isOpen="isAboutOpen" @close="closeAbout" />
   </div>
 </template>
 
 <style scoped>
 .hero-wrapper { padding: 24px 32px 0 32px; width: 100%; box-sizing: border-box; }
 .elevate-hero-dark { position: relative; width: 100%; min-height: 380px; background-size: cover; background-position: center; border-radius: 24px; display: flex; align-items: center; padding: 40px; overflow: hidden; color: #fff; box-shadow: 0 20px 40px rgba(0,0,0,0.3); border: 1px solid #1e1e20; box-sizing: border-box; transition: background-image 1s ease-in-out; }
+.clickable-section { cursor: pointer; transition: transform 0.3s ease, background-image 1s ease-in-out; }
+.clickable-section:hover { transform: translateY(-2px); }
 .hero-overlay { position: absolute; inset: 0; z-index: 1; transition: background 1s ease; }
 .shimmer-container { position: absolute; inset: 0; z-index: 2; pointer-events: none; }
 .shimmer { position: absolute; top: 0; left: -100%; width: 50%; height: 100%; background: linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent); animation: sweep 4s infinite; }
