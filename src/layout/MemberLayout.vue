@@ -40,7 +40,16 @@ function isActive(path) { return route.path === path }
 </template>
 
 <style scoped>
-.member-layout { min-height: 100vh; background-color: #f8fafc; padding-bottom: 75px; padding-top: 64px; }
+/* LAYOUT STYLES - Solid background applied here for the whole app */
+.member-layout { 
+  min-height: 100vh; 
+  background-color: #e0f2fe; /* Solid pale blue color instead of gray or blobs */
+  padding-bottom: 75px; 
+  padding-top: 64px; 
+  position: relative;
+  z-index: 1; 
+}
+
 .fixed-header { position: fixed; top: 0; left: 0; right: 0; z-index: 1050; }
 .main-content { max-width: 1200px; margin: 0 auto; padding: 20px; }
 .bottom-nav { position: fixed; bottom: 0; left: 0; right: 0; height: 75px; background: rgba(255, 255, 255, 0.98); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); display: flex; justify-content: center; border-top: 1px solid rgba(0, 0, 0, 0.05); z-index: 1000; padding-bottom: env(safe-area-inset-bottom); box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.03); }

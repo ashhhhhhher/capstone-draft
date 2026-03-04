@@ -114,14 +114,11 @@ const myLeaderObject = computed(() => {
   return membersStore.activeMembers.find(m => `${m.firstName} ${m.lastName}` === myLeaderName.value)
 })
 
-// MODIFIED: Now includes the current user
 const myUplineGroup = computed(() => {
   if (!myLeaderName.value) return []
-  // removed the check !== myProfile.id so user sees themselves in the list
   return membersStore.activeMembers.filter(m => m.dgroupLeader === myLeaderName.value)
 })
 
-// ADDED: Computed property for Upline Group Details (Member View)
 const myMemberGroupDetails = computed(() => {
   if (!myLeaderObject.value) return null
   const leader = myLeaderObject.value
@@ -225,13 +222,11 @@ async function joinDgroupById() {
       dgroupLeader: leaderName,
       finalTags: { ...myProfile.value.finalTags, isSeeker: false, isRegular: true }
     })
-    // Ensure the member document also gets the leader's dgroupId set
     try {
       if (leader && leader.id && myProfile.value && myProfile.value.id) {
         await membersStore.assignDgroupLeader(myProfile.value.id, leader.id)
       }
     } catch (e) {
-      // Non-fatal: log but don't block the user
         console.warn('Failed to assign dgroupLeaderId after join:', e)
     }
     joinStatus.value = { type: 'success', msg: `Joined ${leaderName}'s group!` }
@@ -241,20 +236,18 @@ async function joinDgroupById() {
   }
 }
 
-// Helpers for Profile Modal
 function getMinistry(person) {
   if (!person || !person.finalTags) return 'Unknown'
   const ageCat = person.finalTags.ageCategory
   if (ageCat === 'professional') return 'B1G'
   if (ageCat === 'college' || ageCat === 'high-school') return 'ELEVATE'
-  return 'B1G' // Default fallback
+  return 'B1G' 
 }
 
 function formatBirthday(dateString) {
   if (!dateString) return 'N/A'
   try {
     const d = new Date(dateString)
-    // Month Day only (e.g. February 17)
     return d.toLocaleDateString('en-US', { month: 'long', day: 'numeric' })
   } catch (e) {
     return dateString
@@ -280,7 +273,7 @@ function isPersonLeader(person) {
 
 <template>
   <div class="dgroup-view">
-    
+
     <!-- PENDING REQUEST STATUS (Modern Design) -->
     <div v-if="mySentRequest" class="pending-status-banner fade-in">
        <div class="banner-glass">
@@ -331,7 +324,7 @@ function isPersonLeader(person) {
           <p>You haven't been assigned to a Dgroup. </p>
         </div>
 
-        <!-- UPLINE CONTENT (Mirrored from Downline) -->
+        <!-- UPLINE CONTENT -->
         <div v-else-if="myMemberGroupDetails">
           
           <!-- Group Card (Read Only) -->
@@ -355,7 +348,6 @@ function isPersonLeader(person) {
                        <div class="detail-tag time">
                           <Clock :size="10" /> {{ myMemberGroupDetails.meetingTime }} • {{ myMemberGroupDetails.meetingDays }}
                        </div>
-                       <!-- Removed Leader Tag Here -->
                        <div class="detail-tag interest" v-for="tag in myMemberGroupDetails.interests" :key="tag">
                          #{{ INTEREST_OPTIONS.find(o => o.id === tag)?.label || tag }}
                        </div>
@@ -365,7 +357,7 @@ function isPersonLeader(person) {
             </div>
           </div>
 
-          <!-- Dgroup Leader Section (Separate List Item) -->
+          <!-- Dgroup Leader Section -->
           <div class="common-list-card" style="margin-bottom: 24px;">
             <div class="list-header row">
                 <h4>Dgroup Leader</h4>
@@ -382,7 +374,7 @@ function isPersonLeader(person) {
             </div>
           </div>
 
-          <!-- Members List (Includes Self) -->
+          <!-- Members List -->
           <div class="common-list-card">
             <div class="list-header row">
                 <h4>Members List</h4>
@@ -615,13 +607,13 @@ function isPersonLeader(person) {
 
 /* TABS */
 .tabs-container { display: flex; justify-content: center; margin-bottom: 24px; }
-.tabs-segment { background: #F1F5F9; padding: 4px; border-radius: 14px; display: flex; gap: 4px; border: 1px solid #E2E8F0; }
+.tabs-segment { background: rgba(255, 255, 255, 0.8); backdrop-filter: blur(10px); padding: 4px; border-radius: 14px; display: flex; gap: 4px; border: 1px solid rgba(226, 232, 240, 0.8); box-shadow: 0 4px 15px rgba(0,0,0,0.02); }
 .tabs-segment button { border: none; background: transparent; padding: 8px 24px; border-radius: 11px; font-size: 13px; font-weight: 800; color: #64748B; cursor: pointer; transition: all 0.2s; }
 .tabs-segment button.active { background: white; color: #3B82F6; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); }
 .badge-dot { position: absolute; width: 8px; height: 8px; background: #EF4444; border-radius: 50%; border: 2px solid white; transform: translate(4px, -4px); }
 
 /* LEADER CARD */
-.leader-card-modern { background: white; border: 2px solid #EFF6FF; border-radius: 20px; padding: 20px; cursor: pointer; transition: all 0.2s; margin-bottom: 24px; box-shadow: 0 4px 12px rgba(59, 130, 246, 0.04); }
+.leader-card-modern { background: rgba(209, 74, 74, 0.9); backdrop-filter: blur(10px); border: 2px solid #EFF6FF; border-radius: 20px; padding: 20px; cursor: pointer; transition: all 0.2s; margin-bottom: 24px; box-shadow: 0 4px 12px rgba(59, 130, 246, 0.04); }
 .leader-card-modern:hover { transform: translateY(-2px); border-color: #3B82F6; }
 .leader-content-row { display: flex; align-items: center; gap: 16px; }
 .avatar-ring-large { width: 56px; height: 56px; background: #EFF6FF; border-radius: 50%; display: flex; align-items: center; justify-content: center; border: 2px solid #DBEAFE; }
@@ -630,13 +622,13 @@ function isPersonLeader(person) {
 .leader-info-modern h3 { margin: 0; font-size: 18px; font-weight: 900; color: #0F172A; }
 
 /* EMPTY STATE CARD */
-.empty-state-card { background: #FFFFFF; border: 2px dashed #E2E8F0; border-radius: 32px; padding: 56px 32px; text-align: center; color: #64748B; margin-bottom: 24px; }
+.empty-state-card { background: rgba(255, 255, 255, 0.8); backdrop-filter: blur(10px); border: 2px dashed #E2E8F0; border-radius: 32px; padding: 56px 32px; text-align: center; color: #64748B; margin-bottom: 24px; }
 .empty-icon-ring { width: 88px; height: 88px; background: #F8FAFC; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 24px; border: 2px solid #F1F5F9; }
 .empty-state-card h3 { margin: 0 0 10px; font-size: 22px; font-weight: 900; color: #1E293B; }
 .empty-state-card p { font-size: 15px; line-height: 1.6; max-width: 360px; margin: 0 auto; font-weight: 500; }
 
 /* DOWNLINE HEADER */
-.drill-header-enhanced { background: #FFFFFF; border-radius: 24px; padding: 28px; border: 2px solid #F1F5F9; margin-bottom: 24px; position: relative; box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.03); }
+.drill-header-enhanced { background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); border-radius: 24px; padding: 28px; border: 5px solid #2391ff; margin-bottom: 24px; position: relative; box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.03); }
 .header-top-row { margin-bottom: 12px; }
 .group-title-label { font-size: 11px; font-weight: 800; color: #94A3B8; text-transform: uppercase; letter-spacing: 0.05em; }
 .group-hero { display: flex; align-items: flex-start; gap: 24px; }
@@ -658,8 +650,8 @@ function isPersonLeader(person) {
 .edit-icon-btn:hover { border-color: #3B82F6; color: #3B82F6; transform: rotate(15deg); }
 
 /* LIST CARDS */
-.common-list-card { background: white; border: 2px solid #F1F5F9; border-radius: 24px; overflow: hidden; }
-.list-header { padding: 16px 24px; background: #F8FAFC; border-bottom: 1.5px solid #F1F5F9; font-size: 14px; font-weight: 800; color: #64748B; text-transform: uppercase; }
+.common-list-card { background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); border: 2px solid #F1F5F9; border-radius: 24px; overflow: hidden; }
+.list-header { padding: 16px 24px; background: rgba(248, 250, 252, 0.8); border-bottom: 1.5px solid #F1F5F9; font-size: 14px; font-weight: 800; color: #64748B; text-transform: uppercase; }
 .list-item { display: flex; align-items: center; padding: 14px 24px; border-bottom: 1px solid #F8FAFC; cursor: pointer; transition: background 0.15s; }
 .list-item:hover { background: #F8FAFC; }
 .avatar-sm { width: 36px; height: 36px; border-radius: 50%; background: #EFF6FF; color: #3B82F6; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 13px; }
