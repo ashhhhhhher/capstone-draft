@@ -46,7 +46,7 @@ const TIME_OPTIONS = [
   { id: 'afternoon', label: '1:00 PM - 3:00 PM', icon: Clock },
   { id: 'late-afternoon', label: '3:00 PM - 5:00 PM', icon: Clock },
   { id: 'evening', label: '5:00 PM - 7:00 PM', icon: Clock },
-  { id: 'anytime', label: 'Anytime', icon: Sparkles }
+  { id: 'anytime', label: 'Flexible', icon: Sparkles }
 ]
 
 const DAY_OPTIONS = [
@@ -392,7 +392,7 @@ const isNextDisabled = computed(() => {
                   </div>
 
                   <div class="stat-item">
-                    Avg age: {{ group.avgAge }} <span>👍</span>
+                    Age Bracket: {{ group.avgAge }} <span>👍</span>
                   </div>
                 </div>
                   
