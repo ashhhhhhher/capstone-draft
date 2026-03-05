@@ -17,20 +17,22 @@ function buildAbsenceNotifications() {
 
 let unsub = null
 onMounted(() => {
-  if (!authStore.branchId) return
-  const colRef = collection(db, 'branches', authStore.branchId, 'notifications')
+  if (!authStore.branchId || !authStore.user?.uid) return
+  // Listen to admin's personal notification collection
+  const colRef = collection(db, 'branches', authStore.branchId, 'dgms', authStore.user.uid, 'notifications')
   const q = query(colRef, orderBy('createdAt', 'desc'))
 
   unsub = onSnapshot(q, (snap) => {
     const items = []
     snap.docs.forEach(d => {
       const data = d.data()
-      if (data.recipientId === 'admin' && typeof data.title === 'string' && data.title.startsWith('Absence Report')) {
-        // extract memberId from message if present
-        const memberIdMatch = data.message ? data.message.match(/Member ID:\s*(\S+)/m) : null
+      // Filter for absence reports
+      if (data.type === 'ABSENCE_REPORT') {
+        // extract memberId from body if present
+        const memberIdMatch = data.body ? data.body.match(/Member ID:\s*(\S+)/m) : null
         const memberId = memberIdMatch ? memberIdMatch[1] : null
-        const name = data.title.replace('Absence Report: ', '')
-        items.push({ id: d.id, name, memberId, message: data.message || '', createdAt: data.createdAt })
+        const name = data.header.replace('Absence Report: ', '')
+        items.push({ id: d.id, name, memberId, message: data.body || '', createdAt: data.createdAt })
       }
     })
     reports.value = items
@@ -49,8 +51,8 @@ async function archiveMember(memberId, reportId) {
   if (!confirmed) return
 
   try {
-    if (!authStore.branchId) {
-      alert('Branch not set; cannot archive member.')
+    if (!authStore.branchId || !authStore.user?.uid) {
+      alert('Branch or user not set; cannot archive member.')
       return
     }
     const memberRef = doc(db, 'branches', authStore.branchId, 'members', memberId)
@@ -62,7 +64,7 @@ async function archiveMember(memberId, reportId) {
 
     // Delete the report after successful archiving
     if (reportId) {
-      const reportRef = doc(db, 'branches', authStore.branchId, 'notifications', reportId)
+      const reportRef = doc(db, 'branches', authStore.branchId, 'dgms', authStore.user.uid, 'notifications', reportId)
       await deleteDoc(reportRef)
       reports.value = reports.value.filter(r => r.id !== reportId)
     }
@@ -76,14 +78,14 @@ async function archiveMember(memberId, reportId) {
 }
 
 async function deleteReport(reportId) {
-  if (!authStore.branchId) {
-    alert('Branch not set; cannot delete report.')
+  if (!authStore.branchId || !authStore.user?.uid) {
+    alert('Branch or user not set; cannot delete report.')
     return
   }
   if (!confirm('Delete this report? This cannot be undone.')) return
 
   try {
-    const reportRef = doc(db, 'branches', authStore.branchId, 'notifications', reportId)
+    const reportRef = doc(db, 'branches', authStore.branchId, 'dgms', authStore.user.uid, 'notifications', reportId)
     await deleteDoc(reportRef)
     // Optimistically remove from local list; onSnapshot will update too
     reports.value = reports.value.filter(r => r.id !== reportId)

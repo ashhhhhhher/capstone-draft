@@ -202,25 +202,19 @@ function messageMember(member) {
 
 async function reportToAdmin(member) {
   const notificationsStore = useNotificationsStore()
-  const title = `Absence Report: ${member.firstName} ${member.lastName}`
-  const message = `Member: ${member.firstName} ${member.lastName}\nDGroup Leader: ${member.dgroupLeader || '—'}\nConsecutive absences: ${member.consecutive}\nLast seen: ${member.lastSeenName || 'Never'} ${member.lastSeenDate ? `— ${member.lastSeenDate}` : ''}\nMember ID: ${member.id}`
+  const memberName = `${member.firstName} ${member.lastName}`
+  const reportDetails = `Member: ${memberName}\nDGroup Leader: ${member.dgroupLeader || '—'}\nConsecutive absences: ${member.consecutive}\nLast seen: ${member.lastSeenName || 'Never'} ${member.lastSeenDate ? `— ${member.lastSeenDate}` : ''}\nMember ID: ${member.id}`
 
   try {
-    // Prevent duplicate reports: look for an existing admin notification with same title
-    if (authStore?.branchId) {
-      const colRef = collection(db, 'branches', authStore.branchId, 'notifications')
-      // Query for any existing admin notification with same title (no orderBy to avoid composite-index requirements)
-      const q = query(colRef, where('recipientId', '==', 'admin'), where('title', '==', title), limit(1))
-      const snaps = await getDocs(q)
-      if (!snaps.empty) {
-        alert('A report for this member has already been submitted.')
-        return
-      }
+    // Prevent duplicate reports
+    if (!authStore?.branchId) {
+      alert('Branch ID not found.')
+      return
     }
 
-    await notificationsStore.sendNotification('admin', title, message, 'alert')
+    await notificationsStore.notifyAdminsAbsenceReport(authStore.branchId, memberName, reportDetails)
     reportedMembers.value.add(member.id)
-    alert(`Report for ${member.firstName} ${member.lastName} sent to admin.`)
+    alert(`Report for ${memberName} sent to admin.`)
   } catch (err) {
     console.error('Failed to send report', err)
     alert(`Failed to send report for ${member.firstName} ${member.lastName}.`)

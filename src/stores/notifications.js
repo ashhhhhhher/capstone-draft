@@ -260,6 +260,23 @@ async function notifyAdminsMatchingPending(branchId, memberId, memberName) {
   }
 }
 
+async function notifyAdminsAbsenceReport(branchId, memberName, reportDetails) {
+  const dgmsRef = collection(db, "branches", branchId, "dgms");
+  const snapshot = await getDocs(dgmsRef);
+
+  for (const adminDoc of snapshot.docs) {
+    await sendToUser({
+      branchId,
+      targetUid: adminDoc.id, // admin authUid
+      roleTarget: "admin",
+      type: "ABSENCE_REPORT",
+      header: `Absence Report: ${memberName}`,
+      body: reportDetails,
+      focus: "members"
+    });
+  }
+}
+
   // 🔹 Permanently delete all notifications in user's collection
   async function clearAllNotifications() {
     const colRef = getUserNotifCollection()
@@ -296,6 +313,7 @@ async function notifyAdminsMatchingPending(branchId, memberId, memberName) {
     notifyMemberJoinRejected,
     notifyLeaderMemberAssigned,
     notifyMemberAssigned,
-    notifyAdminsMatchingPending
+    notifyAdminsMatchingPending,
+    notifyAdminsAbsenceReport
   }
 })
