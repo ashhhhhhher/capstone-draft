@@ -312,49 +312,59 @@ const volunteerPerformanceStats = computed(() => {
   const totalEvts = eventsThisYear.length;
   const eventIdsThisYear = eventsThisYear.map(e => e.id);
 
-  activeMembers.value.forEach(member => {
-    const memberMinistries = member.finalTags?.volunteerMinistry || [];
-    
-    // Overall service attendance for this member for the current year
-    const memberTotalServiceAtt = allAttendance.value.filter(att => 
-       att.memberId === member.id && 
-       eventIdsThisYear.includes(att.eventId) &&
-       att.ministry && att.ministry !== 'N/A'
-    ).length;
-
-    if (memberMinistries.length > 0 || memberTotalServiceAtt > 0) {
-        const rateAll = totalEvts > 0 ? Math.round((memberTotalServiceAtt / totalEvts) * 100) : 0;
-        
-        stats.All.push({
-           name: `${member.firstName} ${member.lastName.charAt(0)}.`,
-           fullName: `${member.lastName}, ${member.firstName}`,
-           totalEvents: totalEvts,
-           volunteered: memberTotalServiceAtt,
-           rate: rateAll,
-           ministryStr: memberMinistries.join(', ') || 'Various'
-        });
-
-        // Specific Ministries Check
-        memberMinistries.forEach(min => {
-            if (stats[min]) {
-                const minAtt = allAttendance.value.filter(att => 
-                   att.memberId === member.id && 
-                   att.ministry === min && 
-                   eventIdsThisYear.includes(att.eventId)
-                ).length;
-
-                const rate = totalEvts > 0 ? Math.round((minAtt / totalEvts) * 100) : 0;
-                stats[min].push({
-                   name: `${member.firstName} ${member.lastName.charAt(0)}.`,
-                   fullName: `${member.lastName}, ${member.firstName}`,
-                   totalEvents: totalEvts,
-                   volunteered: minAtt,
-                   rate: rate,
-                   ministry: min
-                });
-            }
-        });
+  // Build volunteer stats directly from attendance records (source of truth)
+  const volunteersByMember = {}; // memberId -> { memberObj, ministries: Map<ministry, count>, totalVolunteered }
+  
+  allAttendance.value.forEach(att => {
+    if (eventIdsThisYear.includes(att.eventId) && att.ministry && att.ministry !== 'N/A') {
+      const memberId = att.memberId;
+      const ministry = att.ministry;
+      
+      if (!volunteersByMember[memberId]) {
+        const memberObj = activeMembers.value.find(m => m.id === memberId);
+        volunteersByMember[memberId] = {
+          memberObj,
+          ministries: new Map(),
+          totalVolunteered: 0
+        };
+      }
+      
+      const current = volunteersByMember[memberId].ministries.get(ministry) || 0;
+      volunteersByMember[memberId].ministries.set(ministry, current + 1);
+      volunteersByMember[memberId].totalVolunteered += 1;
     }
+  });
+
+  // Transform into stats structure
+  Object.entries(volunteersByMember).forEach(([memberId, data]) => {
+    if (!data.memberObj) return; // Skip if member not found
+    
+    const rateAll = totalEvts > 0 ? Math.round((data.totalVolunteered / totalEvts) * 100) : 0;
+    const ministryArray = Array.from(data.ministries.keys());
+    
+    stats.All.push({
+      name: `${data.memberObj.firstName} ${data.memberObj.lastName.charAt(0)}.`,
+      fullName: `${data.memberObj.lastName}, ${data.memberObj.firstName}`,
+      totalEvents: totalEvts,
+      volunteered: data.totalVolunteered,
+      rate: rateAll,
+      ministryStr: ministryArray.join(', ') || 'Various'
+    });
+
+    // Add to specific ministry tabs based on actual attendance records
+    data.ministries.forEach((count, ministry) => {
+      if (stats[ministry]) {
+        const rate = totalEvts > 0 ? Math.round((count / totalEvts) * 100) : 0;
+        stats[ministry].push({
+          name: `${data.memberObj.firstName} ${data.memberObj.lastName.charAt(0)}.`,
+          fullName: `${data.memberObj.lastName}, ${data.memberObj.firstName}`,
+          totalEvents: totalEvts,
+          volunteered: count,
+          rate: rate,
+          ministry: ministry
+        });
+      }
+    });
   });
 
   // Sort descending by rate
