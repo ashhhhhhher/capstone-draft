@@ -178,7 +178,18 @@ async function handleEndCurrentEvent() {
   </div>
   
   <Modal v-if="showCreateEventModal" @close="showCreateEventModal = false"><CreateEventForm :eventToEdit="eventToEdit" @close="showCreateEventModal = false" /></Modal>
-  <Modal v-if="showAttendanceModal" @close="showAttendanceModal = false" size="xl"><AttendanceListModal :attendees="filteredAttendees" :filterTitle="selectedStatFilter" @close="showAttendanceModal = false" /></Modal>
+  <Modal v-if="showAttendanceModal" @close="showAttendanceModal = false" size="xl">
+    <AttendanceListModal
+      :attendees="filteredAttendees"
+      :filterTitle="selectedStatFilter"
+      :eventName="currentEvent?.name || currentEvent?.title || ''"
+      :eventDate="currentEvent?.date || ''"
+      :eventLocation="currentEvent?.eventLocation || currentEvent?.location || ''"
+      :eventSpeaker="currentEvent?.eventSpeaker || currentEvent?.speaker || ''"
+      :eventSeries="currentEvent?.eventSeries || currentEvent?.series || ''"
+      @close="showAttendanceModal = false"
+    />
+  </Modal>
   <Modal v-if="showCalendarModal" @close="showCalendarModal = false" size="xl"><CalendarModal @close="showCalendarModal = false" @createEvent="handleCreateEvent" @editEvent="handleEditEvent" /></Modal>
   <Modal v-if="showEventDetailsModal" @close="showEventDetailsModal = false" size="xl">
     <div class="event-details-content">

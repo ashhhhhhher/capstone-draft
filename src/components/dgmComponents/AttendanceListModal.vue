@@ -10,23 +10,23 @@ import { useAttendanceStore } from '../../stores/attendance'
 import { storeToRefs } from 'pinia'
 
 const props = defineProps({
-  eventName: String,
-  eventDate: String,
-  eventLocation: String,
-  eventSpeaker: String,
-  eventSeries: String,
-  attendees: Array,
-  filterTitle: String
+  eventName: { type: String, default: '' },
+  eventDate: { type: String, default: '' },
+  eventLocation: { type: String, default: '' },
+  eventSpeaker: { type: String, default: '' },
+  eventSeries: { type: String, default: '' },
+  attendees: { type: Array, default: () => [] },
+  filterTitle: { type: String, default: '' }
 })
 
 // Safe, reactive wrappers around props so template and script don't error
-const attendees = computed(() => props.attendees || [])
-const eventName = computed(() => props.eventName || '')
-const eventDate = computed(() => props.eventDate || '')
-const eventLocation = computed(() => props.eventLocation || '')
-const eventSpeaker = computed(() => props.eventSpeaker || '')
-const eventSeries = computed(() => props.eventSeries || '')
-const filterTitle = computed(() => props.filterTitle || '')
+const attendees = computed(() => Array.isArray(props.attendees) ? props.attendees : [])
+const eventName = computed(() => props.eventName)
+const eventDate = computed(() => props.eventDate)
+const eventLocation = computed(() => props.eventLocation)
+const eventSpeaker = computed(() => props.eventSpeaker)
+const eventSeries = computed(() => props.eventSeries)
+const filterTitle = computed(() => props.filterTitle)
 
 const emit = defineEmits(['close'])
 
@@ -118,6 +118,33 @@ function previousNEventsBefore(currentId, n = 3) {
   return prev;
 }
 
+// Build comparison payload consumed by Excel/PDF export blocks
+function buildComparisonPayload({ allEvents: eventList = [], currentEventId = null } = {}) {
+  const safeEvents = Array.isArray(eventList) ? eventList : [];
+  const resolvedCurrentId = currentEventId || findCurrentEventId();
+  const currentEvent = safeEvents.find(e => String(e?.id) === String(resolvedCurrentId));
+
+  const fallbackCurrent = {
+    id: resolvedCurrentId || null,
+    name: eventName.value || 'N/A',
+    date: eventDate.value || '',
+    total: attendees.value.length,
+    elevate: attendees.value.filter(m => m.finalTags?.ageCategory === 'Elevate').length,
+    b1g: attendees.value.filter(m => m.finalTags?.ageCategory === 'B1G').length,
+    firstTimers: attendees.value.filter(m => m.finalTags?.isFirstTimer).length,
+    volunteers: attendees.value.filter(m => m.attendanceMinistry && m.attendanceMinistry !== 'N/A').length
+  };
+
+  const current = currentEvent ? aggregatesForEvent(currentEvent) : fallbackCurrent;
+  const previous = resolvedCurrentId ? previousNEventsBefore(resolvedCurrentId, 3).map(aggregatesForEvent) : [];
+
+  return {
+    current,
+    previous,
+    cards: [{ title: 'Absence Monitoring' }]
+  };
+}
+
 // --- SORTING LOGIC ---
 const sortedAttendees = computed(() => {
   return [...attendees.value].sort((a, b) =>
@@ -142,12 +169,11 @@ function exportToExcel() {
   const volunteers = sortByName(source.filter(m => !m.finalTags?.isFirstTimer && (m.attendanceMinistry && m.attendanceMinistry !== 'N/A')));
   // DLeaders sheet: include all dgroup leaders so leaders who served still appear on the DLeaders sheet
   const leaders = sortByName(source.filter(m => !m.finalTags?.isFirstTimer && m.finalTags?.isDgroupLeader));
-  const regulars = source.filter(m => !m.finalTags?.isFirstTimer && !m.finalTags?.isDgroupLeader && !(m.attendanceMinistry && m.attendanceMinistry !== 'N/A'));
-  
-  const elevateMales = sortByName(regulars.filter(m => m.gender === 'Male' && m.finalTags?.ageCategory === 'Elevate'));
-  const elevateFemales = sortByName(regulars.filter(m => m.gender === 'Female' && m.finalTags?.ageCategory === 'Elevate'));
-  const b1gMales = sortByName(regulars.filter(m => m.gender === 'Male' && m.finalTags?.ageCategory === 'B1G'));
-  const b1gFemales = sortByName(regulars.filter(m => m.gender === 'Female' && m.finalTags?.ageCategory === 'B1G'));
+  // For Elevate/B1G sheets, include all non-first-timer attendees regardless of other tags
+  const elevateMales = sortByName(source.filter(m => !m.finalTags?.isFirstTimer && m.gender === 'Male' && m.finalTags?.ageCategory === 'Elevate'));
+  const elevateFemales = sortByName(source.filter(m => !m.finalTags?.isFirstTimer && m.gender === 'Female' && m.finalTags?.ageCategory === 'Elevate'));
+  const b1gMales = sortByName(source.filter(m => !m.finalTags?.isFirstTimer && m.gender === 'Male' && m.finalTags?.ageCategory === 'B1G'));
+  const b1gFemales = sortByName(source.filter(m => !m.finalTags?.isFirstTimer && m.gender === 'Female' && m.finalTags?.ageCategory === 'B1G'));
 
   const wb = XLSX.utils.book_new();
   const borderStyle = { top: { style: "thin" }, bottom: { style: "thin" }, left: { style: "thin" }, right: { style: "thin" } };
@@ -187,18 +213,6 @@ function exportToExcel() {
       compRows.push(createMetadataRow(`Ministry in-charge: Elevate Baguio`, "", totalCols));
       compRows.push(['']);
       compRows.push(['Summary']);
-
-      // Summary / Overview block (maintain previous content below the title)
-      const totalAttended = source.length;
-      const totalRegistered = (members && members.value) ? members.value.length : 0;
-      const attRate = totalRegistered > 0 ? Math.round((totalAttended / totalRegistered) * 100) : 0;
-
-      // Summary (dynamic values)
-      const prevTotals = (compPrevious || []).map(p => ({ name: p.name || 'Unknown', total: p.total || 0 }));
-      const prevSum = prevTotals.reduce((s, p) => s + (p.total || 0), 0);
-      const prevAvg = prevTotals.length ? Math.round(prevSum / prevTotals.length) : 0;
-      const prevListText = prevTotals.length ? prevTotals.map(p => `${p.name} (${p.total})`).join(', ') : 'none';
-      const prevCombined = { elevate: (compPrevious || []).reduce((s,p) => s + (p.elevate||0), 0), b1g: (compPrevious || []).reduce((s,p) => s + (p.b1g||0), 0), firstTimers: (compPrevious || []).reduce((s,p) => s + (p.firstTimers||0), 0) };
 
       // Event Comparison Overview table
       compRows.push(['Type','Event Name','Date','Total','Elevate','B1G','First Timers','Volunteers']);
@@ -247,7 +261,9 @@ function exportToExcel() {
       compRows.push(['']);
 
       // Append any remaining cards (charts/interpretation)
-      cards.forEach(card => {
+      cards
+        .filter(card => (card?.title || '').trim().toLowerCase() !== 'absence monitoring')
+        .forEach(card => {
         compRows.push([card.title || 'Card']);
         compRows.push(['']);
         if (card.tableHeaders && Array.isArray(card.tableRows)) {
@@ -632,12 +648,6 @@ try {
   const prevSumFinal = prevTotalsFinal.reduce((s, p) => s + (p.total || 0), 0);
   const prevAvgFinal = (prevTotalsFinal.length) ? Math.round(prevSumFinal / prevTotalsFinal.length) : 0;
   const prevListTextFinal = prevTotalsFinal.length ? prevTotalsFinal.map(p => `${p.name} (${p.total})`).join(', ') : 'none';
-  const prevCombinedFinal = { 
-    elevate: (compFinal.previous || []).reduce((s,p) => s + (p.elevate||0), 0), 
-    b1g: (compFinal.previous || []).reduce((s,p) => s + (p.b1g||0), 0), 
-    firstTimers: (compFinal.previous || []).reduce((s,p) => s + (p.firstTimers||0), 0) 
-  };
-
   writeSectionHeader('Summary');
 
   // Human-readable summary paragraph (use the comparison payload's current event)
@@ -743,13 +753,6 @@ try {
 
       y = doc.lastAutoTable.finalY + 8;
 
-      // Comparison paragraph - clearer numeric summary and direction
-      const prevTotals = (comp.previous || []).map(p => ({ name: p.name || 'Unknown', total: p.total || 0 }));
-      const prevSum = prevTotals.reduce((s, p) => s + (p.total || 0), 0);
-      const prevAvg = (prevTotals.length) ? Math.round(prevSum / prevTotals.length) : 0;
-      const currentTotal = comp.current?.total || 0;
-      const delta = currentTotal - prevAvg;
-
       // Render only the Absence Monitoring card (keep Overview table above)
       try {
         const cards = (payload && payload.cards) ? payload.cards : []
@@ -846,18 +849,11 @@ try {
   // For PDF: include only members who actually served in this event (attendanceMinistry set)
   const volunteers = sortByName(data.filter(m => !m.finalTags?.isFirstTimer && (m.attendanceMinistry && m.attendanceMinistry !== 'N/A')));
 
-  // For PDF regulars: include attendees who did not serve (no attendanceMinistry),
-  // this will include profile-tagged volunteers who attended as regulars.
-  const regulars = data.filter(m =>
-    !m.finalTags?.isFirstTimer &&
-    !m.finalTags?.isDgroupLeader &&
-    !(m.attendanceMinistry && m.attendanceMinistry !== 'N/A')
-  );
-
-  const b1gMale = sortByName(regulars.filter(m => m.finalTags?.ageCategory === 'B1G' && m.gender === 'Male'));
-  const b1gFemale = sortByName(regulars.filter(m => m.finalTags?.ageCategory === 'B1G' && m.gender === 'Female'));
-  const elevateMale = sortByName(regulars.filter(m => m.finalTags?.ageCategory === 'Elevate' && m.gender === 'Male'));
-  const elevateFemale = sortByName(regulars.filter(m => m.finalTags?.ageCategory === 'Elevate' && m.gender === 'Female'));
+  // For Elevate/B1G sections, include all non-first-timer attendees regardless of role/ministry
+  const b1gMale = sortByName(data.filter(m => !m.finalTags?.isFirstTimer && m.finalTags?.ageCategory === 'B1G' && m.gender === 'Male'));
+  const b1gFemale = sortByName(data.filter(m => !m.finalTags?.isFirstTimer && m.finalTags?.ageCategory === 'B1G' && m.gender === 'Female'));
+  const elevateMale = sortByName(data.filter(m => !m.finalTags?.isFirstTimer && m.finalTags?.ageCategory === 'Elevate' && m.gender === 'Male'));
+  const elevateFemale = sortByName(data.filter(m => !m.finalTags?.isFirstTimer && m.finalTags?.ageCategory === 'Elevate' && m.gender === 'Female'));
 
   const createTable = (title, list, columns, mapFn) => {
     if (list.length === 0) return;
@@ -874,8 +870,6 @@ try {
     });
 
     y = doc.lastAutoTable.finalY + 8;
-
-    const total = list.length;
   };
 
   // =========================================================================
