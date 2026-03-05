@@ -7,6 +7,7 @@ const props = defineProps({ title: { type: String, default: 'HOMEPAGE' } });
 const services = [
   {
     id: 'elevate',
+    featureKey: 'unite', // Maps to AboutUs feature key
     badge: 'INTRODUCING',
     bgImage: '/unitesm.jpg',
     title: 'Elevating the',
@@ -20,6 +21,7 @@ const services = [
   },
   {
     id: 'b1g',
+    featureKey: 'groups', // Maps to AboutUs feature key
     badge: 'B1G Singles',
     bgImage: '/group2.jpg', 
     title: 'Be One with',
@@ -32,6 +34,7 @@ const services = [
   },
   {
     id: 'wknd',
+    featureKey: 'wknd', // Maps to AboutUs feature key
     badge: 'WKND SERVICE',
     bgImage: '/hugs.jpg',
     title: 'Start your',
@@ -46,6 +49,7 @@ const services = [
 
 const currentIndex = ref(0);
 const isAboutOpen = ref(false); // State for About Us visibility
+const targetFeature = ref(null); // Which feature to open in AboutUs
 let timer = null;
 
 const startCycle = () => { timer = setInterval(() => { currentIndex.value = (currentIndex.value + 1) % services.length; }, 5000); };
@@ -55,9 +59,15 @@ onUnmounted(() => clearInterval(timer));
 
 const setSlide = (index) => { currentIndex.value = index; clearInterval(timer); startCycle(); };
 
-// Functions to handle About Us navigation
-const openAbout = () => { isAboutOpen.value = true; };
-const closeAbout = () => { isAboutOpen.value = false; };
+// Functions to handle About Us navigation with deep-linking
+const openAbout = () => { 
+  targetFeature.value = services[currentIndex.value].featureKey;
+  isAboutOpen.value = true; 
+};
+const closeAbout = () => { 
+  isAboutOpen.value = false; 
+  targetFeature.value = null; // Reset when closing
+};
 </script>
 
 <template>
@@ -97,8 +107,8 @@ const closeAbout = () => { isAboutOpen.value = false; };
       </div>
     </div>
 
-    <!-- AboutUs Component integration -->
-    <AboutUs :isOpen="isAboutOpen" @close="closeAbout" />
+    <!-- AboutUs Component integration with initialFeature prop -->
+    <AboutUs :isOpen="isAboutOpen" :initialFeature="targetFeature" @close="closeAbout" />
   </div>
 </template>
 

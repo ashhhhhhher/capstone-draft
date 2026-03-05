@@ -1,8 +1,9 @@
 <script setup>
-import { ref } from 'vue'
+import { ref, watch, onMounted } from 'vue'
 
 const props = defineProps({
-  isOpen: { type: Boolean, default: false }
+  isOpen: { type: Boolean, default: false },
+  initialFeature: { type: String, default: null }
 })
 const emit = defineEmits(['close'])
 
@@ -10,13 +11,13 @@ const scrollContainer = ref(null)
 const selectedFeature = ref(null)
 
 const features = {
-  wknd: { 
-    title: 'ELEVATE WKND', 
-    desc: 'Unwind with us at our every other week gatherings!', 
-    longDesc: 'Our youth gathering! A service designed for high school, college students and singles to experience awesome worship, meet new friends, and hear life-changing messages.', 
-    info: 'Hotel Supreme | 5:00PM onwards', 
-    img: '/elevate logo.jpg',
-    gallery: ['/wknd1.jpg', '/wknd2.jpg', '/wknd3.jpg', '/wknd4.jpg']
+  unite: { 
+    title: 'Campus UNITE', 
+    desc: 'Celebrating God’s faithfulness and ministry anniversary.', 
+    longDesc: 'Campus Unite is the massive annual anniversary celebration of Elevate! It brings together students from different campuses for a night of worship, powerful testimonies, and a shared vision to transform our nation. Our biggest event of the year with a purpose that lasts.', 
+    info: 'Happens around June - August', 
+    img: '/unitesm.jpg',
+    gallery: ['/unite1.jpg', '/unite2.jpg', '/unite3.jpg', '/unite4.jpg', '/unite5.jpg', '/unite6.jpg']
   },
   groups: { 
     title: 'DISCIPLESHIP GROUPS', 
@@ -26,17 +27,24 @@ const features = {
     img: '/group2.jpg',
     gallery: ['/dgroup1.jpg', '/dgroup2.jpg', '/dgroup3.jpg', '/dgroup4.jpg', '/dgroup5.jpg']
   },
-  unite: { 
-    title: 'Campus UNITE', 
-    desc: 'Celebrating God’s faithfulness and ministry anniversary.', 
-    longDesc: 'Campus Unite is the massive annual anniversary celebration of Elevate! It brings together students from different campuses for a night of worship, powerful testimonies, and a shared vision to transform our nation. Our biggest event of the year with a purpose that lasts.', 
-    info: 'Happens around June - August', 
-    img: '/unitesm.jpg',
-    gallery: ['/unite6.jpg', '/unite1.jpg', '/unite2.jpg', '/unite3.jpg', '/unite4.jpg', '/unite5.jpg']
+  wknd: { 
+    title: 'ELEVATE WKND', 
+    desc: 'Unwind with us at our every other week gatherings!', 
+    longDesc: 'Our youth gathering! A service designed for high school, college students and singles to experience awesome worship, meet new friends, and hear life-changing messages.', 
+    info: 'Hotel Supreme | 5:00PM onwards', 
+    img: '/elevate logo.jpg',
+    gallery: ['/wknd1.jpg', '/wknd2.jpg', '/wknd3.jpg', '/wknd4.jpg']
   }
 }
 
-function handleClose() { emit('close') }
+// Logic to auto-open feature when prop changes or component opens
+watch(() => props.isOpen, (newVal) => {
+  if (newVal && props.initialFeature && features[props.initialFeature]) {
+    selectedFeature.value = features[props.initialFeature];
+  }
+});
+
+function handleClose() { emit('close'); selectedFeature.value = null; }
 function scrollToSection(id) { 
   const el = document.getElementById(id); 
   if (el) el.scrollIntoView({ behavior: 'smooth' }) 
@@ -52,50 +60,33 @@ function closeFeature() { selectedFeature.value = null }
         <div v-if="selectedFeature" class="feature-modal-backdrop" @click.self="closeFeature">
           <div class="feature-modal-content premium-layout">
             <button class="modal-close-circle" @click="closeFeature">✕</button>
-            
             <div class="modal-flex-container">
               <div class="modal-visual-pane">
-                <div class="gallery-label">
-                  <span class="red-dash"></span>
-                  EXPERIENCE THE MOVEMENT
-                </div>
-                
+                <div class="gallery-label"><span class="red-dash"></span> EXPERIENCE THE MOVEMENT</div>
                 <div class="modal-gallery-wrapper custom-scrollbar">
                   <div v-for="(photo, index) in selectedFeature.gallery" :key="index" class="gallery-card-large">
                     <img :src="photo" alt="Gallery Image" />
                     <div class="card-number">0{{ index + 1 }}</div>
                   </div>
                 </div>
-                
                 <div class="gallery-footer-info">
-                  <div class="scroll-dots">
-                    <span class="dot active"></span>
-                    <span class="dot"></span>
-                    <span class="dot"></span>
-                  </div>
+                  <div class="scroll-dots"><span class="dot active"></span><span class="dot"></span><span class="dot"></span></div>
                   <span class="hint-text">Scroll or Swipe to explore →</span>
                 </div>
               </div>
-
               <div class="modal-info-pane">
                 <div class="header-stack">
                   <h2 class="title-main">{{ selectedFeature.title.split(' ')[0] }}</h2>
                   <h2 class="title-sub">{{ selectedFeature.title.split(' ').slice(1).join(' ') }}</h2>
                   <div class="title-accent"></div>
                 </div>
-
                 <div class="scrollable-body-text custom-scrollbar">
                   <p class="premium-desc">{{ selectedFeature.longDesc }}</p>
-                  
                   <div class="premium-info-card">
                     <div class="icon-wrap">📍</div>
-                    <div class="text-wrap">
-                      <span class="label">LOCATION & TIME</span>
-                      <p>{{ selectedFeature.info }}</p>
-                    </div>
+                    <div class="text-wrap"><span class="label">LOCATION & TIME</span><p>{{ selectedFeature.info }}</p></div>
                   </div>
                 </div>
-
                 <button class="btn-cta-red" @click="closeFeature">CLOSE PREVIEW</button>
               </div>
             </div>
@@ -155,24 +146,12 @@ function closeFeature() { selectedFeature.value = null }
           </div>
         </section>
 
-        <div id="whatwedo" class="divider-header">
-          <h2>WHAT WE DO</h2>
-          <span class="red-line"></span>
-        </div>
+        <div id="whatwedo" class="divider-header"><h2>WHAT WE DO</h2><span class="red-line"></span></div>
 
         <section class="what-we-do-grid">
-          <div v-for="(f, k) in features" 
-               :key="k" 
-               class="feature-col" 
-               :style="{ backgroundImage: `url('${f.img}')` }" 
-               @click="openFeature(k)">
-            <div class="col-overlay-static">
-              <h3 class="feature-title">{{ f.title }}</h3>
-              <p class="feature-desc">{{ f.desc }}</p>
-            </div>
-            <div class="col-overlay-hover">
-              <span class="view-btn">View Details</span>
-            </div>
+          <div v-for="(f, k) in features" :key="k" class="feature-col" :style="{ backgroundImage: `url('${f.img}')` }" @click="openFeature(k)">
+            <div class="col-overlay-static"><h3 class="feature-title">{{ f.title }}</h3><p class="feature-desc">{{ f.desc }}</p></div>
+            <div class="col-overlay-hover"><span class="view-btn">View Details</span></div>
           </div>
         </section>
 

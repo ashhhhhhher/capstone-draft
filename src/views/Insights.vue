@@ -7,7 +7,7 @@ import { useAttendanceStore } from '../stores/attendance'
 import { 
   LayoutDashboard, Users, Calendar, BarChart3, Search, 
   ArrowUp, ArrowDown, UserPlus, CalendarDays, Activity,
-  Clock, TrendingUp 
+  Clock, TrendingUp, Download, Eye
 } from 'lucide-vue-next'
 
 // Components
@@ -31,6 +31,11 @@ const showAttendanceOverview = ref(false)
 const showFullVolunteerList = ref(false)
 const showB1GAttendanceOverview = ref(false)
 
+// --- Volunteer Table State ---
+const volunteerMinistries = ['DGM', 'Live Prod', 'Exalt', 'Events', 'Media']
+const activeVolunteerTab = ref('DGM')
+const modalVolunteerTab = ref('All')
+
 // --- Date State for B1G ---
 const todayStr = new Date().toISOString().split('T')[0]
 const defaultFrom = (() => { const d = new Date(); d.setDate(d.getDate() - 60); return d.toISOString().split('T')[0] })()
@@ -42,7 +47,7 @@ const doughnutChartOptions = ref({
   responsive: true,
   maintainAspectRatio: false,
   plugins: {
-    legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } },
+    legend: { display: false }, 
     datalabels: { display: false }
   },
   cutout: '65%'
@@ -52,24 +57,26 @@ const genderAgeChartOptions = ref({
   responsive: true,
   maintainAspectRatio: false,
   plugins: {
-    legend: { display: true },
-    datalabels: {
-      formatter: (value) => { return value > 0 ? value : ''; },
-      color: '#fff',
-      anchor: 'center',
-      align: 'center',
-      font: { weight: 'bold' }
-    }
+    legend: { 
+      display: true, 
+      position: 'top', 
+      align: 'start',
+      labels: { usePointStyle: true, boxWidth: 8 }
+    },
+    datalabels: { display: false }
   },
-  scales: { x: { stacked: false }, y: { beginAtZero: true, stacked: false, ticks: { stepSize: 1 } } }
+  scales: { 
+    x: { 
+      grid: { display: false } 
+    }, 
+    y: { 
+      beginAtZero: true, 
+      ticks: { stepSize: 1, precision: 0 }, // Forces whole numbers
+      grid: { color: '#F0F2F5' },
+      border: { display: false }
+    } 
+  }
 })
-
-const b1gChartOptions = {
-  responsive: true,
-  maintainAspectRatio: false,
-  plugins: { legend: { display: false } },
-  scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } }
-}
 
 // --- DATA COMPUTATIONS ---
 
@@ -160,7 +167,7 @@ const wkndOverviewStats = computed(() => {
   return { avg, servicesHeld, peak: peak.count, peakEventName: peak.name };
 })
 
-// 7. B1G Overview Stats (Top Cards)
+// 7. B1G Overview Stats
 const b1gOverviewStats = computed(() => {
   const today = new Date(); today.setHours(0, 0, 0, 0);
   const currentYear = today.getFullYear();
@@ -186,42 +193,7 @@ const b1gOverviewStats = computed(() => {
   return { totalEvents, avg, peak: peak.count, peakEventName: peak.name };
 })
 
-// 8. B1G Historical Chart Data (Date Range Filtered)
-const b1gEventsInRange = computed(() => {
-  if (!b1gFromDate.value || !b1gToDate.value) return []
-  if (new Date(b1gFromDate.value) > new Date(b1gToDate.value)) return []
-  
-  return allEvents.value.filter(e => 
-    (e.eventType === 'b1g' || e.name.toLowerCase().includes('b1g'))
-    && e.date >= b1gFromDate.value 
-    && e.date <= b1gToDate.value
-  ).sort((a, b) => new Date(a.date) - new Date(b.date));
-})
-
-const filteredB1GAttendance = computed(() => {
-  const evIds = b1gEventsInRange.value.map(e => e.id)
-  return allAttendance.value.filter(att => evIds.includes(att.eventId))
-})
-
-const b1gChartData = computed(() => {
-  const evs = b1gEventsInRange.value;
-  if (!evs.length) return { labels: [], datasets: [] };
-  
-  const labels = evs.map(e => `${e.name} (${e.date})`);
-  const data = evs.map(e => allAttendance.value.filter(att => att.eventId === e.id).length);
-
-  return {
-    labels,
-    datasets: [{
-      label: 'Attendance',
-      backgroundColor: '#2962FF',
-      borderRadius: 4,
-      data
-    }]
-  }
-})
-
-// 9. Chart Data (General)
+// 8. Member Category / Team Charts
 const categoryDistributionData = computed(() => {
   const d = demographics.value;
   return {
@@ -246,52 +218,171 @@ const serviceTeamData = computed(() => {
   }
 })
 
-const genderAgeDistributionData = computed(() => {
-  const malesElevate = activeMembers.value.filter(m => m.gender === 'Male' && m.finalTags.ageCategory === 'Elevate').length;
-  const malesB1G = activeMembers.value.filter(m => m.gender === 'Male' && m.finalTags.ageCategory === 'B1G').length;
-  const femalesElevate = activeMembers.value.filter(m => m.gender === 'Female' && m.finalTags.ageCategory === 'Elevate').length;
-  const femalesB1G = activeMembers.value.filter(m => m.gender === 'Female' && m.finalTags.ageCategory === 'B1G').length;
+// 9. Split Gender & Age Charts (ELEVATE & B1G) - Dynamic
+const elevateAgeData = computed(() => {
+  const rawData = {};
+  
+  activeMembers.value.forEach(m => {
+    if (m.finalTags?.ageCategory === 'Elevate' && m.age >= 12 && m.age <= 21) {
+      if (!rawData[m.age]) rawData[m.age] = { male: 0, female: 0 };
+      if (m.gender === 'Male') rawData[m.age].male++;
+      if (m.gender === 'Female') rawData[m.age].female++;
+    }
+  });
+
+  const sortedAges = Object.keys(rawData).sort((a, b) => Number(a) - Number(b));
+  const labels = [];
+  const males = [];
+  const females = [];
+
+  sortedAges.forEach(age => {
+    labels.push(age.toString());
+    males.push(rawData[age].male);
+    females.push(rawData[age].female);
+  });
   
   return {
-    labels: ['Elevate (12-21)', 'B1G (22+)'],
+    labels,
     datasets: [
-      { label: 'Male', backgroundColor: '#0D47A1', data: [malesElevate, malesB1G] },
-      { label: 'Female', backgroundColor: '#42A5F5', data: [femalesElevate, femalesB1G] }
+      { label: 'Male', backgroundColor: '#4C8BF5', data: males, borderRadius: 4 },
+      { label: 'Female', backgroundColor: '#52C5D0', data: females, borderRadius: 4 }
     ]
   }
 })
 
-// Volunteer Tracking for Table
-const volunteerTrackingReport = computed(() => {
-    const volunteerIds = new Set(
-      (allAttendance.value || []).filter(att => att.ministry && att.ministry !== 'N/A').map(att => att.memberId)
-    )
-    const allVolunteers = activeMembers.value.filter(m => volunteerIds.has(m.id) || m.finalTags.isVolunteer)
-    const totalServiceEvents = allEvents.value.filter(e => e.eventType === 'service' && e.date <= new Date().toISOString().split('T')[0]).length;
+const b1gAgeData = computed(() => {
+  const rawData = {
+    '22-25': { male: 0, female: 0 },
+    '26-30': { male: 0, female: 0 },
+    '31-35': { male: 0, female: 0 },
+    '36-40': { male: 0, female: 0 },
+    '41+': { male: 0, female: 0 }
+  };
+  
+  activeMembers.value.forEach(m => {
+    if (m.finalTags?.ageCategory === 'B1G' && m.age >= 22) {
+      let bracket = '';
+      if (m.age >= 22 && m.age <= 25) bracket = '22-25';
+      else if (m.age >= 26 && m.age <= 30) bracket = '26-30';
+      else if (m.age >= 31 && m.age <= 35) bracket = '31-35';
+      else if (m.age >= 36 && m.age <= 40) bracket = '36-40';
+      else if (m.age >= 41) bracket = '41+';
+      
+      if (bracket) {
+          if (m.gender === 'Male') rawData[bracket].male++;
+          if (m.gender === 'Female') rawData[bracket].female++;
+      }
+    }
+  });
+  
+  const labels = [];
+  const males = [];
+  const females = [];
 
-    const stats = allVolunteers.map(member => {
-      const memberAttendance = allAttendance.value.filter(att =>
-        att.memberId === member.id && att.ministry && att.ministry !== 'N/A'
-      );
-      const validServiceAttendance = memberAttendance.filter(att => {
-           const ev = allEvents.value.find(e => e.id === att.eventId);
-           return ev && ev.eventType === 'service';
-      });
-      const totalEvents = validServiceAttendance.length;
-      const ministryCounts = {};
-      validServiceAttendance.forEach(att => { ministryCounts[att.ministry] = (ministryCounts[att.ministry] || 0) + 1; });
-      const breakdown = Object.entries(ministryCounts).map(([min, count]) => `${min}: ${count}`).join(', ');
-
-      return {
-          name: `${member.lastName}, ${member.firstName}`,
-          isLeader: member.finalTags.isDgroupLeader,
-          totalEvents: totalEvents,
-          breakdown: breakdown || 'No active service yet',
-          ratio: `${totalEvents} / ${totalServiceEvents}`
-      };
-    });
-    return stats.sort((a, b) => b.totalEvents - a.totalEvents).slice(0, 5);
+  // Only include brackets that have actual data
+  ['22-25', '26-30', '31-35', '36-40', '41+'].forEach(bracket => {
+      if (rawData[bracket].male > 0 || rawData[bracket].female > 0) {
+          labels.push(bracket);
+          males.push(rawData[bracket].male);
+          females.push(rawData[bracket].female);
+      }
+  });
+  
+  return {
+    labels,
+    datasets: [
+      { label: 'Male', backgroundColor: '#4C8BF5', data: males, borderRadius: 4 },
+      { label: 'Female', backgroundColor: '#52C5D0', data: females, borderRadius: 4 }
+    ]
+  }
 })
+
+// 10. Volunteer Performance Table (Tabbed & Processed per year)
+const currentYearStr = new Date().getFullYear().toString();
+
+const totalServiceEventsThisYear = computed(() => {
+  return allEvents.value.filter(e => e.eventType === 'service' && e.date.startsWith(currentYearStr) && e.date <= new Date().toISOString().split('T')[0]);
+});
+
+const volunteerPerformanceStats = computed(() => {
+  const stats = { All: [] };
+  volunteerMinistries.forEach(min => stats[min] = []);
+
+  const eventsThisYear = totalServiceEventsThisYear.value;
+  const totalEvts = eventsThisYear.length;
+  const eventIdsThisYear = eventsThisYear.map(e => e.id);
+
+  activeMembers.value.forEach(member => {
+    const memberMinistries = member.finalTags?.volunteerMinistry || [];
+    
+    // Overall service attendance for this member for the current year
+    const memberTotalServiceAtt = allAttendance.value.filter(att => 
+       att.memberId === member.id && 
+       eventIdsThisYear.includes(att.eventId) &&
+       att.ministry && att.ministry !== 'N/A'
+    ).length;
+
+    if (memberMinistries.length > 0 || memberTotalServiceAtt > 0) {
+        const rateAll = totalEvts > 0 ? Math.round((memberTotalServiceAtt / totalEvts) * 100) : 0;
+        
+        stats.All.push({
+           name: `${member.firstName} ${member.lastName.charAt(0)}.`,
+           fullName: `${member.lastName}, ${member.firstName}`,
+           totalEvents: totalEvts,
+           volunteered: memberTotalServiceAtt,
+           rate: rateAll,
+           ministryStr: memberMinistries.join(', ') || 'Various'
+        });
+
+        // Specific Ministries Check
+        memberMinistries.forEach(min => {
+            if (stats[min]) {
+                const minAtt = allAttendance.value.filter(att => 
+                   att.memberId === member.id && 
+                   att.ministry === min && 
+                   eventIdsThisYear.includes(att.eventId)
+                ).length;
+
+                const rate = totalEvts > 0 ? Math.round((minAtt / totalEvts) * 100) : 0;
+                stats[min].push({
+                   name: `${member.firstName} ${member.lastName.charAt(0)}.`,
+                   fullName: `${member.lastName}, ${member.firstName}`,
+                   totalEvents: totalEvts,
+                   volunteered: minAtt,
+                   rate: rate,
+                   ministry: min
+                });
+            }
+        });
+    }
+  });
+
+  // Sort descending by rate
+  Object.keys(stats).forEach(key => {
+     stats[key].sort((a, b) => b.rate - a.rate);
+  });
+
+  return stats;
+});
+
+const topVolunteers = computed(() => {
+   return (volunteerPerformanceStats.value[activeVolunteerTab.value] || []).slice(0, 5);
+});
+
+const modalVolunteers = computed(() => {
+   return volunteerPerformanceStats.value[modalVolunteerTab.value] || [];
+});
+
+const getRateColor = (rate) => {
+  if (rate >= 90) return 'rate-green';
+  if (rate >= 80) return 'rate-blue';
+  return 'rate-orange';
+};
+
+const openVolunteerModal = () => {
+  modalVolunteerTab.value = activeVolunteerTab.value;
+  showFullVolunteerList.value = true;
+};
 </script>
 
 <template>
@@ -310,25 +401,13 @@ const volunteerTrackingReport = computed(() => {
 
     <!-- 2. TABS NAVIGATION -->
     <div class="tabs-header">
-      <button 
-        class="tab-btn" 
-        :class="{ active: currentTab === 'overview' }"
-        @click="currentTab = 'overview'"
-      >
+      <button class="tab-btn" :class="{ active: currentTab === 'overview' }" @click="currentTab = 'overview'">
         <LayoutDashboard :size="18" /> Org Overview
       </button>
-      <button 
-        class="tab-btn" 
-        :class="{ active: currentTab === 'wknd' }"
-        @click="currentTab = 'wknd'"
-      >
+      <button class="tab-btn" :class="{ active: currentTab === 'wknd' }" @click="currentTab = 'wknd'">
         <Users :size="18" /> WKND Service
       </button>
-      <button 
-        class="tab-btn" 
-        :class="{ active: currentTab === 'b1g' }"
-        @click="currentTab = 'b1g'"
-      >
+      <button class="tab-btn" :class="{ active: currentTab === 'b1g' }" @click="currentTab = 'b1g'">
         <Calendar :size="18" /> B1G Events
       </button>
     </div>
@@ -340,29 +419,24 @@ const volunteerTrackingReport = computed(() => {
         
         <!-- Row 1: Top Metrics Cards -->
         <div class="metrics-row">
-            <!-- Total Members (Blue) -->
             <div class="metric-card primary-blue">
                 <div class="metric-info">
                     <span class="metric-label">Total Members</span>
                     <div class="metric-number">{{ demographics.total }}</div>
                     <div class="metric-subtext">Active registered members</div>
                 </div>
-                <!-- Export Button -->
                 <div style="position: absolute; top: 20px; right: 20px; z-index: 10;">
                     <ExportButton exportType="members" variant="on-blue" :iconOnly="true" />
                 </div>
             </div>
 
-            <!-- Monthly Attendance -->
             <div class="metric-card white-card">
                  <div class="metric-header">
                     <div class="metric-info">
                         <span class="metric-label">Monthly Attendance</span>
                         <div class="metric-number-row">
                             <div class="metric-number-dark">{{ monthlyAttendanceStats.total }}</div>
-                            <div class="trend-badge positive">
-                                <ArrowUp :size="12" /> {{ monthlyAttendanceStats.percent }}%
-                            </div>
+                            <div class="trend-badge positive"><ArrowUp :size="12" /> {{ monthlyAttendanceStats.percent }}%</div>
                         </div>
                         <div class="metric-subtext">Total attendees this month</div>
                     </div>
@@ -370,16 +444,13 @@ const volunteerTrackingReport = computed(() => {
                  </div>
             </div>
 
-            <!-- Growth Rate -->
             <div class="metric-card white-card">
                  <div class="metric-header">
                     <div class="metric-info">
                         <span class="metric-label">Growth Rate</span>
                         <div class="metric-number-row">
                             <div class="metric-number-dark">+{{ growthRate.rate }}%</div>
-                            <div class="trend-badge positive">
-                                <ArrowUp :size="12" /> {{ growthRate.percent }}%
-                            </div>
+                            <div class="trend-badge positive"><ArrowUp :size="12" /> {{ growthRate.percent }}%</div>
                         </div>
                         <div class="metric-subtext">Compared to last quarter</div>
                     </div>
@@ -387,16 +458,13 @@ const volunteerTrackingReport = computed(() => {
                  </div>
             </div>
 
-             <!-- New This Month -->
             <div class="metric-card white-card">
                  <div class="metric-header">
                     <div class="metric-info">
                         <span class="metric-label">New This Month</span>
                         <div class="metric-number-row">
                             <div class="metric-number-dark">{{ newMembersStats.count }}</div>
-                            <div class="trend-badge negative">
-                                <ArrowDown :size="12" /> {{ newMembersStats.percent }}%
-                            </div>
+                            <div class="trend-badge negative"><ArrowDown :size="12" /> {{ newMembersStats.percent }}%</div>
                         </div>
                         <div class="metric-subtext">First-time visitors</div>
                     </div>
@@ -407,7 +475,6 @@ const volunteerTrackingReport = computed(() => {
 
         <!-- Row 2: Attendance Stats Breakdown -->
         <div class="attendance-breakdown-row">
-            <!-- WKND Service Stats -->
             <div class="stats-group">
                 <div class="stats-group-header">
                     <span class="dot-indicator blue"></span> WKND Service Attendance
@@ -428,7 +495,6 @@ const volunteerTrackingReport = computed(() => {
                 </div>
             </div>
 
-            <!-- B1G Event Stats -->
             <div class="stats-group">
                 <div class="stats-group-header">
                     <span class="dot-indicator light-blue"></span> B1G Event Attendance
@@ -450,18 +516,27 @@ const volunteerTrackingReport = computed(() => {
             </div>
         </div>
 
-        <!-- Row 3: Charts Grid -->
-        <div class="charts-grid-3-col">
-            <!-- 1. Age & Group Distribution -->
+        <!-- Row 3: Charts Grid (Expanded to 4 items) -->
+        <div class="charts-grid-auto">
+            <!-- ELEVATE Age -->
             <div class="chart-card">
-                <h3>Gender & Age Distribution</h3>
-                <div class="chart-wrapper" style="height: 300px;">
-                    <BarChart v-if="members.length > 0" :chartData="genderAgeDistributionData" :chartOptions="genderAgeChartOptions" />
-                    <p v-else class="no-data-text">No members registered yet.</p>
+                <h3>Gender & Age Group <span class="chart-sub">ELEVATE Members</span></h3>
+                <div class="chart-wrapper" style="height: 240px;">
+                    <BarChart v-if="members.length > 0 && elevateAgeData.labels.length > 0" :chartData="elevateAgeData" :chartOptions="genderAgeChartOptions" />
+                    <p v-else class="no-data-text">No Elevate members found.</p>
                 </div>
             </div>
 
-            <!-- 2. Member Categories -->
+            <!-- B1G Age -->
+            <div class="chart-card">
+                <h3>Gender & Age Group <span class="chart-sub">B1G Members</span></h3>
+                <div class="chart-wrapper" style="height: 240px;">
+                    <BarChart v-if="members.length > 0 && b1gAgeData.labels.length > 0" :chartData="b1gAgeData" :chartOptions="genderAgeChartOptions" />
+                    <p v-else class="no-data-text">No B1G members found.</p>
+                </div>
+            </div>
+
+            <!-- Member Categories -->
             <div class="chart-card">
                 <div class="chart-header-row">
                     <h3>Member Categories</h3>
@@ -476,7 +551,7 @@ const volunteerTrackingReport = computed(() => {
                 </div>
             </div>
 
-            <!-- 3. Service Team -->
+            <!-- Service Team -->
             <div class="chart-card">
                 <div class="chart-header-row">
                     <h3>Service Team</h3>
@@ -492,25 +567,62 @@ const volunteerTrackingReport = computed(() => {
             </div>
         </div>
         
-        <!-- Volunteer Leaderboard -->
-         <div class="chart-card-full" style="margin-top: 20px;">
-            <div class="section-title-with-button">
-                <h3>Volunteer Top Performers</h3>
-                <button class="view-overview-btn" @click="showFullVolunteerList = true">View Full List</button>
+        <!-- PERFORMANCE VOLUNTEER TABLE -->
+         <div class="perf-container mt-6">
+            <div class="perf-header">
+                <div class="perf-title">
+                   <span class="text-blue uppercase">PERFORMANCE (THIS YEAR)</span>
+                   <span class="text-gray uppercase ml-4">VOLUNTEER TABLE</span>
+                </div>
+                
+                <div class="vol-tabs mt-4">
+                    <button v-for="tab in volunteerMinistries" :key="tab"
+                            class="vol-tab" :class="{active: activeVolunteerTab === tab}"
+                            @click="activeVolunteerTab = tab">
+                        {{ tab }}
+                    </button>
+                </div>
             </div>
+
             <div class="table-responsive">
-                <table v-if="volunteerTrackingReport.length > 0" class="volunteer-table">
-                <thead>
-                    <tr><th>Volunteer Name</th><th>Count</th><th>Ministry Breakdown</th></tr>
-                </thead>
-                <tbody>
-                    <tr v-for="row in volunteerTrackingReport" :key="row.name">
-                        <td class="name-cell">{{ row.name }} <span v-if="row.isLeader" class="tag dl-small">DL</span></td>
-                        <td class="count-cell">{{ row.ratio }}</td>
-                        <td class="breakdown-cell">{{ row.breakdown }}</td>
-                    </tr>
-                </tbody>
+                <table class="perf-table">
+                    <thead>
+                        <tr>
+                            <th>MEMBER</th>
+                            <th>TOTAL EVENTS</th>
+                            <th>VOLUNTEERED</th>
+                            <th>ATTENDANCE</th>
+                            <th>RATE</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr v-for="row in topVolunteers" :key="row.name">
+                            <td class="font-bold text-dark">{{ row.name }}</td>
+                            <td>{{ row.totalEvents }}</td>
+                            <td>{{ row.volunteered }}</td>
+                            <td>
+                               <div class="attendance-bar-cell">
+                                  <div class="progress-track">
+                                      <div class="progress-fill" :style="{width: row.rate + '%'}"></div>
+                                  </div>
+                                  <span class="progress-text">{{row.volunteered}}/{{row.totalEvents}}</span>
+                               </div>
+                            </td>
+                            <td>
+                               <span class="rate-badge" :class="getRateColor(row.rate)">{{ row.rate }}%</span>
+                            </td>
+                        </tr>
+                        <tr v-if="topVolunteers.length === 0">
+                            <td colspan="5" class="text-center py-6 text-gray-500">No active volunteers for this ministry yet.</td>
+                        </tr>
+                    </tbody>
                 </table>
+            </div>
+            
+            <div class="view-all-row mt-4">
+                <button class="view-all-btn" @click="openVolunteerModal">
+                   <Eye :size="16" /> View All
+                </button>
             </div>
         </div>
 
@@ -518,10 +630,7 @@ const volunteerTrackingReport = computed(() => {
 
     <!-- TAB 2: WKND SERVICE -->
     <div v-if="currentTab === 'wknd'" class="tab-content">
-        
-        <!-- Metrics Row -->
         <div class="metrics-row">
-            <!-- Avg Attendance (Blue) -->
             <div class="metric-card primary-blue">
                 <div class="metric-info">
                     <span class="metric-label">Avg. Attendance</span>
@@ -536,7 +645,6 @@ const volunteerTrackingReport = computed(() => {
                 <div class="metric-icon-glass"><Users color="white" :size="24" /></div>
             </div>
 
-            <!-- Services Held -->
             <div class="metric-card white-card">
                  <div class="metric-header">
                     <div class="metric-info">
@@ -548,7 +656,6 @@ const volunteerTrackingReport = computed(() => {
                  </div>
             </div>
 
-            <!-- Peak Attendance -->
             <div class="metric-card white-card">
                  <div class="metric-header">
                     <div class="metric-info">
@@ -560,17 +667,12 @@ const volunteerTrackingReport = computed(() => {
                  </div>
             </div>
         </div>
-
         <HistoricalAttendance eventType="service" />
-        
     </div>
 
-    <!-- TAB 3: B1G EVENTS (UPDATED) -->
+    <!-- TAB 3: B1G EVENTS -->
     <div v-if="currentTab === 'b1g'" class="tab-content">
-        
-        <!-- Metrics Row -->
         <div class="metrics-row">
-            <!-- Total Events (Blue) -->
             <div class="metric-card primary-blue">
                 <div class="metric-info">
                     <span class="metric-label">Total Events</span>
@@ -585,7 +687,6 @@ const volunteerTrackingReport = computed(() => {
                 <div class="metric-icon-glass"><Calendar color="white" :size="24" /></div>
             </div>
 
-            <!-- Avg Attendance -->
             <div class="metric-card white-card">
                  <div class="metric-header">
                     <div class="metric-info">
@@ -602,7 +703,6 @@ const volunteerTrackingReport = computed(() => {
                  </div>
             </div>
 
-            <!-- Peak Attendance -->
             <div class="metric-card white-card">
                  <div class="metric-header">
                     <div class="metric-info">
@@ -614,35 +714,68 @@ const volunteerTrackingReport = computed(() => {
                  </div>
             </div>
         </div>
-
         <HistoricalAttendance eventType="b1g" />
-
     </div>
-    
-    <!-- WKND Attendance Modal -->
-    <Modal v-if="showAttendanceOverview" @close="showAttendanceOverview = false" size="xl">
-      <AttendanceOverviewModal :events="allEvents.filter(e => e.eventType === 'service')" :attendance="allAttendance" :members="members" @close="showAttendanceOverview = false" />
-    </Modal>
 
-    <!-- B1G Attendance Modal -->
-    <Modal v-if="showB1GAttendanceOverview" @close="showB1GAttendanceOverview = false" size="xl">
-      <AttendanceOverviewModal :events="b1gEventsInRange" :attendance="filteredB1GAttendance" :members="members" @close="showB1GAttendanceOverview = false" />
-    </Modal>
-
+    <!-- Full Volunteer Modal -->
     <Modal v-if="showFullVolunteerList" @close="showFullVolunteerList = false" size="xl">
-        <div class="full-list-container">
-            <h3>Full Volunteer Activity List</h3>
+        <div class="full-list-container p-4">
+            <div class="modal-header-row mb-6">
+                <h3 class="text-xl font-bold text-dark">Volunteer Activity List (This Year)</h3>
+                <!-- Replaced local export logic with ExportButton -->
+                <ExportButton 
+                  exportType="volunteers" 
+                  :volunteersData="modalVolunteers" 
+                  :volunteerTab="modalVolunteerTab"
+                  customLabel="Export Excel" 
+                />
+            </div>
+            
+            <div class="vol-tabs mb-6">
+                <button class="vol-tab" :class="{active: modalVolunteerTab === 'All'}" @click="modalVolunteerTab = 'All'">All</button>
+                <button v-for="tab in volunteerMinistries" :key="tab"
+                        class="vol-tab" :class="{active: modalVolunteerTab === tab}"
+                        @click="modalVolunteerTab = tab">
+                    {{ tab }}
+                </button>
+            </div>
+
              <div class="table-responsive modal-table-wrap">
-                <table class="volunteer-table">
-                   <thead><tr><th>Volunteer Name</th><th>Number of times volunteered</th><th>Ministry Breakdown</th></tr></thead>
-                   <tbody>
-                      <tr v-for="row in volunteerTrackingReport" :key="row.name">
-                          <td class="name-cell">{{ row.name }}</td><td class="count-cell">{{ row.ratio }}</td><td class="breakdown-cell">{{ row.breakdown }}</td>
-                      </tr>
-                   </tbody>
+                <table class="perf-table w-full">
+                   <thead>
+                        <tr>
+                            <th>MEMBER</th>
+                            <th v-if="modalVolunteerTab === 'All'">MINISTRY</th>
+                            <th>TOTAL EVENTS</th>
+                            <th>VOLUNTEERED</th>
+                            <th>ATTENDANCE</th>
+                            <th>RATE</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr v-for="row in modalVolunteers" :key="row.name">
+                            <td class="font-bold text-dark">{{ row.fullName }}</td>
+                            <td v-if="modalVolunteerTab === 'All'" class="text-sm text-gray-600">{{ row.ministryStr }}</td>
+                            <td>{{ row.totalEvents }}</td>
+                            <td>{{ row.volunteered }}</td>
+                            <td>
+                               <div class="attendance-bar-cell">
+                                  <div class="progress-track">
+                                      <div class="progress-fill" :style="{width: row.rate + '%'}"></div>
+                                  </div>
+                                  <span class="progress-text">{{row.volunteered}}/{{row.totalEvents}}</span>
+                               </div>
+                            </td>
+                            <td>
+                               <span class="rate-badge" :class="getRateColor(row.rate)">{{ row.rate }}%</span>
+                            </td>
+                        </tr>
+                        <tr v-if="modalVolunteers.length === 0">
+                            <td :colspan="modalVolunteerTab === 'All' ? 6 : 5" class="text-center py-8 text-gray-500">No records found for this selection.</td>
+                        </tr>
+                    </tbody>
                 </table>
             </div>
-            <button class="close-btn" @click="showFullVolunteerList = false">Close</button>
         </div>
     </Modal>
   </div>
@@ -664,9 +797,7 @@ const volunteerTrackingReport = computed(() => {
 .tab-btn.active { color: #1976D2; border-bottom-color: #1976D2; }
 .tab-content { flex: 1; animation: fadeIn 0.3s ease; }
 
-/* --- NEW LAYOUT STYLES --- */
-
-/* 1. Metrics Row */
+/* --- METRICS ROW --- */
 .metrics-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 20px; margin-bottom: 24px; }
 
 .metric-card {
@@ -674,7 +805,6 @@ const volunteerTrackingReport = computed(() => {
     display: flex; justify-content: space-between; align-items: flex-start;
     box-shadow: 0 4px 15px rgba(0,0,0,0.03);
     position: relative; 
-    /* removed overflow: hidden to allow export dropdown to show */
 }
 .metric-card.primary-blue { background: #2962FF; color: white; }
 .metric-card.white-card { background: white; border: 1px solid #ECEFF1; }
@@ -722,165 +852,91 @@ const volunteerTrackingReport = computed(() => {
 .success-text { color: #2E7D32; }
 .error-text { color: #C62828; }
 
-/* 3. Charts Grid */
-.charts-grid-3-col { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; }
+/* 3. Charts Grid Auto */
+.charts-grid-auto { display: grid; grid-template-columns: repeat(auto-fit, minmax(450px, 1fr)); gap: 20px; }
 .chart-card { background: white; border-radius: 16px; padding: 24px; border: 1px solid #ECEFF1; box-shadow: 0 4px 12px rgba(0,0,0,0.03); display: flex; flex-direction: column; }
 .chart-header-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
-.chart-card h3 { margin: 0; font-size: 16px; font-weight: 600; color: #455A64; margin-bottom: 16px; }
+.chart-card h3 { margin: 0; font-size: 16px; font-weight: 700; color: #263238; margin-bottom: 16px; }
+.chart-sub { font-size: 13px; font-weight: 400; color: #90A4AE; display: block; margin-top: 4px; }
 .total-badge { font-size: 12px; font-weight: 600; color: #78909C; }
-.chart-wrapper { height: 220px; position: relative; width: 100%; display: flex; justify-content: center; }
-.donut-wrapper { height: 180px; margin: 10px 0; }
+.chart-wrapper { position: relative; width: 100%; display: flex; justify-content: center; }
+.donut-wrapper { height: 200px; margin: 10px 0; }
 
 .chart-legend-custom { display: flex; justify-content: center; gap: 16px; margin-top: auto; padding-top: 16px; font-size: 13px; color: #546E7A; }
-.chart-footer-info { display: flex; justify-content: center; gap: 16px; margin-top: 12px; font-size: 13px; color: #546E7A; }
 .legend-item { display: flex; align-items: center; gap: 6px; }
-.box, .dot { width: 10px; height: 10px; display: inline-block; border-radius: 2px; }
-.dot { border-radius: 50%; }
+.box { width: 12px; height: 12px; display: inline-block; border-radius: 2px; }
 
 /* Colors for custom legend */
 .box.regular { background: #00C853; }
 .box.ft { background: #00B0FF; }
 .box.vol { background: #00C853; }
 .box.dl { background: #6200EA; }
-.dot.male { background: #2962FF; }
-.dot.female { background: #FF4081; }
 
-/* Legacy styles preserved for other tabs */
-.kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; margin-bottom: 20px; }
-.kpi-card { background: #fff; border-radius: 12px; padding: 24px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); transition: all 0.2s ease; border: 1px solid #ECEFF1; }
-.kpi-card h4 { margin: 0 0 12px 0; font-size: 16px; color: #546E7A; }
-.kpi-value { font-size: 40px; font-weight: 700; color: #0D47A1; }
-.kpi-detail { font-size: 14px; color: #78909C; }
-.chart-card-full { background: #fff; border-radius: 12px; padding: 24px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); border: 1px solid #ECEFF1; }
-.section-title-with-button { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
-.section-title-with-button h3 { margin: 0; }
-.view-overview-btn { padding: 8px 16px; background: #1976D2; color: white; border: none; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; }
-.volunteer-table { width: 100%; border-collapse: collapse; font-size: 14px; }
-.volunteer-table th { background: #F5F7FA; padding: 12px; text-align: left; color: #546E7A; font-weight: 600; border-bottom: 1px solid #CFD8DC; }
-.volunteer-table td { padding: 12px; border-bottom: 1px solid #ECEFF1; color: #37474F; }
-.name-cell { font-weight: 600; color: #1976D2; }
-.count-cell { font-weight: 700; text-align: center; color: #1565C0; background: #E3F2FD; border-radius: 6px; padding: 6px; }
-.breakdown-cell { font-size: 13px; color: #546E7A; }
+/* --- PERFORMANCE VOLUNTEER TABLE --- */
+.perf-container {
+    background: white;
+    border-radius: 16px;
+    padding: 24px;
+    border: 1px solid #ECEFF1;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.03);
+}
+.perf-title { display: flex; align-items: center; border-bottom: 1px solid #ECEFF1; padding-bottom: 12px; }
+.perf-title .text-blue { color: #1976D2; font-weight: 700; font-size: 13px; letter-spacing: 0.5px;}
+.perf-title .text-gray { color: #90A4AE; font-weight: 600; font-size: 13px; letter-spacing: 0.5px;}
 
-/* Historical Section Specifics */
-.section-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 12px;
-  margin-bottom: 14px;
+.vol-tabs { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 8px; }
+.vol-tab { 
+    background: #F5F7FA; border: 1px solid #E0E0E0; color: #546E7A; 
+    padding: 6px 16px; border-radius: 8px; font-size: 13px; font-weight: 600; 
+    cursor: pointer; transition: 0.2s; white-space: nowrap;
 }
-.header-left {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
+.vol-tab.active { background: #1976D2; border-color: #1976D2; color: white; }
+
+.table-responsive { overflow-x: auto; width: 100%; }
+.perf-table { width: 100%; border-collapse: collapse; min-width: 600px; }
+.perf-table th { 
+    background: #F5F7FA; color: #78909C; font-size: 11px; font-weight: 700; 
+    text-transform: uppercase; padding: 12px 16px; text-align: left; letter-spacing: 0.5px;
 }
-.header-left h3 {
-    margin: 0;
-    font-size: 18px;
-    color: #0D47A1;
+.perf-table td { padding: 16px; border-bottom: 1px solid #ECEFF1; color: #455A64; font-size: 14px; }
+.perf-table tr:last-child td { border-bottom: none; }
+.text-dark { color: #263238; }
+
+.attendance-bar-cell { display: flex; align-items: center; gap: 12px; width: 200px; }
+.progress-track { flex-grow: 1; height: 6px; background: #E3F2FD; border-radius: 4px; overflow: hidden; }
+.progress-fill { height: 100%; background: #4C8BF5; border-radius: 4px; transition: width 0.3s ease; }
+.progress-text { font-size: 13px; color: #546E7A; font-weight: 500; min-width: 40px; }
+
+.rate-badge { padding: 4px 10px; border-radius: 12px; font-weight: 700; font-size: 12px; display: inline-block; text-align: center; }
+.rate-green { background: #E8F5E9; color: #2E7D32; }
+.rate-blue { background: #E3F2FD; color: #1565C0; }
+.rate-orange { background: #FFF3E0; color: #E65100; }
+
+.view-all-row { border-top: 1px solid #ECEFF1; padding-top: 16px; }
+.view-all-btn { 
+    display: inline-flex; align-items: center; gap: 8px; background: #1976D2; color: white; 
+    border: none; padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 600; 
+    cursor: pointer; transition: 0.2s; 
 }
-.date-text {
-  font-size: 13px;
-  color: #546E7A;
-  margin-left: 2px;
-}
-.header-actions {
-  display: inline-flex;
-  gap: 8px;
-  align-items: center;
-}
-.date-controls {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-bottom: 12px;
-}
-.controls-inline {
-  display: inline-flex;
-  gap: 12px;
-  align-items: flex-end;
-  flex-wrap: wrap;
-}
-.date-label {
-  display: inline-flex;
-  flex-direction: column;
-  font-size: 12px;
-  color: #546E7A;
-}
-.date-label input[type="date"] {
-  margin-top: 4px;
-  padding: 6px 8px;
-  border-radius: 8px;
-  border: 1px solid #E0E0E0;
-  background: white;
-}
+.view-all-btn:hover { background: #1565C0; }
+
+/* MODAL EXTRAS */
+.modal-header-row { display: flex; justify-content: space-between; align-items: center; }
+/* Replaced locally managed export-csv-btn styling, handled by ExportButton component now */
 
 @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
 
-/* Mobile: stack chart grid and adjust header/actions */
 @media (max-width: 900px) {
-  .charts-grid-3-col { grid-template-columns: 1fr; }
+  .charts-grid-auto { grid-template-columns: 1fr; }
   .attendance-breakdown-row { grid-template-columns: 1fr; }
-  .section-header { flex-direction: column; align-items: flex-start; }
-  .header-actions { margin-top: 6px; }
-
-  /* Chart & metric adjustments for medium screens */
-  .chart-card, .metric-card, .chart-card-full { padding: 16px; }
+  .chart-card { padding: 16px; }
   .metric-number { font-size: 28px; }
   .metric-number-dark { font-size: 24px; }
-  .charts-grid-3-col { gap: 16px; }
-  .chart-wrapper { height: auto; min-height: 200px; }
-  .donut-wrapper { height: 160px; }
-  .chart-card h3 { font-size: 15px; }
-  .chart-legend-custom { flex-direction: column; gap: 8px; align-items: flex-start; }
-  .metrics-row { gap: 12px; }
-  .section-title-with-button { flex-direction: column; align-items: flex-start; gap: 8px; }
-  .date-controls .controls-inline { flex-direction: column; align-items: flex-start; }
 }
 
-/* Small screens (phones) - reduce paddings/margins and font sizes */
 @media (max-width: 480px) {
   .insights-container { padding: 10px; }
-  .dashboard-header { gap: 10px; }
-  .header-text h1 { font-size: 18px; }
-  .tabs-header { gap: 6px; padding: 6px 6px 0 6px; margin-bottom: 12px; }
-  .tab-btn { padding: 8px 10px; font-size: 13px; }
-
   .metrics-row { grid-template-columns: 1fr; gap: 12px; }
-  .metric-card { padding: 12px; }
-  .metric-number { font-size: 22px; }
-  .metric-number-dark { font-size: 20px; }
-
-  .charts-grid-3-col { gap: 12px; }
-  .chart-card, .chart-card-full { padding: 12px; }
-  .chart-wrapper { min-height: 160px; }
-  .donut-wrapper { height: 140px; }
-  .chart-card h3 { font-size: 14px; }
-
-  .chart-legend-custom { flex-direction: column; gap: 6px; align-items: flex-start; }
-  .section-title-with-button { flex-direction: column; align-items: flex-start; gap: 8px; }
-  .date-controls .controls-inline { flex-direction: column; }
-
-  .volunteer-table th, .volunteer-table td { padding: 8px; font-size: 13px; }
-}
-
-/* Mirror HistoricalAttendance wrapper behavior to avoid chart overlap */
-.chart-card .chart-wrapper,
-.chart-card-full .chart-wrapper,
-.chart-card .chart-wrapper > div,
-.chart-card-full .chart-wrapper > div {
-  border-radius: 8px;
-  padding: 12px;
-  height: auto !important;
-  min-height: 200px;
-}
-.chart-wrapper canvas {
-  width: 100% !important;
-  height: 100% !important;
-}
-@media (max-width: 600px) {
-  .chart-card .chart-wrapper,
-  .chart-card-full .chart-wrapper { min-height: 140px; }
+  .vol-tabs { padding-bottom: 12px; }
 }
 </style>

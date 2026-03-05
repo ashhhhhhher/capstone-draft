@@ -9,9 +9,9 @@ import {
   Sparkles, 
   Search, 
   ChevronDown, 
-  ChevronRight, 
-  Edit3,
-  Copy
+  ChevronUp, 
+  Copy,
+  MoveRight
 } from 'lucide-vue-next'
 
 // Components
@@ -33,29 +33,19 @@ const { currentEventAttendees } = storeToRefs(attendanceStore)
 const currentTab = ref('directory') // 'directory', 'attendance', 'matching'
 const searchQuery = ref('')
 const expandedDgroups = ref([])
-const showEditModal = ref(false)
-const selectedDgroupForEdit = ref(null)
 
 // Member Details Modal State
 const showMemberModal = ref(false)
 const selectedMember = ref(null)
 
+// Move Member Modal State
+const showMoveModal = ref(false)
+const memberToMove = ref(null)
+const newLeaderIdSelection = ref('')
+
 // --- Computed: Present Members Set ---
 const presentMemberIds = computed(() => {
   return new Set(currentEventAttendees.value.map(att => att.memberId))
-})
-
-// --- Computed: Filtered Members for Directory ---
-const filteredMembers = computed(() => {
-  let list = activeMembers.value
-  if (searchQuery.value.trim() !== '') {
-    const query = searchQuery.value.toLowerCase()
-    list = list.filter(member => 
-      member.firstName.toLowerCase().includes(query) ||
-      member.lastName.toLowerCase().includes(query)
-    )
-  }
-  return list
 })
 
 // --- Computed: Grouping Logic ---
@@ -69,18 +59,23 @@ const sortedDgroups = computed(() => {
       leaderName: leaderFullName,
       leaderFirstName: leader.firstName,
       leaderLastName: leader.lastName,
-      // Add profile picture logic from leader object
       leaderProfilePic: leader.profilePicture || leader.photoURL,
       dgroupName: leader.dgroupName || `${leader.firstName}'s Dgroup`,
       dgroupId: leader.dgroupId || 'No ID',
       leaderGender: leader.gender,
       capacity: leader.dgroupCapacity || 12,
+      // Pulling prescriptive data for display
+      lifeStage: leader.finalTags?.ageCategory || leader.finalTags?.lifeStage || 'professional',
+      meetingTime: leader.dgroupDetails?.meetingTime || 'Anytime',
+      meetingDays: leader.dgroupDetails?.meetingDays || 'Flexible',
+      interests: leader.dgroupDetails?.interests || [],
       members: [],
       isLeaderPresent: presentMemberIds.value.has(leader.id)
     }
   })
 
-  filteredMembers.value.forEach(member => {
+  // Add all active members to their respective groups
+  activeMembers.value.forEach(member => {
     const leaderName = member.dgroupLeader
     if (leaderName && groups.hasOwnProperty(leaderName)) {
       groups[leaderName].members.push(member)
@@ -90,15 +85,97 @@ const sortedDgroups = computed(() => {
   return Object.values(groups)
 })
 
-const maleGroups = computed(() => sortedDgroups.value.filter(g => g.leaderGender === 'Male'))
-const femaleGroups = computed(() => sortedDgroups.value.filter(g => g.leaderGender === 'Female'))
+// --- Computed: Functional Search ---
+const searchedGroups = computed(() => {
+  const query = searchQuery.value.trim().toLowerCase()
+  
+  // If no search query, return all groups
+  if (!query) return sortedDgroups.value
+
+  return sortedDgroups.value.filter(g => {
+    // Check if group details match
+    const matchLeader = g.leaderName.toLowerCase().includes(query) || 
+                        g.dgroupName.toLowerCase().includes(query) ||
+                        (g.dgroupId && g.dgroupId.toLowerCase().includes(query))
+                        
+    // Check if any member in the group matches
+    const matchingMembers = g.members.filter(m => 
+      m.firstName.toLowerCase().includes(query) || 
+      m.lastName.toLowerCase().includes(query)
+    )
+    
+    // If a member matched, auto-expand the group so the admin can see them
+    if (matchLeader || matchingMembers.length > 0) {
+      if (matchingMembers.length > 0 && !expandedDgroups.value.includes(g.leaderName)) {
+        expandedDgroups.value.push(g.leaderName)
+      }
+      return true
+    }
+    
+    return false
+  })
+})
+
+const maleGroups = computed(() => searchedGroups.value.filter(g => g.leaderGender === 'Male'))
+const femaleGroups = computed(() => searchedGroups.value.filter(g => g.leaderGender === 'Female'))
 
 // --- Computed: Unmatched Seekers Count for Badge ---
 const unmatchedSeekersCount = computed(() => seekers.value.length)
 
+// --- Helper Data Maps & Colors ---
+const INTEREST_MAP = {
+  'music': 'Music', 'arts': 'Arts & Crafts', 'sports': 'Sports',
+  'tech': 'Tech', 'photography': 'Photography', 'fitness': 'Fitness',
+  'reading': 'Books/Reading', 'dancing': 'Dancing'
+}
+
+const INTEREST_COLORS = {
+  'music': { color: '#2563EB', bg: '#EFF6FF', border: '#BFDBFE' },       // Blue
+  'arts': { color: '#DB2777', bg: '#FDF2F8', border: '#FBCFE8' },        // Pink
+  'sports': { color: '#D97706', bg: '#FFFBEB', border: '#FEF3C7' },      // Amber
+  'tech': { color: '#0891B2', bg: '#ECFEFF', border: '#A5F3FC' },        // Cyan
+  'photography': { color: '#DC2626', bg: '#FEF2F2', border: '#FECACA' }, // Red
+  'fitness': { color: '#059669', bg: '#ECFDF5', border: '#A7F3D0' },     // Emerald
+  'reading': { color: '#7C3AED', bg: '#F5F3FF', border: '#EDE9FE' },     // Violet
+  'dancing': { color: '#E11D48', bg: '#FFF1F2', border: '#FECDD3' }      // Rose
+}
+
+function getInterestLabel(id) {
+  return INTEREST_MAP[id] || id;
+}
+
+function getInterestStyle(id) {
+  const style = INTEREST_COLORS[id] || { color: '#1D4ED8', bg: '#EFF6FF', border: '#BFDBFE' }; // Default Blue
+  return {
+    backgroundColor: style.bg,
+    color: style.color,
+    borderColor: style.border,
+    borderWidth: '1px',
+    borderStyle: 'solid'
+  }
+}
+
+function formatLifeStage(stage) {
+  const s = (stage || '').toLowerCase()
+  if (s.includes('high-school') || s === 'elevate') return 'High School'
+  if (s.includes('college')) return 'College/University'
+  return 'Young Professional'
+}
+
+function getLifeStageStyle(stage) {
+  const s = (stage || '').toLowerCase()
+  if (s.includes('high-school') || s === 'elevate') {
+    return { backgroundColor: '#FFF7ED', color: '#EA580C', borderColor: '#FFEDD5', borderWidth: '1px', borderStyle: 'solid' } // Orange theme
+  }
+  if (s.includes('college')) {
+    return { backgroundColor: '#F0FDF4', color: '#16A34A', borderColor: '#DCFCE7', borderWidth: '1px', borderStyle: 'solid' } // Green theme
+  }
+  // Professional / Default
+  return { backgroundColor: '#F8FAFC', color: '#475569', borderColor: '#E2E8F0', borderWidth: '1px', borderStyle: 'solid' } // Slate theme
+}
+
 // --- Functions ---
 
-// --- React to route query 'tab' so external links can open a specific tab ---
 const route = useRoute()
 onMounted(() => {
   if (route.query && route.query.tab) {
@@ -116,16 +193,6 @@ function toggleDgroup(leaderName) {
   else expandedDgroups.value.push(leaderName)
 }
 
-function openEditModal(group) {
-  selectedDgroupForEdit.value = group
-  showEditModal.value = true
-}
-
-function handleEditClose() {
-  showEditModal.value = false
-  selectedDgroupForEdit.value = null
-}
-
 function copyId(id) {
   if (!id || id === 'No ID') return
   navigator.clipboard.writeText(id).then(() => {
@@ -141,7 +208,7 @@ function copyId(id) {
   });
 }
 
-// --- Avatar Helper Functions (Similar to MemberCard) ---
+// --- Avatar Helper Functions ---
 function getLeaderInitials(group) {
   if (!group.leaderFirstName) return '?'
   return group.leaderFirstName[0] + (group.leaderLastName?.[0] || '')
@@ -150,7 +217,6 @@ function getLeaderInitials(group) {
 function getLeaderColor(group) {
    const colors = ['#FFCDD2', '#F8BBD0', '#E1BEE7', '#D1C4E9', '#C5CAE9', '#BBDEFB', '#B3E5FC', '#B2EBF2', '#B2DFDB', '#C8E6C9', '#DCEDC8', '#F0F4C3', '#FFF9C4', '#FFECB3', '#FFE0B2', '#FFCCBC'];
    let hash = 0;
-   // Use leaderId or name for consistent hashing
    const str = group.leaderId || group.leaderName; 
    for (let i = 0; i < str.length; i++) {
      hash = str.charCodeAt(i) + ((hash << 5) - hash);
@@ -158,7 +224,43 @@ function getLeaderColor(group) {
    return colors[Math.abs(hash) % colors.length];
 }
 
-// Member Details Functions
+// --- Move Member Functions ---
+const availableLeadersForMove = computed(() => {
+  if (!memberToMove.value) return []
+  return leaders.value.filter(l => {
+     const lName = `${l.firstName} ${l.lastName}`
+     return l.gender === memberToMove.value.gender && lName !== memberToMove.value.dgroupLeader
+  })
+})
+
+function openMoveModal(member) {
+  memberToMove.value = member
+  newLeaderIdSelection.value = ''
+  showMoveModal.value = true
+}
+
+function closeMoveModal() {
+  showMoveModal.value = false
+  memberToMove.value = null
+  newLeaderIdSelection.value = ''
+}
+
+async function confirmMove() {
+  if (!newLeaderIdSelection.value) {
+     alert("Please select a new leader first.")
+     return
+  }
+  try {
+     await membersStore.assignDgroupLeader(memberToMove.value.id, newLeaderIdSelection.value)
+     alert(`Successfully moved ${memberToMove.value.firstName} to a new Dgroup!`)
+     closeMoveModal()
+  } catch(e) {
+     console.error(e)
+     alert("Failed to move member.")
+  }
+}
+
+// --- Member Details Functions ---
 function openMemberDetails(member) {
   selectedMember.value = member
   showMemberModal.value = true
@@ -221,7 +323,7 @@ function handleRestoreMember(memberId) {
       <div class="controls-bar">
         <div class="search-bar">
           <Search :size="20" class="search-icon" />
-          <input type="text" placeholder="Search members or leaders..." v-model="searchQuery">
+          <input type="text" placeholder="Search groups, leaders, or members..." v-model="searchQuery">
         </div>
       </div>
 
@@ -266,20 +368,33 @@ function handleRestoreMember(memberId) {
                   <button class="icon-btn-small" @click.stop="copyId(group.dgroupId)" title="Copy ID">
                     <Copy :size="12" />
                   </button>
+                  <span class="group-meta" style="margin-left: 8px;">
+                    {{ group.members.length }} / {{ group.capacity }} Members
+                  </span>
                 </div>
                 
-                <div class="group-meta">
-                  Members: {{ group.members.length }} / {{ group.capacity }}
+                <!-- Lifestage, Schedule, and Interests Tags -->
+                <div class="dgroup-tags-container">
+                  <div class="dgroup-tags-row">
+                    <span class="d-tag" :style="getLifeStageStyle(group.lifeStage)">
+                      {{ formatLifeStage(group.lifeStage) }}
+                    </span>
+                    <span class="d-tag schedule-tag" v-if="group.meetingTime">
+                      <Calendar :size="12" /> {{ group.meetingDays }} • {{ group.meetingTime }}
+                    </span>
+                  </div>
+                  <div class="dgroup-tags-row" v-if="group.interests && group.interests.length">
+                    <span v-for="interest in group.interests" :key="interest" class="d-tag" :style="getInterestStyle(interest)">
+                      #{{ getInterestLabel(interest) }}
+                    </span>
+                  </div>
                 </div>
               </div>
               
               <div class="header-actions">
-                 <button class="icon-btn edit-btn" @click.stop="openEditModal(group)" title="Manage Group">
-                    <Edit3 :size="16" />
-                 </button>
                  <button class="icon-btn toggle-btn" @click.stop="toggleDgroup(group.leaderName)">
-                    <ChevronDown v-if="expandedDgroups.includes(group.leaderName)" :size="20" />
-                    <ChevronRight v-else :size="20" />
+                    <ChevronUp v-if="expandedDgroups.includes(group.leaderName)" :size="20" />
+                    <ChevronDown v-else :size="20" />
                  </button>
               </div>
             </div>
@@ -287,14 +402,19 @@ function handleRestoreMember(memberId) {
             <div v-if="expandedDgroups.includes(group.leaderName)" class="card-body">
                <div v-if="group.members.length === 0" class="no-members">No members assigned.</div>
                <div class="members-list" v-else>
-                  <MemberCard 
-                    v-for="member in group.members" 
-                    :key="member.id" 
-                    :member="member" 
-                    :isPresent="presentMemberIds.has(member.id)"
-                    :hideDetails="true"
-                    @click="openMemberDetails(member)"
-                  />
+                  <div class="member-list-item-wrapper" v-for="member in group.members" :key="member.id">
+                    <MemberCard 
+                      :member="member" 
+                      :isPresent="presentMemberIds.has(member.id)"
+                      :hideDetails="true"
+                      @click="openMemberDetails(member)"
+                      style="flex: 1;"
+                    />
+                    <!-- Move Member Button -->
+                    <button class="btn-move-member" @click.stop="openMoveModal(member)" title="Move to another Dgroup">
+                      <MoveRight :size="16" />
+                    </button>
+                  </div>
                </div>
             </div>
           </div>
@@ -340,20 +460,33 @@ function handleRestoreMember(memberId) {
                   <button class="icon-btn-small" @click.stop="copyId(group.dgroupId)" title="Copy ID">
                     <Copy :size="12" />
                   </button>
+                  <span class="group-meta" style="margin-left: 8px;">
+                    {{ group.members.length }} / {{ group.capacity }} Members
+                  </span>
                 </div>
                 
-                <div class="group-meta">
-                  Members: {{ group.members.length }} / {{ group.capacity }}
+                <!-- Lifestage, Schedule, and Interests Tags -->
+                <div class="dgroup-tags-container">
+                  <div class="dgroup-tags-row">
+                    <span class="d-tag" :style="getLifeStageStyle(group.lifeStage)">
+                      {{ formatLifeStage(group.lifeStage) }}
+                    </span>
+                    <span class="d-tag schedule-tag" v-if="group.meetingTime">
+                      <Calendar :size="12" /> {{ group.meetingDays }} • {{ group.meetingTime }}
+                    </span>
+                  </div>
+                  <div class="dgroup-tags-row" v-if="group.interests && group.interests.length">
+                    <span v-for="interest in group.interests" :key="interest" class="d-tag" :style="getInterestStyle(interest)">
+                      #{{ getInterestLabel(interest) }}
+                    </span>
+                  </div>
                 </div>
               </div>
               
               <div class="header-actions">
-                 <button class="icon-btn edit-btn" @click.stop="openEditModal(group)" title="Manage Group">
-                    <Edit3 :size="16" />
-                 </button>
                  <button class="icon-btn toggle-btn" @click.stop="toggleDgroup(group.leaderName)">
-                    <ChevronDown v-if="expandedDgroups.includes(group.leaderName)" :size="20" />
-                    <ChevronRight v-else :size="20" />
+                    <ChevronUp v-if="expandedDgroups.includes(group.leaderName)" :size="20" />
+                    <ChevronDown v-else :size="20" />
                  </button>
               </div>
             </div>
@@ -361,14 +494,19 @@ function handleRestoreMember(memberId) {
             <div v-if="expandedDgroups.includes(group.leaderName)" class="card-body">
                <div v-if="group.members.length === 0" class="no-members">No members assigned.</div>
                <div class="members-list" v-else>
-                  <MemberCard 
-                    v-for="member in group.members" 
-                    :key="member.id" 
-                    :member="member" 
-                    :isPresent="presentMemberIds.has(member.id)"
-                    :hideDetails="true"
-                    @click="openMemberDetails(member)"
-                  />
+                  <div class="member-list-item-wrapper" v-for="member in group.members" :key="member.id">
+                    <MemberCard 
+                      :member="member" 
+                      :isPresent="presentMemberIds.has(member.id)"
+                      :hideDetails="true"
+                      @click="openMemberDetails(member)"
+                      style="flex: 1;"
+                    />
+                    <!-- Move Member Button -->
+                    <button class="btn-move-member" @click.stop="openMoveModal(member)" title="Move to another Dgroup">
+                      <MoveRight :size="16" />
+                    </button>
+                  </div>
                </div>
             </div>
           </div>
@@ -386,15 +524,6 @@ function handleRestoreMember(memberId) {
        <DgroupMatchingSection />
     </div>
 
-    <!-- Manage DGroup Modal -->
-    <Modal v-if="showEditModal" @close="handleEditClose">
-       <DGroupEditModal 
-          v-if="selectedDgroupForEdit" 
-          :group="selectedDgroupForEdit" 
-          @close="handleEditClose" 
-       />
-    </Modal>
-
     <!-- Member Details Modal -->
     <Modal v-if="showMemberModal" @close="handleMemberModalClose"> 
       <MemberDetailsModal 
@@ -407,11 +536,38 @@ function handleRestoreMember(memberId) {
       />
     </Modal>
 
+    <!-- Move Member Modal -->
+    <Modal v-if="showMoveModal" @close="closeMoveModal">
+      <div class="move-modal-container">
+        <div class="move-modal-header">
+          <h3>Move Member</h3>
+          <button class="close-btn" @click="closeMoveModal"><X :size="20" /></button>
+        </div>
+        <div class="move-modal-body">
+          <p class="move-subtitle">
+            Select a new Dgroup Leader for <strong>{{ memberToMove?.firstName }} {{ memberToMove?.lastName }}</strong>.
+          </p>
+          <div class="form-group">
+            <label>New Dgroup Leader</label>
+            <select v-model="newLeaderIdSelection" class="modern-select">
+              <option disabled value="">-- Select a new leader --</option>
+              <option v-for="l in availableLeadersForMove" :key="l.id" :value="l.id">
+                {{ l.firstName }} {{ l.lastName }} ({{ l.dgroupName || "Dgroup" }}) - {{ l.dgroupCapacity - membersStore.activeMembers.filter(m => m.dgroupLeaderId === l.id).length }} slots left
+              </option>
+            </select>
+          </div>
+        </div>
+        <div class="move-modal-actions">
+           <button class="btn-cancel" @click="closeMoveModal">Cancel</button>
+           <button class="btn-save" @click="confirmMove">Confirm Move</button>
+        </div>
+      </div>
+    </Modal>
+
   </div>
 </template>
 
 <style scoped>
-/* Same styles as previous */
 .dgroups-view-container {
   padding: 20px;
   height: 100%;
@@ -488,7 +644,8 @@ function handleRestoreMember(memberId) {
 }
 .search-bar {
   position: relative;
-  max-width: 300px;
+  width: 100%;
+  max-width: 380px;
 }
 .search-icon {
   position: absolute;
@@ -498,11 +655,12 @@ function handleRestoreMember(memberId) {
   color: #90A4AE;
 }
 .search-bar input {
-  width: 80%;
+  width: 100%;
   padding: 10px 10px 10px 40px;
   border: 1px solid #CFD8DC;
   border-radius: 8px;
   font-size: 14px;
+  box-sizing: border-box;
 }
 
 .dgroup-grid {
@@ -542,7 +700,7 @@ function handleRestoreMember(memberId) {
   margin-bottom: 16px;
   transition: all 0.2s ease;
   border: 1px solid #ECEFF1;
-  border-left: 4px solid #B0BEC5; /* Default Neutral */
+  border-left: 6px solid #B0BEC5; /* Default Neutral */
 }
 
 /* ATTENDANCE INDICATORS */
@@ -551,17 +709,14 @@ function handleRestoreMember(memberId) {
 
 
 .dgroup-card:hover {
-  box-shadow: 0 4px 12px rgba(0,0,0,0.08);
-  border-top-color: #B0BEC5;
-  border-right-color: #B0BEC5;
-  border-bottom-color: #B0BEC5;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
 }
 
 .card-header {
   padding: 16px;
   display: flex;
   justify-content: space-between;
-  align-items: center; /* Changed to center to align avatar */
+  align-items: flex-start; /* Changed to start for tags */
   cursor: pointer;
   gap: 12px; /* Gap between avatar and content */
 }
@@ -593,7 +748,6 @@ function handleRestoreMember(memberId) {
   box-shadow: 0 2px 4px rgba(0,0,0,0.1);
 }
 
-
 .header-content {
   flex: 1;
   display: flex;
@@ -617,7 +771,7 @@ function handleRestoreMember(memberId) {
 
 .dgroup-id {
   font-size: 12px;
-  color: #78909C;
+  color: #455A64;
   font-family: monospace;
   background: #F5F7F9;
   padding: 2px 6px;
@@ -628,20 +782,42 @@ function handleRestoreMember(memberId) {
   background: none;
   border: none;
   cursor: pointer;
-  color: #90A4AE;
+  color: #546E7A;
   padding: 2px;
   display: flex;
   align-items: center;
 }
 .icon-btn-small:hover { color: #1976D2; }
 
-
 .group-meta {
-  margin-top: 4px;
-  font-size: 13px;
+  font-size: 12px;
   color: #546E7A;
-  font-weight: 500;
+  font-weight: 600;
 }
+
+/* TAG STYLES FOR CARD HEADER */
+.dgroup-tags-container {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 6px;
+}
+.dgroup-tags-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.d-tag {
+  font-size: 10px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.schedule-tag { background: #F8FAFC; color: #475569; border: 1px solid #E2E8F0; }
 
 .header-actions {
   display: flex;
@@ -658,13 +834,12 @@ function handleRestoreMember(memberId) {
   border-radius: 50%;
   border: none;
   background: transparent;
-  color: #78909C;
+  color: #546E7A;
   cursor: pointer;
   transition: background 0.2s;
 }
 
-.icon-btn:hover { background-color: #ECEFF1; color: #455A64; }
-.edit-btn:hover { background-color: #E3F2FD; color: #1565C0; }
+.icon-btn:hover { background-color: #ECEFF1; color: #263238; }
 
 .card-body {
   border-top: 1px solid #ECEFF1;
@@ -682,8 +857,111 @@ function handleRestoreMember(memberId) {
 
 .no-members {
   text-align: center;
-  color: #90A4AE;
+  color: #78909C;
   font-size: 13px;
   padding: 12px;
 }
+
+/* MOVE MEMBER BUTTON & WRAPPER */
+.member-list-item-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+.btn-move-member {
+  background: #FFFFFF;
+  color: #546E7A;
+  border: 1px solid #CFD8DC;
+  padding: 8px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+}
+.btn-move-member:hover {
+  background: #1976D2;
+  color: white;
+  border-color: #1976D2;
+}
+
+/* MOVE MODAL CSS */
+.move-modal-container {
+  padding: 24px;
+}
+.move-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+.move-modal-header h3 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  color: #263238;
+}
+.close-btn {
+  background: none;
+  border: none;
+  color: #90A4AE;
+  cursor: pointer;
+}
+.move-subtitle {
+  font-size: 14px;
+  color: #546E7A;
+  margin-bottom: 24px;
+}
+.form-group {
+  margin-bottom: 24px;
+}
+.form-group label {
+  display: block;
+  margin-bottom: 8px;
+  font-weight: 600;
+  color: #455A64;
+  font-size: 13px;
+}
+.modern-select {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #B0BEC5;
+  border-radius: 8px;
+  font-size: 14px;
+  color: #263238;
+  outline: none;
+  box-sizing: border-box;
+}
+.modern-select:focus {
+  border-color: #1976D2;
+}
+.move-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 10px;
+}
+.btn-cancel {
+  background: #F5F7FA;
+  border: 1px solid #CFD8DC;
+  color: #546E7A;
+  padding: 8px 16px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 600;
+}
+.btn-cancel:hover { background: #ECEFF1; }
+.btn-save {
+  background: #1976D2;
+  border: none;
+  color: white;
+  padding: 8px 16px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 600;
+}
+.btn-save:hover { background: #1565C0; }
 </style>
