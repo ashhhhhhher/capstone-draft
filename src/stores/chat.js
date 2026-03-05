@@ -16,6 +16,7 @@ export const useChatStore = defineStore('chat', () => {
   const activeChatId = ref(null)
   const messages = ref([]) 
   const isLoadingMessages = ref(false)
+  const shouldOpenChatBox = ref(false)
   
   let chatsUnsub = null
   let messagesUnsub = null
@@ -94,6 +95,7 @@ export const useChatStore = defineStore('chat', () => {
   async function selectChat(chatId) {
     if (activeChatId.value === chatId) return
     activeChatId.value = chatId
+    shouldOpenChatBox.value = true
     await markAsRead(chatId)
 
     const colRef = getBranchChatsCollection()
@@ -150,8 +152,13 @@ export const useChatStore = defineStore('chat', () => {
   async function sendMessage(text) {
     if (!activeChatId.value || !text.trim()) return
     const colRef = getBranchChatsCollection()
-    const mId = authStore.userProfile.id
-    const mName = `${authStore.userProfile.firstName} ${authStore.userProfile.lastName}`
+    const mId = authStore.user?.uid || authStore.userProfile?.id
+    const mName = `${authStore.userProfile?.firstName || authStore.user?.displayName || 'User'} ${authStore.userProfile?.lastName || ''}`
+    
+    if (!mId) {
+      console.error("Cannot send message: user ID not available")
+      return
+    }
     
     const messagePayload = {
       text: text.trim(),
@@ -201,14 +208,22 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   async function openPrivateChatWith(targetMember) {
-    const mId = authStore.userProfile.id
-    if (!mId || !targetMember.id) return
+    console.log('🔵 openPrivateChatWith called with:', targetMember)
+    console.log('🔵 targetMember.id:', targetMember.id)
+    
+    // Use myId computed (which checks userProfile.id), fallback to user.uid which is always available
+    let mId = myId.value || authStore.user?.uid
+    let targetId = targetMember.id
+    
+    if (!mId || !targetId) {
+      return
+    }
 
     const existing = chats.value.find(c => 
       c.type === 'private' && 
       c.participants && 
       c.participants.includes(mId) && 
-      c.participants.includes(targetMember.id)
+      c.participants.includes(targetId)
     )
 
     if (existing) {
@@ -217,12 +232,17 @@ export const useChatStore = defineStore('chat', () => {
     }
 
     const colRef = getBranchChatsCollection()
+    
+    // Get current user details safely
+    const currentUserName = authStore.userProfile?.firstName || authStore.user?.displayName || 'User'
+    const currentUserPhoto = authStore.userProfile?.profilePicture || authStore.user?.photoURL || ''
+    
     const newChatData = {
       type: 'private',
-      participants: [mId, targetMember.id],
+      participants: [mId, targetId],
       participantDetails: { 
-        [mId]: { name: `${authStore.userProfile.firstName}`, photo: authStore.userProfile.profilePicture || '' },
-        [targetMember.id]: { name: `${targetMember.firstName}`, photo: targetMember.profilePicture || '' }
+        [mId]: { name: currentUserName, photo: currentUserPhoto },
+        [targetId]: { name: `${targetMember.firstName}`, photo: targetMember.profilePicture || '' }
       },
       lastMessage: null,
       createdAt: serverTimestamp()
@@ -230,6 +250,14 @@ export const useChatStore = defineStore('chat', () => {
 
     try {
       const docRef = await addDoc(colRef, newChatData)
+      
+      // Add the new chat to the store immediately so activeChat can find it
+      const newChat = {
+        id: docRef.id,
+        ...newChatData
+      }
+      chats.value.push(newChat)
+      
       selectChat(docRef.id)
     } catch (error) {
       console.error("Create private chat error:", error)
@@ -242,6 +270,10 @@ export const useChatStore = defineStore('chat', () => {
     messages.value = []
   }
 
+  function resetChatBoxSignal() {
+    shouldOpenChatBox.value = false
+  }
+
   return {
     chats,
     activeChatId,
@@ -251,12 +283,14 @@ export const useChatStore = defineStore('chat', () => {
     privateChats,
     totalUnreadCount,
     isLoadingMessages,
+    shouldOpenChatBox,
     initChatListeners,
     selectChat,
     sendMessage,
     openPrivateChatWith,
     createGroupChat, 
     clearActiveChat,
+    resetChatBoxSignal,
     markAsRead
   }
 })

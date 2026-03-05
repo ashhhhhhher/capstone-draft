@@ -38,7 +38,20 @@ watch(
   { immediate: true }
 )
 
-
+// Auto-open chat box when a chat is selected from elsewhere (e.g., Message button)
+watch(
+  () => chatStore.shouldOpenChatBox,
+  (shouldOpen) => {
+    if (shouldOpen) {
+      isOpen.value = true
+      // Reset the flag after opening
+      setTimeout(() => {
+        chatStore.resetChatBoxSignal()
+      }, 100)
+    }
+  },
+  { immediate: true }
+)
 
 watch(() => chatStore.messages, () => {
   nextTick(() => {
@@ -48,12 +61,16 @@ watch(() => chatStore.messages, () => {
   })
 }, { deep: true })
 
-const myId = computed(() => authStore.userProfile?.id)
+const myId = computed(() => authStore.user?.uid || authStore.userProfile?.id)
 
 // --- CHAT LISTS ---
 const groupChats = computed(() => chatStore.groupChats)
 const privateChats = computed(() => chatStore.privateChats)
-const activeChat = computed(() => chatStore.activeChatDetails)
+const activeChat = computed(() => {
+  const chat = chatStore.activeChatDetails
+  console.log('🟣 activeChat computed:', { chatId: chatStore.activeChatId, chatExists: !!chat, chatData: chat })
+  return chat
+})
 const unreadCount = computed(() => chatStore.totalUnreadCount)
 
 const filteredMembers = computed(() => {
@@ -119,7 +136,9 @@ function backToList() {
 }
 
 function getChatName(chat) {
-  if (chat.type === 'group') return chat.name
+  if (chat.type === 'group') {
+    return chat.name
+  }
   if (chat.type === 'dgroup') return chat.name // Fallback for old types
   if (chat.participantDetails) {
     const otherId = chat.participants.find(p => p !== myId.value)

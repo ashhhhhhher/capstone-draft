@@ -3,6 +3,7 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import { useAuthStore } from '../../stores/auth'
 import { useMembersStore } from '../../stores/members'
+import { useChatStore } from '../../stores/chat'
 import { db } from '../../firebase'
 import { collection, query, orderBy, onSnapshot, deleteDoc, doc, updateDoc } from 'firebase/firestore'
 
@@ -10,6 +11,7 @@ import { collection, query, orderBy, onSnapshot, deleteDoc, doc, updateDoc } fro
 const reports = ref([])
 const authStore = useAuthStore()
 const membersStore = useMembersStore()
+const chatStore = useChatStore()
 
 function buildAbsenceNotifications() {
   // kept for compatibility
@@ -95,6 +97,23 @@ async function deleteReport(reportId) {
   }
 }
 
+function messageMemeber(memberId, memberName) {
+  if (!memberId) {
+    alert('Member ID not available.')
+    return
+  }
+  
+  // Create a minimal member object with the memberId
+  const memberForChat = { 
+    id: memberId, 
+    firstName: memberName || 'Unknown',
+    lastName: '',
+    profilePicture: ''
+  }
+  
+  chatStore.openPrivateChatWith(memberForChat)
+}
+
 defineExpose({ buildAbsenceNotifications })
 </script>
 
@@ -110,6 +129,7 @@ defineExpose({ buildAbsenceNotifications })
           <div class="report-meta">ID: {{ r.memberId || '—' }}</div>
           <pre class="report-message">{{ r.message }}</pre>
           <div class="report-actions">
+            <button v-if="r.memberId" class="message-btn" @click="messageMemeber(r.memberId, r.name)">Message</button>
             <button v-if="r.memberId" class="archive-btn" @click="archiveMember(r.memberId, r.id)">Archive Member</button>
             <button class="delete-btn" @click="deleteReport(r.id)">Delete</button>
           </div>
@@ -133,10 +153,13 @@ defineExpose({ buildAbsenceNotifications })
 .report-name { font-weight:700; color:#1E293B }
 .report-meta { font-size:12px; color:#64748B }
 .report-message { background:#FAFAFA; padding:8px; border-radius:8px; white-space:pre-wrap; font-size:13px; color:#374151 }
-.report-actions { display:flex; justify-content:flex-end; margin-top:8px }
-.archive-btn { background:#1976D2; color:white; border:none; padding:8px 12px; border-radius:8px; cursor:pointer }
-.delete-btn { background:#E11D48; color:white; border:none; padding:8px 12px; border-radius:8px; cursor:pointer; margin-left:8px }
-.archive-btn:hover { background:#1565C0 }
-.delete-btn:hover { background:#BE123C }
+.report-actions { display:flex; justify-content:flex-end; gap:8px; margin-top:8px }
+.message-btn { background:#1976D2; color:white; border:none; padding:8px 12px; border-radius:8px; cursor:pointer }
+.message-btn:hover { background:#1565C0; opacity:0.8 }
+.message-btn:focus { outline:2px solid rgba(25,118,210,0.18); outline-offset:2px }
+.archive-btn { background:#d21919; color:white; border:none; padding:8px 12px; border-radius:8px; cursor:pointer }
+.delete-btn { background:transparent; color:#64748B; border:1px solid #CBD5E1; padding:8px 12px; border-radius:8px; cursor:pointer }
+.archive-btn:hover { background:#d21919; opacity:0.8 }
+.delete-btn:hover { background:#F1F5F9; color:#475569 }
 .archive-btn:focus, .delete-btn:focus { outline:2px solid rgba(25,118,210,0.18); outline-offset:2px }
 </style>
