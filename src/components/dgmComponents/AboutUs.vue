@@ -14,24 +14,24 @@ const features = {
   unite: { 
     title: 'Campus UNITE', 
     desc: 'Celebrating God’s faithfulness and ministry anniversary.', 
-    longDesc: 'Campus Unite is the massive annual anniversary celebration of Elevate! It brings together students from different campuses for a night of worship, powerful testimonies, and a shared vision to transform our nation. Our biggest event of the year with a purpose that lasts.', 
-    info: 'Happens around June - August', 
+    longDesc: 'Our annual anniversary isn\'t just an event; it\s a movement. Once a year, students from across the country converge to celebrate what God is doing on our campuses. It\’s a dedicated night for collective worship and hearing the stories of lives changed, all centered around a singular mission: to see our nation transformed through the next generation.', 
+    info: 'Happens around June - August, 2026', 
     img: '/unitesm.jpg',
     gallery: ['/unite1.jpg', '/unite2.jpg', '/unite3.jpg', '/unite4.jpg', '/unite5.jpg', '/unite6.jpg']
   },
   groups: { 
     title: 'DISCIPLESHIP GROUPS', 
     desc: 'Find a group of friends you can grow with.', 
-    longDesc: 'Join a Dgroup! A Dgroup is a small group of students who meet to talk about life, study the Bible, and support one another. Where "big" services become "personal" friendships. No matter where you are in your journey.', 
-    info: 'Join by simply going to the Dgroup section and clicking on the "Find a Dgroup" button', 
+    longDesc: 'Life is better when you don\'t have to navigate it alone. Dgroups are small circles of students who meet to share life, explore the Bible, and build the kind of friendships that make a big campus feel like home. Whether you\'re just starting your spiritual journey or looking for deep community, there\’s a place for you here.', 
+    info: 'How to join: Head to the Dgroup section upon log in and tap Find a Dgroup to get started.', 
     img: '/group2.jpg',
     gallery: ['/dgroup1.jpg', '/dgroup2.jpg', '/dgroup3.jpg', '/dgroup4.jpg', '/dgroup5.jpg']
   },
   wknd: { 
     title: 'ELEVATE WKND', 
     desc: 'Unwind with us at our every other week gatherings!', 
-    longDesc: 'Our youth gathering! A service designed for high school, college students and singles to experience awesome worship, meet new friends, and hear life-changing messages.', 
-    info: 'Hotel Supreme | 5:00PM onwards', 
+    longDesc: 'Our youth gathering is a space crafted specifically for high schoolers, college students, and young professionals. It\’s more than just a service; it\’s a weekly opportunity to recharge through high-energy worship, find community with people in your same stage of life, and engage with messages that actually speak to your day-to-day.', 
+    info: 'Hotel Supreme | 5:00PM onwards | Every other Saturday | 2026', 
     img: '/elevate logo.jpg',
     gallery: ['/wknd1.jpg', '/wknd2.jpg', '/wknd3.jpg', '/wknd4.jpg']
   }
