@@ -62,15 +62,16 @@ watch(() => chatStore.messages, () => {
 }, { deep: true })
 
 const myId = computed(() => authStore.user?.uid || authStore.userProfile?.id)
+const myIds = computed(() => {
+  const ids = [authStore.user?.uid, authStore.userProfile?.id].filter(Boolean)
+  return Array.from(new Set(ids))
+})
+const isMineId = (id) => !!id && myIds.value.includes(id)
 
 // --- CHAT LISTS ---
 const groupChats = computed(() => chatStore.groupChats)
 const privateChats = computed(() => chatStore.privateChats)
-const activeChat = computed(() => {
-  const chat = chatStore.activeChatDetails
-  console.log('🟣 activeChat computed:', { chatId: chatStore.activeChatId, chatExists: !!chat, chatData: chat })
-  return chat
-})
+const activeChat = computed(() => chatStore.activeChatDetails)
 const unreadCount = computed(() => chatStore.totalUnreadCount)
 
 const filteredMembers = computed(() => {
@@ -141,7 +142,7 @@ function getChatName(chat) {
   }
   if (chat.type === 'dgroup') return chat.name // Fallback for old types
   if (chat.participantDetails) {
-    const otherId = chat.participants.find(p => p !== myId.value)
+    const otherId = chat.participants.find(p => !isMineId(p))
     if (otherId && chat.participantDetails[otherId]) {
       return chat.participantDetails[otherId].name
     }
@@ -152,7 +153,7 @@ function getChatName(chat) {
 function getChatAvatar(chat) {
   if (chat.type === 'group' || chat.type === 'dgroup') return null 
   if (chat.participantDetails) {
-    const otherId = chat.participants.find(p => p !== myId.value)
+    const otherId = chat.participants.find(p => !isMineId(p))
     if (otherId && chat.participantDetails[otherId]) {
       return chat.participantDetails[otherId].photo
     }
@@ -162,8 +163,8 @@ function getChatAvatar(chat) {
 
 function isUnread(chat) {
   const lm = chat.lastMessage
-  if (!lm || lm.senderId === myId.value) return false
-  return lm.readBy && !lm.readBy.includes(myId.value)
+  if (!lm || isMineId(lm.senderId)) return false
+  return lm.readBy && !lm.readBy.some(id => isMineId(id))
 }
 
 function formatTime(timestamp) {
@@ -221,9 +222,9 @@ function formatTime(timestamp) {
               v-for="msg in chatStore.messages" 
               :key="msg.id" 
               class="message-row"
-              :class="{ 'mine': msg.senderId === myId }"
+              :class="{ 'mine': isMineId(msg.senderId) }"
             >
-              <div v-if="msg.senderId !== myId && (activeChat.type === 'group' || activeChat.type === 'dgroup')" class="sender-name">
+              <div v-if="!isMineId(msg.senderId) && (activeChat.type === 'group' || activeChat.type === 'dgroup')" class="sender-name">
                 {{ msg.senderName.split(' ')[0] }}
               </div>
               <div class="bubble">

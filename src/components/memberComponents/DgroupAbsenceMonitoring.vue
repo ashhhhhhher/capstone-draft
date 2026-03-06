@@ -1,6 +1,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useAuthStore } from '../../stores/auth'
+import { useChatStore } from '../../stores/chat'
 import { db } from '../../firebase'
 import { collection, query, where, getDocs, limit } from 'firebase/firestore'
 import { useMembersStore } from '../../stores/members'
@@ -11,6 +12,7 @@ const authStore = useAuthStore()
 const membersStore = useMembersStore()
 const attendanceStore = useAttendanceStore()
 const eventsStore = useEventsStore()
+const chatStore = useChatStore()
 
 const isLoading = ref(true)
 const messagedMembers = ref(new Set())
@@ -190,14 +192,22 @@ function severityClass(count) {
 import { useNotificationsStore } from '../../stores/notifications'
 
 function messageMember(member) {
-  if (!member.email) {
-    alert('Member email not found.')
+  if (!member.id) {
+    alert('Member ID not found.')
     return
   }
-  const subject = encodeURIComponent(`Checking in — ${member.firstName} ${member.lastName}`)
-  const body = encodeURIComponent(`Hi ${member.firstName},\n\nWe noticed you've missed recent services. We hope all is well and would love to see you at our next gathering.\n\nRegards,\n${myName.value}`)
+  
+  // Create a minimal member object with the memberId for chat
+  const memberForChat = { 
+    id: member.id, 
+    firstName: member.firstName || 'Unknown',
+    lastName: member.lastName || '',
+    profilePicture: ''
+  }
+  
+  // Open a private chat with the member
+  chatStore.openPrivateChatWith(memberForChat)
   messagedMembers.value.add(member.id)
-  window.location.href = `mailto:${member.email}?subject=${subject}&body=${body}`
 }
 
 async function reportToAdmin(member) {
