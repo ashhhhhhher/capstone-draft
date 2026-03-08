@@ -11,6 +11,32 @@ import Modal from './Modal.vue'
 import AttendanceOverviewModal from './AttendanceOverviewModal.vue'
 import ExportButton from './ExportButton.vue'
 
+// --- Chart.js Registrations ---
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  BarElement,
+  Title,
+  Tooltip,
+  Legend,
+  Filler
+} from 'chart.js'
+
+ChartJS.register(
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  BarElement,
+  Title,
+  Tooltip,
+  Legend,
+  Filler
+)
+
 const props = defineProps({
   eventType: {
     type: String,
@@ -28,33 +54,18 @@ const { members } = storeToRefs(membersStore)
 
 // --- UI Controls State ---
 const todayStr = new Date().toISOString().split('T')[0]
-const activeFilter = ref('month')
+const activeFilter = ref('monthly') // 'yearly', 'monthly', 'custom'
 const chartType = ref('bar') // 'bar' or 'line'
 const showAttendanceOverview = ref(false)
 
-const fromDate = ref('')
-const toDate = ref('')
+// Input Models
+const selectedYear = ref(new Date().getFullYear())
+const selectedMonth = ref(new Date().toISOString().substring(0, 7)) // YYYY-MM
 
-// --- Initialize Dates Based on Filter ---
-const setFilter = (type) => {
-  activeFilter.value = type;
-  const today = new Date();
-  let start = new Date();
-  
-  if (type === 'year') {
-    start = new Date(today.getFullYear(), 0, 1);
-  } else if (type === 'month') {
-    start = new Date(today.getFullYear(), today.getMonth(), 1);
-  } else if (type === 'week') {
-    start.setDate(today.getDate() - 7);
-  }
-  
-  fromDate.value = start.toISOString().split('T')[0];
-  toDate.value = today.toISOString().split('T')[0];
-}
+// FIXED: Wrapped the arrow function in parentheses to properly format the IIFE
+const fromDate = ref((() => { const d = new Date(); d.setDate(d.getDate() - 30); return d.toISOString().split('T')[0] })())
 
-// Initial Setup
-setFilter('month');
+const toDate = ref(todayStr)
 
 // --- Colors ---
 const chartThemeColor = computed(() => props.eventType === 'b1g' ? '#8AE1FC' : '#068FFF')
@@ -64,9 +75,24 @@ const chartThemeBgColor = computed(() => props.eventType === 'b1g' ? 'rgba(138, 
 const historicalChartOptions = computed(() => ({
   responsive: true,
   maintainAspectRatio: false,
+  layout: {
+    padding: {
+      top: chartType.value === 'bar' ? 25 : 0 // Add top padding for bar chart so labels aren't cut off
+    }
+  },
   plugins: { 
     legend: { display: false }, 
-    datalabels: { display: false } 
+    datalabels: { 
+      display: chartType.value === 'bar', // Only show labels directly on the graph if it's a bar chart
+      anchor: 'end',
+      align: 'end',
+      offset: 4,
+      color: '#546E7A',
+      font: {
+        weight: '600',
+        size: 12
+      }
+    } 
   },
   scales: { 
     x: {
@@ -74,8 +100,8 @@ const historicalChartOptions = computed(() => ({
     },
     y: { 
       beginAtZero: true, 
-      max: 300, 
-      ticks: { stepSize: 50 },
+      suggestedMax: 300, // Scales up automatically if grouped sums exceed 300
+      ticks: { stepSize: 50, precision: 0 },
       grid: { color: '#F0F2F5' },
       border: { display: false }
     } 
@@ -84,38 +110,79 @@ const historicalChartOptions = computed(() => ({
 
 // --- Data Computations ---
 
-// 1. Chart Specific (Depends on Date Filters)
-const eventsInRange = computed(() => {
-  if (!fromDate.value || !toDate.value) return []
-  if (new Date(fromDate.value) > new Date(toDate.value)) return []
-  
+const allEventsOfType = computed(() => {
   return (allEvents.value || [])
     .filter(e => {
-      const isMatch = props.eventType === 'b1g' 
+      return props.eventType === 'b1g' 
         ? (e.eventType === 'b1g' || e.name.toLowerCase().includes('b1g'))
         : e.eventType === props.eventType;
-        
-      return isMatch && e.date >= fromDate.value && e.date <= toDate.value;
     })
-    .sort((a, b) => new Date(a.date) - new Date(b.date))
-})
+    .sort((a, b) => new Date(a.date) - new Date(b.date));
+});
 
-const filteredAttendance = computed(() => {
-  const evIds = (eventsInRange.value || []).map(e => e.id)
-  return (allAttendance.value || []).filter(att => evIds.includes(att.eventId))
-})
+const availableYears = computed(() => {
+  const years = new Set(allEventsOfType.value.map(e => e.date.substring(0, 4)));
+  if (years.size === 0) years.add(new Date().getFullYear().toString());
+  return Array.from(years).sort().reverse();
+});
+
+// 1. Chart Specific (Depends on Date Filters)
+const processedChartData = computed(() => {
+  let labels = [];
+  let data = [];
+
+  if (activeFilter.value === 'yearly') {
+     // Yearly: Show total attendance per month (Jan-Dec)
+     labels = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+     data = new Array(12).fill(0);
+     
+     allEventsOfType.value.forEach(e => {
+        if (e.date.startsWith(selectedYear.value.toString())) {
+           const d = new Date(e.date);
+           const monthIdx = d.getMonth();
+           const count = (allAttendance.value || []).filter(a => a.eventId === e.id).length;
+           data[monthIdx] += count;
+        }
+     });
+
+  } else if (activeFilter.value === 'monthly') {
+     // Monthly: Show total attendance per week (Week 1 to Week 5)
+     labels = ['Week 1', 'Week 2', 'Week 3', 'Week 4', 'Week 5'];
+     data = new Array(5).fill(0);
+     
+     allEventsOfType.value.forEach(e => {
+        if (e.date.startsWith(selectedMonth.value)) {
+           const day = parseInt(e.date.split('-')[2]);
+           // Rough week calculation: 1-7 (Week 1), 8-14 (Week 2), etc.
+           let weekIdx = Math.floor((day - 1) / 7);
+           if (weekIdx > 4) weekIdx = 4; // Cap at Week 5
+           
+           const count = (allAttendance.value || []).filter(a => a.eventId === e.id).length;
+           data[weekIdx] += count;
+        }
+     });
+
+  } else if (activeFilter.value === 'custom') {
+     // Custom: Show attendance per event (by Date)
+     const customEvents = allEventsOfType.value.filter(e => e.date >= fromDate.value && e.date <= toDate.value);
+     
+     customEvents.forEach(e => {
+        const d = new Date(e.date);
+        labels.push(d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }));
+        data.push((allAttendance.value || []).filter(a => a.eventId === e.id).length);
+     });
+  }
+
+  return { labels, data };
+});
 
 const historicalAttendanceData = computed(() => {
-  const evs = eventsInRange.value || []
-  if (!evs.length) return { labels: [], datasets: [] }
+  const { labels, data } = processedChartData.value;
   
-  // Format dates for X-axis
-  const labels = evs.map(ev => {
-    return ev.date; // Use date exactly as requested
-  })
-  
-  const data = evs.map(ev => (filteredAttendance.value || []).filter(att => att.eventId === ev.id).length)
-  
+  if (labels.length === 0 || data.every(v => v === 0) && activeFilter.value === 'custom') {
+     return { labels: [], datasets: [] }; // No data scenario
+  }
+
   return { 
     labels, 
     datasets: [{ 
@@ -124,7 +191,7 @@ const historicalAttendanceData = computed(() => {
       borderColor: chartThemeColor.value,
       borderWidth: 2,
       borderRadius: chartType.value === 'bar' ? 4 : 0,
-      fill: chartType.value === 'line',
+      fill: chartType.value === 'line', // Activates the Filler plugin
       tension: 0.4, // Smooth curves for line chart
       pointBackgroundColor: '#fff',
       pointBorderColor: chartThemeColor.value,
@@ -135,21 +202,26 @@ const historicalAttendanceData = computed(() => {
   }
 })
 
-// 2. Table Specific (Independent of Date Filters, shows latest 10)
-const allEventsOfType = computed(() => {
-  return (allEvents.value || [])
-    .filter(e => {
-      return props.eventType === 'b1g' 
-        ? (e.eventType === 'b1g' || e.name.toLowerCase().includes('b1g'))
-        : e.eventType === props.eventType;
-    })
-    .sort((a, b) => new Date(b.date) - new Date(a.date));
+// 3. Export Filtered Events
+const filteredEventsForExport = computed(() => {
+  if (activeFilter.value === 'yearly') {
+    return allEventsOfType.value.filter(e => e.date.startsWith(selectedYear.value.toString()));
+  } else if (activeFilter.value === 'monthly') {
+    return allEventsOfType.value.filter(e => e.date.startsWith(selectedMonth.value));
+  } else if (activeFilter.value === 'custom') {
+    return allEventsOfType.value.filter(e => e.date >= fromDate.value && e.date <= toDate.value);
+  }
+  return allEventsOfType.value;
 });
 
+// 2. Table Specific (Independent of Date Filters, strictly shows latest 10)
 const latestEventsForTable = computed(() => {
-  // Only grab past or current events and limit to 10 latest for the quick table
+  const today = new Date();
+  today.setHours(23, 59, 59, 999);
+  
   return allEventsOfType.value
-    .filter(e => new Date(e.date) <= new Date())
+    .filter(e => new Date(e.date) <= today)
+    .sort((a, b) => new Date(b.date) - new Date(a.date))
     .slice(0, 10);
 });
 
@@ -192,10 +264,6 @@ const formatDate = (dateString) => {
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
-const handleDateChange = () => {
-  activeFilter.value = 'custom';
-}
-
 onMounted(() => {
   attendanceStore.fetchAllAttendance().catch(() => {})
 })
@@ -215,19 +283,31 @@ onMounted(() => {
         <div class="filters-group">
           <!-- Timeframe Pills -->
           <div class="pill-group">
-            <button class="pill" :class="{ active: activeFilter === 'year' }" @click="setFilter('year')">Year</button>
-            <button class="pill" :class="{ active: activeFilter === 'month' }" @click="setFilter('month')">Month</button>
-            <button class="pill" :class="{ active: activeFilter === 'week' }" @click="setFilter('week')">Week</button>
+            <button class="pill" :class="{ active: activeFilter === 'yearly' }" @click="activeFilter = 'yearly'">Yearly</button>
+            <button class="pill" :class="{ active: activeFilter === 'monthly' }" @click="activeFilter = 'monthly'">Monthly</button>
+            <button class="pill" :class="{ active: activeFilter === 'custom' }" @click="activeFilter = 'custom'">Custom</button>
           </div>
 
           <div class="divider"></div>
 
-          <!-- Date Pickers -->
-          <div class="date-pickers">
+          <!-- Dynamic Date Pickers -->
+          <div class="date-pickers" v-if="activeFilter === 'yearly'">
+            <span class="label">Year</span>
+            <select v-model="selectedYear" class="input-styled">
+              <option v-for="y in availableYears" :key="y" :value="y">{{ y }}</option>
+            </select>
+          </div>
+
+          <div class="date-pickers" v-else-if="activeFilter === 'monthly'">
+            <span class="label">Month</span>
+            <input type="month" v-model="selectedMonth" class="input-styled" />
+          </div>
+
+          <div class="date-pickers" v-else-if="activeFilter === 'custom'">
             <span class="label">From</span>
-            <input type="date" v-model="fromDate" @change="handleDateChange" />
+            <input type="date" v-model="fromDate" class="input-styled" />
             <span class="label">To</span>
-            <input type="date" v-model="toDate" :max="todayStr" @change="handleDateChange" />
+            <input type="date" v-model="toDate" :max="todayStr" class="input-styled" />
           </div>
 
           <div class="divider"></div>
@@ -241,7 +321,12 @@ onMounted(() => {
         
         <div class="actions">
           <div class="export-wrap">
-             <ExportButton exportType="events" :eventsList="eventsInRange" />
+             <!-- Export passes the specifically filtered events + the yearly summary data if yearly is selected -->
+             <ExportButton 
+                exportType="events" 
+                :eventsList="filteredEventsForExport" 
+                :yearlySummaryData="activeFilter === 'yearly' ? { year: selectedYear, labels: processedChartData.labels, data: processedChartData.data } : null"
+             />
           </div>
         </div>
       </div>
@@ -249,15 +334,15 @@ onMounted(() => {
       <div class="chart-wrapper" style="height: 350px;">
         <BarChart v-if="chartType === 'bar' && historicalAttendanceData.labels.length > 0" :chartData="historicalAttendanceData" :chartOptions="historicalChartOptions" />
         <LineChart v-else-if="chartType === 'line' && historicalAttendanceData.labels.length > 0" :chartData="historicalAttendanceData" :chartOptions="historicalChartOptions" />
-        <p v-else class="no-data-text">No event data in the selected date range.</p>
+        <p v-else class="no-data-text">No event data available for the selected range.</p>
       </div>
     </div>
 
-    <!-- Detailed Records Table -->
+    <!-- Detailed Records Table (Always Latest 10) -->
     <div class="records-header mt-8">
        <div class="section-badge-header">
            <span class="badge">{{ eventType === 'service' ? 'WKND' : 'B1G' }}</span>
-           <span class="title-text">ATTENDANCE RECORDS</span>
+           <span class="title-text">LATEST ATTENDANCE RECORDS</span>
        </div>
        <button class="view-full-btn" @click="showAttendanceOverview = true">
           <Eye :size="16" /> View Full History
@@ -400,7 +485,7 @@ onMounted(() => {
   font-size: 13px;
   color: #78909C;
 }
-.date-pickers input[type="date"] {
+.input-styled {
   border: 1px solid #CFD8DC;
   border-radius: 6px;
   padding: 6px 10px;
@@ -408,6 +493,7 @@ onMounted(() => {
   color: #37474F;
   background: #F5F7FA;
   outline: none;
+  font-family: inherit;
 }
 
 /* Toggles */
@@ -435,10 +521,6 @@ onMounted(() => {
 }
 
 /* Export Button Wrap */
-.export-wrap {
-  /* Inherit blue styling from generic export button or override if necessary */
-}
-/* Ensure the inner button provided by ExportButton stands out */
 :deep(.export-trigger-btn) {
   background-color: #1976D2 !important;
   color: white !important;

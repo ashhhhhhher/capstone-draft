@@ -40,6 +40,10 @@ const props = defineProps({
     type: Array,
     required: false
   },
+  yearlySummaryData: {
+    type: Object,
+    required: false
+  },
   // New props for volunteer exports
   volunteersData: {
     type: Array,
@@ -52,7 +56,7 @@ const props = defineProps({
 })
 
 // expose prop values in template more ergonomically
-const { exportType, pageExportData, singleEvent, eventsList, volunteersData, volunteerTab } = props
+const { exportType, pageExportData, singleEvent, eventsList, yearlySummaryData, volunteersData, volunteerTab } = props
 
 // --- Store Connections ---
 const membersStore = useMembersStore()
@@ -83,9 +87,16 @@ function getSegmentedMembers() {
     })
   }
 
+  // 1. First Timers
   const firstTimers = all.filter(m => m.finalTags?.isFirstTimer).map(m => ({ ...m, _servingMinistry: ministryMap[m.id] || null }));
-  const volunteers = all.filter(m => !m.finalTags?.isFirstTimer && (m.finalTags?.isVolunteer || !!ministryMap[m.id])).map(m => ({ ...m, _servingMinistry: ministryMap[m.id] || null }));
-  const leaders = all.filter(m => !m.finalTags?.isFirstTimer && m.finalTags?.isDgroupLeader && !m.finalTags?.isVolunteer && !ministryMap[m.id]).map(m => ({ ...m, _servingMinistry: ministryMap[m.id] || null }));
+  
+  // 2. Dgroup Leaders (Takes precedence over volunteer)
+  const leaders = all.filter(m => !m.finalTags?.isFirstTimer && m.finalTags?.isDgroupLeader).map(m => ({ ...m, _servingMinistry: ministryMap[m.id] || null }));
+  
+  // 3. Volunteers (Must NOT be a Dgroup Leader)
+  const volunteers = all.filter(m => !m.finalTags?.isFirstTimer && !m.finalTags?.isDgroupLeader && (m.finalTags?.isVolunteer || !!ministryMap[m.id])).map(m => ({ ...m, _servingMinistry: ministryMap[m.id] || null }));
+  
+  // 4. Regulars (Neither FT, Leader, nor Volunteer)
   const regulars = all.filter(m => !m.finalTags?.isFirstTimer && !m.finalTags?.isDgroupLeader && !m.finalTags?.isVolunteer && !ministryMap[m.id]).map(m => ({ ...m, _servingMinistry: ministryMap[m.id] || null }));
 
   return { firstTimers, leaders, volunteers, regulars, all };
@@ -144,13 +155,13 @@ function exportMembersExcel() {
         name: 'Dgroup Leaders', 
         data: leaders, 
         headers: ['Name', 'Age', 'Age Group', 'Gender', 'Volunteer Ministry'],
-        map: m => [`${m.lastName}, ${m.firstName}`, m.age, m.finalTags?.ageCategory || '-', m.gender, m.finalTags?.volunteerMinistry?.join(', ') || m._servingMinistry || 'N/A']
+        map: m => [`${m.lastName}, ${m.firstName}`, m.age, m.finalTags?.ageCategory || '-', m.gender, (m.finalTags?.volunteerMinistry && m.finalTags.volunteerMinistry.length > 0) ? m.finalTags.volunteerMinistry.join(', ') : (m._servingMinistry || 'N/A')]
       },
       { 
         name: 'Volunteers', 
         data: volunteers, 
         headers: ['Name', 'Age', 'Age Group', 'Gender', 'Ministry'],
-        map: m => [`${m.lastName}, ${m.firstName}`, m.age, m.finalTags?.ageCategory || '-', m.gender, m.finalTags?.volunteerMinistry?.join(', ') || m._servingMinistry || '']
+        map: m => [`${m.lastName}, ${m.firstName}`, m.age, m.finalTags?.ageCategory || '-', m.gender, (m.finalTags?.volunteerMinistry && m.finalTags.volunteerMinistry.length > 0) ? m.finalTags.volunteerMinistry.join(', ') : (m._servingMinistry || '')]
       },
       { 
         name: 'Regular Members', 
@@ -285,8 +296,8 @@ function exportMembersPDF() {
     };
 
     renderSection("First Timers", firstTimers, ['Name', 'Age', 'Age Group', 'Gender', 'Contact #'], m => [`${m.lastName}, ${m.firstName}`, m.age, m.finalTags?.ageCategory || '-', m.gender, m.contactNumber || '']);
-    renderSection("DLeaders", leaders, ['Name', 'Age', 'Age Group', 'Gender', 'Volunteer'], m => [`${m.lastName}, ${m.firstName}`, m.age, m.finalTags?.ageCategory || '-', m.gender, m.finalTags?.volunteerMinistry?.join(', ') || 'N/A']);
-    renderSection("Volunteers", volunteers, ['Name', 'Age', 'Age Group', 'Gender', 'Ministry'], m => [`${m.lastName}, ${m.firstName}`, m.age, m.finalTags?.ageCategory || '-', m.gender, m.finalTags?.volunteerMinistry?.join(', ') || '']);
+    renderSection("DLeaders", leaders, ['Name', 'Age', 'Age Group', 'Gender', 'Volunteer'], m => [`${m.lastName}, ${m.firstName}`, m.age, m.finalTags?.ageCategory || '-', m.gender, (m.finalTags?.volunteerMinistry && m.finalTags.volunteerMinistry.length > 0) ? m.finalTags.volunteerMinistry.join(', ') : (m._servingMinistry || 'N/A')]);
+    renderSection("Volunteers", volunteers, ['Name', 'Age', 'Age Group', 'Gender', 'Ministry'], m => [`${m.lastName}, ${m.firstName}`, m.age, m.finalTags?.ageCategory || '-', m.gender, (m.finalTags?.volunteerMinistry && m.finalTags.volunteerMinistry.length > 0) ? m.finalTags.volunteerMinistry.join(', ') : (m._servingMinistry || '')]);
     renderSection("Regular Members", regulars, ['Name', 'Age', 'Age Group', 'Gender', 'Dgroup Leader'], m => [`${m.lastName}, ${m.firstName}`, m.age, m.finalTags?.ageCategory || '-', m.gender, m.dgroupLeader || 'Unassigned']);
 
 
@@ -325,30 +336,71 @@ function getEventsData(specificEvent = null) {
 function exportEventsExcel() {
   try {
     const data = getEventsData(singleEvent || null);
-    if (data.length === 0) { alert("No historical event data found."); return; }
+    if (data.length === 0 && !props.yearlySummaryData) { alert("No historical event data found for this selection."); return; }
     
     const wb = XLSX.utils.book_new();
-    const headers = ['Event Name', 'Date', 'Total', 'Elevate', 'B1G', 'First Timers', 'Volunteers'];
-    const rows = [["CHRIST COMMISSION FOUNDATION INC."], ["HISTORICAL ATTENDANCE REPORT"], [""], headers, ...data.map(e => [e.name, e.date, e.total, e.elevate, e.b1g, e.firstTimers, e.volunteers])];
-    const ws = XLSX.utils.aoa_to_sheet(rows);
 
-    const headerStyle = { font: { bold: true, color: { rgb: "FFFFFF" } }, fill: { fgColor: { rgb: "2196F3" } }, alignment: { horizontal: "center" }, border: { top: { style: "thin" }, bottom: { style: "thin" }, left: { style: "thin" }, right: { style: "thin" } } };
-    
-    if (ws['!ref']) {
-      const range = XLSX.utils.decode_range(ws['!ref']);
-      for (let R = range.s.r; R <= range.e.r; ++R) {
-          for (let C = range.s.c; C <= range.e.c; ++C) {
-            const cell = XLSX.utils.encode_cell({ r: R, c: C });
-            if (!ws[cell]) continue;
-            if (R === 3) ws[cell].s = headerStyle;
-            else if (R > 3) ws[cell].s = { alignment: { horizontal: "center" }, border: { top: { style: "thin" }, bottom: { style: "thin" }, left: { style: "thin" }, right: { style: "thin" } } };
-          }
+    // 1. Optional Yearly Summary Sheet
+    if (props.yearlySummaryData) {
+      const summaryHeaders = ['Month', 'Total Attendance'];
+      const summaryRows = [
+        ["CHRIST COMMISSION FOUNDATION INC."],
+        [`YEARLY ATTENDANCE SUMMARY - ${props.yearlySummaryData.year}`],
+        [""],
+        summaryHeaders
+      ];
+
+      props.yearlySummaryData.labels.forEach((label, idx) => {
+        summaryRows.push([label, props.yearlySummaryData.data[idx]]);
+      });
+
+      const summaryWs = XLSX.utils.aoa_to_sheet(summaryRows);
+      const summaryHeaderStyle = { font: { bold: true, color: { rgb: "FFFFFF" } }, fill: { fgColor: { rgb: "2196F3" } }, alignment: { horizontal: "center" }, border: { top: { style: "thin" }, bottom: { style: "thin" }, left: { style: "thin" }, right: { style: "thin" } } };
+      
+      if (summaryWs['!ref']) {
+        const range = XLSX.utils.decode_range(summaryWs['!ref']);
+        for (let R = range.s.r; R <= range.e.r; ++R) {
+            for (let C = range.s.c; C <= range.e.c; ++C) {
+              const cell = XLSX.utils.encode_cell({ r: R, c: C });
+              if (!summaryWs[cell]) continue;
+              if (R === 3) summaryWs[cell].s = summaryHeaderStyle;
+              else if (R > 3) summaryWs[cell].s = { alignment: { horizontal: "center" }, border: { top: { style: "thin" }, bottom: { style: "thin" }, left: { style: "thin" }, right: { style: "thin" } } };
+            }
+        }
+        summaryWs['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 1 } }, { s: { r: 1, c: 0 }, e: { r: 1, c: 1 } }];
+        summaryWs['!cols'] = [{ wch: 20 }, { wch: 20 }];
       }
-      ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 6 } }, { s: { r: 1, c: 0 }, e: { r: 1, c: 6 } }];
-      ws['!cols'] = [{ wch: 30 }, { wch: 15 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 15 }, { wch: 15 }];
+
+      XLSX.utils.book_append_sheet(wb, summaryWs, "Monthly Summary");
     }
-    XLSX.utils.book_append_sheet(wb, ws, "History");
-    XLSX.writeFile(wb, `Events_History_${new Date().toISOString().split('T')[0]}.xlsx`);
+
+    // 2. Raw Events List Sheet
+    if (data.length > 0) {
+      const headers = ['Event Name', 'Date', 'Total', 'Elevate', 'B1G', 'First Timers', 'Volunteers'];
+      const rows = [["CHRIST COMMISSION FOUNDATION INC."], ["HISTORICAL ATTENDANCE REPORT"], [""], headers, ...data.map(e => [e.name, e.date, e.total, e.elevate, e.b1g, e.firstTimers, e.volunteers])];
+      const ws = XLSX.utils.aoa_to_sheet(rows);
+
+      const headerStyle = { font: { bold: true, color: { rgb: "FFFFFF" } }, fill: { fgColor: { rgb: "2196F3" } }, alignment: { horizontal: "center" }, border: { top: { style: "thin" }, bottom: { style: "thin" }, left: { style: "thin" }, right: { style: "thin" } } };
+      
+      if (ws['!ref']) {
+        const range = XLSX.utils.decode_range(ws['!ref']);
+        for (let R = range.s.r; R <= range.e.r; ++R) {
+            for (let C = range.s.c; C <= range.e.c; ++C) {
+              const cell = XLSX.utils.encode_cell({ r: R, c: C });
+              if (!ws[cell]) continue;
+              if (R === 3) ws[cell].s = headerStyle;
+              else if (R > 3) ws[cell].s = { alignment: { horizontal: "center" }, border: { top: { style: "thin" }, bottom: { style: "thin" }, left: { style: "thin" }, right: { style: "thin" } } };
+            }
+        }
+        ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 6 } }, { s: { r: 1, c: 0 }, e: { r: 1, c: 6 } }];
+        ws['!cols'] = [{ wch: 30 }, { wch: 15 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 15 }, { wch: 15 }];
+      }
+      XLSX.utils.book_append_sheet(wb, ws, props.yearlySummaryData ? "Events Historical Attendance" : "History");
+    }
+
+    if (wb.SheetNames.length === 0) return;
+
+    XLSX.writeFile(wb, `Events_Attendance_${new Date().toISOString().split('T')[0]}.xlsx`);
   } catch (error) {
     console.error("Event Excel Export Failed:", error);
   }
@@ -357,21 +409,58 @@ function exportEventsExcel() {
 function exportEventsPDF() {
   try {
     const data = getEventsData(singleEvent || null);
-    if (data.length === 0) { alert("No historical event data found."); return; }
+    if (data.length === 0 && !props.yearlySummaryData) { alert("No historical event data found for this selection."); return; }
+    
     const doc = new jsPDF();
     try { doc.addImage('/ccf logo.png', 'PNG', 15, 10, 20, 20); } catch (e) {}
     doc.setFontSize(14).setFont("helvetica", "bold").setTextColor(13, 71, 161).text("CHRIST'S COMMISSION FELLOWSHIP", 40, 20);
     doc.setFontSize(10).setFont("helvetica", "normal").setTextColor(100).text("Historical Attendance Report", 40, 26);
     doc.line(15, 35, 195, 35);
 
-    autoTable(doc, {
-      startY: 45,
-      head: [['Date', 'Event Name', 'Total', 'Elevate', 'B1G', 'FT', 'Vols']],
-      body: data.map(e => [e.date, e.name, e.total, e.elevate, e.b1g, e.firstTimers, e.volunteers]),
-      headStyles: { fillColor: [33, 150, 243], textColor: [255, 255, 255] },
-      styles: { fontSize: 9, halign: 'center' },
-      columnStyles: { 1: { halign: 'left' } } 
-    });
+    let currentY = 45;
+
+    // 1. Optional Yearly Summary Table
+    if (props.yearlySummaryData) {
+      doc.setFontSize(12).setFont("helvetica", "bold").setTextColor(0);
+      doc.text(`Yearly Summary (${props.yearlySummaryData.year})`, 15, currentY);
+      currentY += 5;
+
+      const summaryRows = [];
+      props.yearlySummaryData.labels.forEach((month, index) => {
+        summaryRows.push([month, props.yearlySummaryData.data[index]]);
+      });
+
+      autoTable(doc, {
+        startY: currentY,
+        head: [['Month', 'Total Attendance']],
+        body: summaryRows,
+        headStyles: { fillColor: [33, 150, 243], textColor: [255, 255, 255] },
+        styles: { fontSize: 9, halign: 'center' },
+        margin: { left: 15, right: 15 }
+      });
+      
+      currentY = doc.lastAutoTable.finalY + 15;
+    }
+
+    // 2. Raw Events List
+    if (data.length > 0) {
+      if (props.yearlySummaryData) {
+         if (currentY > 240) { doc.addPage(); currentY = 20; }
+         doc.setFontSize(12).setFont("helvetica", "bold").setTextColor(0);
+         doc.text("Events Historical Attendance", 15, currentY);
+         currentY += 5;
+      }
+
+      autoTable(doc, {
+        startY: currentY,
+        head: [['Date', 'Event Name', 'Total', 'Elevate', 'B1G', 'FT', 'Vols']],
+        body: data.map(e => [e.date, e.name, e.total, e.elevate, e.b1g, e.firstTimers, e.volunteers]),
+        headStyles: { fillColor: [33, 150, 243], textColor: [255, 255, 255] },
+        styles: { fontSize: 9, halign: 'center' },
+        columnStyles: { 1: { halign: 'left' } } 
+      });
+    }
+
     doc.save(`Events_History_${new Date().toISOString().split('T')[0]}.pdf`);
   } catch (error) {
     console.error("Event PDF Export Failed:", error);
