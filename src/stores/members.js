@@ -42,7 +42,7 @@ export const useMembersStore = defineStore('members', () => {
       // Ensure arrays exist for matching/analytics
       dgroupDetails: {
         interests: l.dgroupDetails?.interests || [],
-        meetingTime: l.dgroupDetails?.meetingTime || 'Anytime'
+        meetingTime: l.dgroupDetails?.meetingTime || 'Flexible'
       }
     }))
   })

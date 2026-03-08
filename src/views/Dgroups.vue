@@ -66,7 +66,7 @@ const sortedDgroups = computed(() => {
       capacity: leader.dgroupCapacity || 12,
       // Pulling prescriptive data for display
       lifeStage: leader.finalTags?.ageCategory || leader.finalTags?.lifeStage || 'professional',
-      meetingTime: leader.dgroupDetails?.meetingTime || 'Anytime',
+      meetingTime: leader.dgroupDetails?.meetingTime || 'Flexible',
       meetingDays: leader.dgroupDetails?.meetingDays || 'Flexible',
       interests: leader.dgroupDetails?.interests || [],
       members: [],

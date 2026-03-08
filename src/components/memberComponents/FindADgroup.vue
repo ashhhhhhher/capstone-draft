@@ -46,7 +46,7 @@ const TIME_OPTIONS = [
   { id: 'afternoon', label: '1:00 PM - 3:00 PM', icon: Clock },
   { id: 'late-afternoon', label: '3:00 PM - 5:00 PM', icon: Clock },
   { id: 'evening', label: '5:00 PM - 7:00 PM', icon: Clock },
-  { id: 'anytime', label: 'Flexible', icon: Sparkles }
+  { id: 'flexible', label: 'Flexible', icon: Sparkles }
 ]
 
 const DAY_OPTIONS = [
@@ -127,9 +127,9 @@ const recommendedDgroups = computed(() => {
     }
 
     // SCHEDULE MATCHING
-    const groupTime = l.dgroupDetails?.meetingTime || 'Anytime'
+    const groupTime = l.dgroupDetails?.meetingTime || 'Flexible'
 
-    if (seekerPrefs.meetingTime.includes('Anytime') || groupTime === 'Anytime') {
+    if (seekerPrefs.meetingTime.includes('Flexible') || groupTime === 'Flexible') {
       score += 30
       reasons.push('Schedule Match')
     } else if (seekerPrefs.meetingTime.includes(groupTime)) {
@@ -175,10 +175,10 @@ function toggleInterest(id) {
 
 function toggleTime(label) {
   const idx = seekerPrefs.meetingTime.indexOf(label)
-  if (label === 'Anytime') {
-      seekerPrefs.meetingTime = ['Anytime']
+  if (label === 'Flexible') {
+      seekerPrefs.meetingTime = ['Flexible']
   } else {
-      if (seekerPrefs.meetingTime.includes('Anytime')) seekerPrefs.meetingTime = []
+      if (seekerPrefs.meetingTime.includes('Flexible')) seekerPrefs.meetingTime = []
       if (idx === -1) seekerPrefs.meetingTime.push(label)
       else seekerPrefs.meetingTime.splice(idx, 1)
   }
@@ -392,7 +392,7 @@ const isNextDisabled = computed(() => {
                   </div>
 
                   <div class="stat-item">
-                    Age Bracket: {{ group.avgAge }} <span>👍</span>
+                    Age Bracket: {{ group.avgAge }}
                   </div>
                 </div>
                   

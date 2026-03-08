@@ -45,7 +45,7 @@ const LIFE_STAGE_OPTIONS = [
 
 const TIME_OPTIONS = [
   '8:00 AM - 10:00 AM', '10:00 AM - 12:00 PM', '1:00 PM - 3:00 PM', 
-  '3:00 PM - 5:00 PM', '5:00 PM - 7:00 PM', 'Anytime'
+  '3:00 PM - 5:00 PM', '5:00 PM - 7:00 PM', 'Flexible'
 ]
 
 const DAY_OPTIONS = ['Weekdays', 'Weekends', 'Flexible']
@@ -55,7 +55,7 @@ const editGroupForm = reactive({
   dgroupName: '',
   capacity: 12,
   interests: [],
-  meetingTime: 'Anytime',
+  meetingTime: 'Flexible',
   meetingDays: 'Flexible',
   lifeStage: ''
 })
@@ -128,7 +128,7 @@ const myMemberGroupDetails = computed(() => {
     leaderName: `${leader.firstName} ${leader.lastName}`,
     capacity: leader.dgroupCapacity || 12,
     interests: leader.dgroupDetails?.interests || [],
-    meetingTime: leader.dgroupDetails?.meetingTime || 'Anytime',
+    meetingTime: leader.dgroupDetails?.meetingTime || 'Flexible',
     meetingDays: leader.dgroupDetails?.meetingDays || 'Flexible',
     lifeStage: leader.finalTags?.ageCategory || 'professional'
   }
@@ -144,7 +144,7 @@ const primaryDownlineGroup = computed(() => {
     members: members,
     capacity: myProfile.value?.dgroupCapacity || 12,
     interests: myProfile.value?.dgroupDetails?.interests || [],
-    meetingTime: myProfile.value?.dgroupDetails?.meetingTime || 'Anytime',
+    meetingTime: myProfile.value?.dgroupDetails?.meetingTime || 'Flexible',
     meetingDays: myProfile.value?.dgroupDetails?.meetingDays || 'Flexible',
     lifeStage: myProfile.value?.finalTags?.ageCategory || 'professional'
   }
@@ -172,7 +172,7 @@ function openEditGroupModal() {
   editGroupForm.dgroupName = myProfile.value.dgroupName || ''
   editGroupForm.capacity = myProfile.value.dgroupCapacity || 12
   editGroupForm.interests = myProfile.value.dgroupDetails?.interests || []
-  editGroupForm.meetingTime = myProfile.value.dgroupDetails?.meetingTime || 'Anytime'
+  editGroupForm.meetingTime = myProfile.value.dgroupDetails?.meetingTime || 'Flexible'
   editGroupForm.meetingDays = myProfile.value.dgroupDetails?.meetingDays || 'Flexible'
   editGroupForm.lifeStage = myProfile.value.finalTags?.ageCategory || 'professional'
   showEditGroupModal.value = true

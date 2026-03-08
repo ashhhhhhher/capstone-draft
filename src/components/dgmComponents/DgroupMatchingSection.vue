@@ -68,7 +68,7 @@ const leaderStats = computed(() => {
       averageMemberAge,
       // Pass down prescriptive details
       interests: leader.dgroupDetails?.interests || [],
-      meetingTime: leader.dgroupDetails?.meetingTime || 'Anytime'
+      meetingTime: leader.dgroupDetails?.meetingTime || 'Flexible'
     }
   })
 })
@@ -146,7 +146,7 @@ const currentMatches = computed(() => {
     }
 
     // D. Time Match (New Prescriptive)
-    if (sPrefs.meetingTime?.includes(l.meetingTime) || l.meetingTime === 'Anytime' || sPrefs.meetingTime?.includes('Anytime')) {
+    if (sPrefs.meetingTime?.includes(l.meetingTime) || l.meetingTime === 'Flexible' || sPrefs.meetingTime?.includes('Flexible')) {
        score += 15
        reasons.push('Schedule Match')
     }
