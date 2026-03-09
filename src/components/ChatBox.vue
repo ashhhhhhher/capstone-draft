@@ -24,10 +24,9 @@ const selectedMemberIds = ref([])
 
 // Init listeners when profile is ready
 watch(
-  () => [authStore.userProfile, authStore.branchId],
-  ([profile, branchId]) => {
-    if (!profile || !branchId) return
-    if (!profile.id) return
+  () => [authStore.user, authStore.userProfile, authStore.branchId],
+  ([user, profile, branchId]) => {
+    if (!user || !branchId) return
     
     try {
       chatStore.initChatListeners()
