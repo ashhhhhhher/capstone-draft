@@ -3,7 +3,7 @@ import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useAuthStore } from '../stores/auth'
 import { useEventsStore } from '../stores/events'
 import { useRouter } from 'vue-router'
-import { MapPin, QrCode, BarChart2, Clock, Info, X, Sparkles, Plus, ClipboardCheck, Calendar } from 'lucide-vue-next'
+import { MapPin, QrCode, BarChart2, Clock, Info, X, Sparkles, Plus, ClipboardCheck, Calendar, Mic, ZoomIn } from 'lucide-vue-next'
 import DgroupMeetingModal from '../components/memberComponents/DgroupMeetingModal.vue'
 import DgroupAttendanceModal from '../components/memberComponents/DgroupAttendanceModal.vue'
 import BackgroundHero from '../components/dgmComponents/Background.vue'
@@ -27,6 +27,7 @@ const memberProfile = computed(() => authStore.userProfile)
 const isFirstTime = computed(() => !memberProfile.value?.dgroupId)
 const showEventModal = ref(false)
 const selectedEvent = ref(null)
+const showFullImage = ref(false)
 
 const todayEvent = computed(() => {
   const todayStr = localYMD()
@@ -132,7 +133,12 @@ const upcomingEvents = computed(() => {
     .sort((a, b) => new Date(a.date) - new Date(b.date))
 })
 
-function openEventDetails(event) { selectedEvent.value = event; showEventModal.value = true }
+function openEventDetails(event) { 
+  selectedEvent.value = event; 
+  showEventModal.value = true;
+  showFullImage.value = false;
+}
+
 function formatShortDate(dateStr) { if (!dateStr) return ''; return new Date(dateStr).toLocaleString('default', { month: 'short', day: 'numeric' }) }
 </script>
 
@@ -234,19 +240,43 @@ function formatShortDate(dateStr) { if (!dateStr) return ''; return new Date(dat
       :meeting="todayMeeting"
       @close="showAttendanceModal = false"
     />
+    
     <!-- Event Detail Modal -->
     <div v-if="showEventModal && selectedEvent" class="modal-backdrop" @click.self="showEventModal = false">
       <div class="modern-modal">
-        <div class="modal-cover" :style="selectedEvent.photoURL ? { backgroundImage: `url(${selectedEvent.photoURL})` } : {}">
+        <!-- Reverted to cover sizing but added click-to-zoom feature -->
+        <div 
+          class="modal-cover" 
+          :class="{ 'zoomable-cover': selectedEvent.photoURL }"
+          :style="selectedEvent.photoURL ? { backgroundImage: `url(${selectedEvent.photoURL})` } : {}"
+          @click="selectedEvent.photoURL ? showFullImage = true : null"
+        >
           <div class="modal-cover-overlay"></div>
-          <button class="modal-close-btn" @click="showEventModal = false"><X :size="20" /></button>
-          <div class="modal-date-chip">{{ formatShortDate(selectedEvent.date) }}</div>
+          <button class="modal-close-btn" @click.stop="showEventModal = false"><X :size="20" /></button>
+          
+          <div v-if="selectedEvent.photoURL" class="zoom-hint">
+            <ZoomIn :size="14" /> View full poster
+          </div>
         </div>
         <div class="modal-body">
           <h2 class="modal-title">{{ selectedEvent.name }}</h2>
           <div class="modal-info-grid">
-            <div class="modal-info-item"><div class="m-icon blue"><Clock :size="18" /></div><div class="m-text"><label>Time</label><span>{{ selectedEvent.time || 'TBA' }}</span></div></div>
-            <div class="modal-info-item"><div class="m-icon red"><MapPin :size="18" /></div><div class="m-text"><label>Location</label><span>{{ selectedEvent.eventLocation || 'TBD' }}</span></div></div>
+            <div class="modal-info-item">
+              <div class="m-icon blue"><Calendar :size="18" /></div>
+              <div class="m-text"><label>Date</label><span>{{ formatShortDate(selectedEvent.date) }}</span></div>
+            </div>
+            <div class="modal-info-item">
+              <div class="m-icon green"><Clock :size="18" /></div>
+              <div class="m-text"><label>Time</label><span>{{ selectedEvent.time || 'TBA' }}</span></div>
+            </div>
+            <div class="modal-info-item">
+              <div class="m-icon red"><MapPin :size="18" /></div>
+              <div class="m-text"><label>Location</label><span>{{ selectedEvent.eventLocation || 'TBD' }}</span></div>
+            </div>
+            <div class="modal-info-item">
+              <div class="m-icon yellow"><Mic :size="18" /></div>
+              <div class="m-text"><label>Speaker</label><span>{{ selectedEvent.eventSpeaker || 'TBA' }}</span></div>
+            </div>
           </div>
           <div class="modal-about">
             <label><Info :size="14" /> About this event</label>
@@ -255,6 +285,13 @@ function formatShortDate(dateStr) { if (!dateStr) return ''; return new Date(dat
         </div>
       </div>
     </div>
+
+    <!-- Full Image Lightbox Viewer -->
+    <div v-if="showFullImage && selectedEvent?.photoURL" class="full-image-lightbox" @click="showFullImage = false">
+      <button class="lightbox-close-btn" @click.stop="showFullImage = false"><X :size="24" /></button>
+      <img :src="selectedEvent.photoURL" class="lightbox-img" alt="Event Poster Full View" @click.stop />
+    </div>
+
   </div>
 </template>
 
@@ -299,10 +336,17 @@ function formatShortDate(dateStr) { if (!dateStr) return ''; return new Date(dat
 .meeting-time-pill{display:inline-block;margin-top:8px;padding:2px 8px;background:#f1f5f9;border-radius:4px;font-size:10px;font-weight:700;color:#475569}
 .modal-backdrop{position:fixed;inset:0;background:rgba(15, 23, 42, 0.7);backdrop-filter:blur(8px);z-index:1000;display:flex;align-items:center;justify-content:center;padding:16px}
 .modern-modal{background:#fff;width:100%;max-width:480px;border-radius:32px;overflow:hidden;box-shadow:0 30px 60px -12px rgba(0,0,0,0.3)}
-.modal-cover{height:180px;background-size:cover;background-position:center;position:relative}
-.modal-cover-overlay{position:absolute;inset:0;background:linear-gradient(0deg, rgba(0,0,0,0.4), transparent)}
-.modal-close-btn{position:absolute;top:16px;right:16px;background:rgba(255,255,255,0.2);backdrop-filter:blur(10px);border:none;width:32px;height:32px;border-radius:50%;color:white;cursor:pointer;display:flex;align-items:center;justify-content:center}
-.modal-date-chip{position:absolute;bottom:16px;left:16px;background:#fff;padding:4px 12px;border-radius:12px;font-size:12px;font-weight:800;color:#1e293b}
+
+/* Modal Cover with Cover styling */
+.modal-cover{height:260px;background-size:cover;background-repeat:no-repeat;background-position:center;background-color:#0f172a;position:relative}
+.zoomable-cover{cursor:zoom-in;transition:opacity 0.2s;}
+.zoomable-cover:hover{opacity:0.95;}
+.modal-cover-overlay{position:absolute;inset:0;background:linear-gradient(180deg, rgba(0,0,0,0.5) 0%, transparent 80px);pointer-events:none}
+
+/* Zoom Hint */
+.zoom-hint{position:absolute;bottom:16px;right:16px;background:rgba(0,0,0,0.75);color:white;padding:6px 12px;border-radius:20px;font-size:11px;font-weight:600;display:flex;align-items:center;gap:6px;backdrop-filter:blur(4px);pointer-events:none;border:1px solid rgba(255,255,255,0.1)}
+
+.modal-close-btn{position:absolute;top:16px;right:16px;background:rgba(255,255,255,0.2);backdrop-filter:blur(10px);border:none;width:32px;height:32px;border-radius:50%;color:white;cursor:pointer;display:flex;align-items:center;justify-content:center;pointer-events:auto;z-index:10}
 .modal-body{padding:24px}
 .modal-title{font-size:24px;font-weight:900;color:#1e293b;margin:0 0 16px 0}
 .modal-info-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:24px}
@@ -310,12 +354,21 @@ function formatShortDate(dateStr) { if (!dateStr) return ''; return new Date(dat
 .m-icon{width:36px;height:36px;border-radius:10px;display:flex;align-items:center;justify-content:center}
 .m-icon.blue{background:#eff6ff;color:#3b82f6}
 .m-icon.red{background:#fef2f2;color:#ef4444}
+.m-icon.green{background:#f0fdf4;color:#16a34a}
+.m-icon.yellow{background:#fffbeb;color:#d97706}
 .m-text label{display:block;font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase}
 .m-text span{font-size:13px;font-weight:700;color:#1e293b}
 .modal-about label{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:800;color:#475569;margin-bottom:8px}
 .modal-about p{font-size:14px;line-height:1.6;color:#64748b;margin:0}
 .loading-state{text-align:center;padding:20px;color:#94a3b8;font-size:13px}
 .empty-placeholder{text-align:center;padding:24px;color:#94a3b8;font-size:13px;font-weight:500}
+
+/* Full Image Lightbox Viewer */
+.full-image-lightbox{position:fixed;inset:0;background:rgba(0,0,0,0.92);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(8px);cursor:zoom-out}
+.lightbox-close-btn{position:absolute;top:24px;right:24px;background:rgba(255,255,255,0.1);border:none;width:48px;height:48px;border-radius:50%;color:white;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background 0.2s}
+.lightbox-close-btn:hover{background:rgba(255,255,255,0.25)}
+.lightbox-img{max-width:100%;max-height:90vh;border-radius:12px;box-shadow:0 25px 50px rgba(0,0,0,0.5);object-fit:contain;cursor:default}
+
 @keyframes soft-pulse{0%{box-shadow:0 0 0 0 rgba(239, 68, 68, 0.4)}70%{box-shadow:0 0 0 10px rgba(239, 68, 68, 0)}100%{box-shadow:0 0 0 0 rgba(239, 68, 68, 0)}}
 @media (max-width: 768px){.home-view{gap:16px}.quick-actions{grid-template-columns:repeat(2,1fr);gap:10px}.events-grid{grid-template-columns:1fr}.banner-title{font-size:20px}}
 </style>
