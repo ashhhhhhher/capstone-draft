@@ -30,7 +30,7 @@ const features = {
   wknd: { 
     title: 'ELEVATE WKND', 
     desc: 'Unwind with us at our every other week gatherings!', 
-    longDesc: 'Our youth gathering is a space crafted specifically for high schoolers, college students, and young professionals. It\’s more than just a service; it\’s a weekly opportunity to recharge through high-energy worship, find community with people in your same stage of life, and engage with messages that actually speak to your day-to-day.', 
+    longDesc: 'The youth gathering is a weekly program designed for high school students, college students, and young professionals. It serves as a space where participants can engage in worship, connect with peers who are in similar stages of life, and listen to messages that address relevant topics and everyday challenges. The gathering typically includes high-energy worship, opportunities for community building, and a message or discussion aimed at encouraging personal growth and spiritual reflection.', 
     info: 'Hotel Supreme | 5:00PM onwards | Every other Saturday | 2026', 
     img: '/elevate logo.jpg',
     gallery: ['/wknd1.jpg', '/wknd2.jpg', '/wknd3.jpg', '/wknd4.jpg']

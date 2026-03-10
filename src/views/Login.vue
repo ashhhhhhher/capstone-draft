@@ -102,7 +102,6 @@ async function handleForgotPassword() {
     <transition name="fade">
       <div v-if="showWelcome" class="welcome-overlay">
         <div class="welcome-content">
-          <img src="/qonnect.png" alt="Qonnect" class="welcome-logo" />
           <h1>Welcome, {{ welcomeName }}!</h1>
           <p>Signing you in...</p>
           <div class="spinner"></div>
@@ -168,7 +167,10 @@ async function handleForgotPassword() {
   align-items: center;
   justify-content: center;
   height: 100vh;
-  background-color: #f4f7f9;
+  background-image: url('/LandingPage.jpg');
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
 }
 .login-box {
   background: white;
@@ -302,7 +304,10 @@ p {
   left: 0;
   width: 100%;
   height: 100%;
-  background-color: #1976D2;
+  background-image: url('/Transition.jpg');
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
   z-index: 9999;
   display: flex;
   align-items: center;
@@ -318,20 +323,9 @@ p {
   gap: 16px;
 }
 
-.welcome-logo {
-  width: 160px;        
-  height: 160px;       
-  object-fit: contain;   
-  margin-bottom: 20px;
-  background: white;
-  border-radius: 50%;
-  padding: 24px;      
-  box-shadow: 0 4px 15px rgba(0,0,0,0.2);
-}
-
 .welcome-content h1 {
   font-size: 32px;
-  margin: 0;
+  margin: 0 0 180px 0; /* Huge bottom margin to push this up and the rest down */
   font-weight: 700;
 }
 

@@ -420,7 +420,7 @@ function clearTcError() {
 </template>
 
 <style scoped>
-.signup-container { display: flex; align-items: center; justify-content: center; padding: 60px 0; background-color: #f4f7f9; min-height: 100vh; position: relative; }
+.signup-container { display: flex; align-items: center; justify-content: center; padding: 60px 0; background-image: url('/LandingPage.jpg'); background-size: cover; background-position: center; background-repeat: no-repeat; min-height: 100vh; position: relative; }
 .signup-box { background: white; padding: 40px; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); width: 90%; max-width: 500px; text-align: center; }
 h2 { margin-top: 0; color: #0D47A1; }
 p { color: #546E7A; margin-bottom: 24px; }
