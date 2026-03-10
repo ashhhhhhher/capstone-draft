@@ -30,7 +30,7 @@ if (Array.isArray(localFilters.value.type)) {
   localFilters.value.type = { included: [...localFilters.value.type], excluded: [] };
 }
 
-const ministries = ref(['Live Prod', 'Host Team', 'Exalt', 'Welcome', 'DGM'])
+const ministries = ref(['Live Prod', 'Events', 'Exalt', 'Media', 'DGM'])
 
 // --- TRI-STATE LOGIC ---
 // Cycle: None -> Include -> Exclude -> None
