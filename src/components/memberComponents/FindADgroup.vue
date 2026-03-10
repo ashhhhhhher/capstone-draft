@@ -55,14 +55,6 @@ const DAY_OPTIONS = [
   { id: 'flexible', label: 'Flexible', icon: Sparkles }
 ]
 
-  function formatLifeStage(value) {
-    if (!value) return ''
-    if (value === 'high-school') return 'High School'
-    if (value === 'college') return 'College/University'
-    if (value === 'professional') return 'Young Professionals'
-    return value
-  }
-
 // Matching Logic
 const recommendedDgroups = computed(() => {
   if (seekerStep.value !== 3) return []

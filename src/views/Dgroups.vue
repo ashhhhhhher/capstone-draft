@@ -65,7 +65,6 @@ const sortedDgroups = computed(() => {
       leaderGender: leader.gender,
       capacity: leader.dgroupCapacity || 12,
       // Pulling prescriptive data for display
-      lifeStage: leader.finalTags?.ageCategory || leader.finalTags?.lifeStage || 'professional',
       meetingTime: leader.dgroupDetails?.meetingTime || 'Flexible',
       meetingDays: leader.dgroupDetails?.meetingDays || 'Flexible',
       interests: leader.dgroupDetails?.interests || [],
@@ -153,25 +152,6 @@ function getInterestStyle(id) {
     borderWidth: '1px',
     borderStyle: 'solid'
   }
-}
-
-function formatLifeStage(stage) {
-  const s = (stage || '').toLowerCase()
-  if (s.includes('high-school') || s === 'elevate') return 'High School'
-  if (s.includes('college')) return 'College/University'
-  return 'Young Professional'
-}
-
-function getLifeStageStyle(stage) {
-  const s = (stage || '').toLowerCase()
-  if (s.includes('high-school') || s === 'elevate') {
-    return { backgroundColor: '#FFF7ED', color: '#EA580C', borderColor: '#FFEDD5', borderWidth: '1px', borderStyle: 'solid' } // Orange theme
-  }
-  if (s.includes('college')) {
-    return { backgroundColor: '#F0FDF4', color: '#16A34A', borderColor: '#DCFCE7', borderWidth: '1px', borderStyle: 'solid' } // Green theme
-  }
-  // Professional / Default
-  return { backgroundColor: '#F8FAFC', color: '#475569', borderColor: '#E2E8F0', borderWidth: '1px', borderStyle: 'solid' } // Slate theme
 }
 
 // --- Functions ---
@@ -373,13 +353,10 @@ function handleRestoreMember(memberId) {
                   </span>
                 </div>
                 
-                <!-- Lifestage, Schedule, and Interests Tags -->
+                <!-- Schedule and Interests Tags -->
                 <div class="dgroup-tags-container">
-                  <div class="dgroup-tags-row">
-                    <span class="d-tag" :style="getLifeStageStyle(group.lifeStage)">
-                      {{ formatLifeStage(group.lifeStage) }}
-                    </span>
-                    <span class="d-tag schedule-tag" v-if="group.meetingTime">
+                  <div class="dgroup-tags-row" v-if="group.meetingTime">
+                    <span class="d-tag schedule-tag">
                       <Calendar :size="12" /> {{ group.meetingDays }} • {{ group.meetingTime }}
                     </span>
                   </div>
@@ -465,13 +442,10 @@ function handleRestoreMember(memberId) {
                   </span>
                 </div>
                 
-                <!-- Lifestage, Schedule, and Interests Tags -->
+                <!-- Schedule and Interests Tags -->
                 <div class="dgroup-tags-container">
-                  <div class="dgroup-tags-row">
-                    <span class="d-tag" :style="getLifeStageStyle(group.lifeStage)">
-                      {{ formatLifeStage(group.lifeStage) }}
-                    </span>
-                    <span class="d-tag schedule-tag" v-if="group.meetingTime">
+                  <div class="dgroup-tags-row" v-if="group.meetingTime">
+                    <span class="d-tag schedule-tag">
                       <Calendar :size="12" /> {{ group.meetingDays }} • {{ group.meetingTime }}
                     </span>
                   </div>

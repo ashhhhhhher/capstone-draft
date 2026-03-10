@@ -5,7 +5,7 @@ import { storage } from '../firebase'
 import { ref as storageRef, uploadBytesResumable, getDownloadURL, deleteObject } from "firebase/storage"
 import { getAuth, verifyBeforeUpdateEmail } from "firebase/auth" // Import specific auth functions
 import { v4 as uuidv4 } from 'uuid'
-import { Camera, Save, Lock, Mail, Phone, Facebook, GraduationCap, X, Upload } from 'lucide-vue-next'
+import { Camera, Save, Lock, Mail, Phone, Facebook, GraduationCap, X, Upload, Users } from 'lucide-vue-next'
 
 const authStore = useAuthStore()
 const auth = getAuth()
@@ -46,7 +46,8 @@ const profile = reactive({
   email: '',
   contactNumber: '',
   fbAccount: '',
-  profilePicture: '' 
+  profilePicture: '',
+  lifeStage: ''
 })
 
 // --- Password Data ---
@@ -56,7 +57,13 @@ const passwordForm = reactive({
   confirm: ''
 })
 
-const lifestage = computed(() => authStore.userProfile?.finalTags?.ageCategory || 'N/A')
+const lifestage = computed(() => {
+  const ls = authStore.userProfile?.finalTags?.lifeStage
+  if (ls === 'high-school') return 'High School'
+  if (ls === 'college-university') return 'College/University'
+  if (ls === 'young-professional') return 'Young Professional'
+  return authStore.userProfile?.finalTags?.ageCategory || 'N/A'
+})
 
 // Initialize
 onMounted(() => {
@@ -72,7 +79,8 @@ onMounted(() => {
       email: p.email || authStore.user?.email || '',
       contactNumber: p.contactNumber || '',
       fbAccount: p.fbAccount || '',
-      profilePicture: p.profilePicture || ''
+      profilePicture: p.profilePicture || '',
+      lifeStage: p.finalTags?.lifeStage || ''
     })
 
     // Set initial dropdown state based on saved school
@@ -228,7 +236,11 @@ async function saveProfile() {
     // We don't save email to Firestore directly here if it hasn't verified yet, 
     // or we can save it for record keeping, but Auth email is source of truth.
     // Let's save it to Firestore profile for display consistency.
-    email: profile.email 
+    email: profile.email,
+    finalTags: {
+      ...(authStore.userProfile.finalTags || {}),
+      lifeStage: profile.lifeStage
+    }
   }
 
   try {
@@ -323,6 +335,21 @@ async function updatePassword() {
 
     <!-- Details Form -->
     <div class="form-card">
+      <div class="form-row">
+        <div class="input-group full">
+          <label>Life Stage</label>
+          <div class="input-wrapper">
+            <Users :size="18" class="icon" />
+            <select v-model="profile.lifeStage">
+              <option value="" disabled>Select Life Stage</option>
+              <option value="high-school">High School</option>
+              <option value="college-university">College/University</option>
+              <option value="young-professional">Young Professional</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
       <div class="form-row">
         <div class="input-group full">
           <label>School / Workplace</label>

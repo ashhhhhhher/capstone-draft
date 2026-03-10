@@ -10,7 +10,7 @@ import {
   User, Users, ChevronRight, X, UserMinus, HelpCircle, 
   Pencil, ClipboardCheck, Copy, Calendar as CalendarIcon, ArrowLeft,
   Music, BookOpen, Heart, Activity, Palette, Clock, CheckCircle,
-  Trophy, Laptop, Camera, Dumbbell, Sparkles, School, GraduationCap, Briefcase
+  Trophy, Laptop, Camera, Dumbbell, Sparkles
 } from 'lucide-vue-next'
 import DgroupOverview from '../components/memberComponents/DgroupOverview.vue' 
 
@@ -37,12 +37,6 @@ const INTEREST_OPTIONS = [
   { id: 'dancing', label: 'Dancing', icon: Activity, color: '#F43F5E' }
 ]
 
-const LIFE_STAGE_OPTIONS = [
-  { id: 'high-school', label: 'High School', icon: School, color: '#F59E0B' },
-  { id: 'college', label: 'College/University', icon: GraduationCap, color: '#3B82F6' },
-  { id: 'professional', label: 'Young Professional', icon: Briefcase, color: '#10B981' }
-]
-
 const TIME_OPTIONS = [
   '8:00 AM - 10:00 AM', '10:00 AM - 12:00 PM', '1:00 PM - 3:00 PM', 
   '3:00 PM - 5:00 PM', '5:00 PM - 7:00 PM', 'Flexible'
@@ -56,8 +50,7 @@ const editGroupForm = reactive({
   capacity: 12,
   interests: [],
   meetingTime: 'Flexible',
-  meetingDays: 'Flexible',
-  lifeStage: ''
+  meetingDays: 'Flexible'
 })
 
 const dgroupIdInput = ref('')
@@ -129,8 +122,7 @@ const myMemberGroupDetails = computed(() => {
     capacity: leader.dgroupCapacity || 12,
     interests: leader.dgroupDetails?.interests || [],
     meetingTime: leader.dgroupDetails?.meetingTime || 'Flexible',
-    meetingDays: leader.dgroupDetails?.meetingDays || 'Flexible',
-    lifeStage: leader.finalTags?.ageCategory || 'professional'
+    meetingDays: leader.dgroupDetails?.meetingDays || 'Flexible'
   }
 })
 
@@ -145,8 +137,7 @@ const primaryDownlineGroup = computed(() => {
     capacity: myProfile.value?.dgroupCapacity || 12,
     interests: myProfile.value?.dgroupDetails?.interests || [],
     meetingTime: myProfile.value?.dgroupDetails?.meetingTime || 'Flexible',
-    meetingDays: myProfile.value?.dgroupDetails?.meetingDays || 'Flexible',
-    lifeStage: myProfile.value?.finalTags?.ageCategory || 'professional'
+    meetingDays: myProfile.value?.dgroupDetails?.meetingDays || 'Flexible'
   }
 })
 
@@ -174,7 +165,6 @@ function openEditGroupModal() {
   editGroupForm.interests = myProfile.value.dgroupDetails?.interests || []
   editGroupForm.meetingTime = myProfile.value.dgroupDetails?.meetingTime || 'Flexible'
   editGroupForm.meetingDays = myProfile.value.dgroupDetails?.meetingDays || 'Flexible'
-  editGroupForm.lifeStage = myProfile.value.finalTags?.ageCategory || 'professional'
   showEditGroupModal.value = true
 }
 
@@ -189,7 +179,6 @@ async function saveGroupDetails() {
     await authStore.updateExtendedProfile({
       dgroupName: editGroupForm.dgroupName,
       dgroupCapacity: editGroupForm.capacity,
-      finalTags: { ...myProfile.value.finalTags, ageCategory: editGroupForm.lifeStage },
       dgroupDetails: {
         interests: editGroupForm.interests,
         meetingTime: editGroupForm.meetingTime,
@@ -242,6 +231,14 @@ function getMinistry(person) {
   if (ageCat === 'professional') return 'B1G'
   if (ageCat === 'college' || ageCat === 'high-school') return 'ELEVATE'
   return 'B1G' 
+}
+
+function formatLifeStage(person) {
+  const ls = person?.finalTags?.lifeStage;
+  if (ls === 'high-school') return 'High School';
+  if (ls === 'college-university') return 'College/University';
+  if (ls === 'young-professional') return 'Young Professional';
+  return ls || '--';
 }
 
 function formatBirthday(dateString) {
@@ -339,9 +336,6 @@ function isPersonLeader(person) {
                     <div class="hero-badges">
                          <div class="info-badge id-badge" @click="copyId(myMemberGroupDetails.dgroupId)">
                              ID: {{ myMemberGroupDetails.dgroupId }} <Copy :size="12" />
-                         </div>
-                         <div class="info-badge lifestage-badge">
-                           {{ LIFE_STAGE_OPTIONS.find(o => o.id === myMemberGroupDetails.lifeStage)?.label || 'Professional' }}
                          </div>
                     </div>
                     <div class="hero-details">
@@ -441,9 +435,6 @@ function isPersonLeader(person) {
                          <div class="info-badge id-badge" @click="copyId(primaryDownlineGroup.dgroupId)">
                              ID: {{ primaryDownlineGroup.dgroupId }} <Copy :size="12" />
                          </div>
-                         <div class="info-badge lifestage-badge">
-                           {{ LIFE_STAGE_OPTIONS.find(o => o.id === primaryDownlineGroup.lifeStage)?.label || 'Professional' }}
-                         </div>
                     </div>
                     <div class="hero-details">
                        <div class="detail-tag time">
@@ -496,17 +487,6 @@ function isPersonLeader(person) {
           <div class="form-section">
             <label>Capacity</label>
             <input type="number" v-model="editGroupForm.capacity" class="modern-input" />
-          </div>
-
-          <div class="form-section">
-            <label>Life Stage</label>
-            <div class="selector-grid">
-              <button v-for="opt in LIFE_STAGE_OPTIONS" :key="opt.id" 
-                class="selector-btn" :class="{ selected: editGroupForm.lifeStage === opt.id }"
-                @click="editGroupForm.lifeStage = opt.id">
-                <component :is="opt.icon" :size="14" /> {{ opt.label }}
-              </button>
-            </div>
           </div>
 
           <div class="form-section">
@@ -564,8 +544,12 @@ function isPersonLeader(person) {
 
           <div class="profile-details-list">
              <div class="detail-row-clean">
-                <span class="d-label">Life Stage</span>
+                <span class="d-label">Age Group</span>
                 <span class="d-value">{{ getMinistry(selectedPerson) }}</span>
+             </div>
+             <div class="detail-row-clean">
+                <span class="d-label">Life Stage</span>
+                <span class="d-value">{{ formatLifeStage(selectedPerson) }}</span>
              </div>
              <div class="detail-row-clean">
                 <span class="d-label">Birthday</span>

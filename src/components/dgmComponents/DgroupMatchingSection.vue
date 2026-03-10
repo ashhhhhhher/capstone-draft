@@ -332,7 +332,7 @@ async function adminOverrideRequest(req, action) {
                   <Check :size="10" /> {{ reason }}
                 </span>
                 
-                <!-- Dynamic Group Type Tag -->
+                <!-- Dynamic Group Type Tag (ELEVATE or B1G or Mixed) -->
                 <span class="match-tag type-tag" :class="match.groupType === 'Mixed Aged Group' ? 'mixed' : 'standard'">
                    {{ match.groupType }}
                 </span>
