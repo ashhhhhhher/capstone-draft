@@ -2,11 +2,12 @@
 import { ref, reactive, computed } from 'vue'
 import { useAuthStore } from '../../stores/auth'
 import { useMembersStore } from '../../stores/members'
+import { calculateDgroupMatches } from '../../utils/DgroupMatcher'
 import { 
   Music, BookOpen, Heart, Activity, Palette, Clock, CheckCircle, X, 
   Gamepad2, Trophy, Laptop, UtensilsCrossed, Plane, Dumbbell, 
   Film, Camera, Leaf, Sparkles, ArrowRight, ChevronLeft, Calendar,
-  Users, Target, Info, GraduationCap, School, Briefcase
+  Users, Target, Info, GraduationCap, School, Briefcase, Star, Cake
 } from 'lucide-vue-next'
 
 const props = defineProps({
@@ -55,100 +56,91 @@ const DAY_OPTIONS = [
   { id: 'flexible', label: 'Flexible', icon: Sparkles }
 ]
 
-// Matching Logic
+// Updated Matching Logic using the Unified Utility and formatting for new UI
 const recommendedDgroups = computed(() => {
   if (seekerStep.value !== 3) return []
 
-  const seekerLifeStage =
-    myProfile.value?.finalTags?.lifeStage ||
-    myProfile.value?.lifeStage ||
-    null
+  const seeker = {
+    age: myProfile.value?.age,
+    gender: myProfile.value?.gender,
+    lifeStage: myProfile.value?.finalTags?.lifeStage || myProfile.value?.lifeStage,
+    prefs: seekerPrefs
+  }
 
-  const leaders = membersStore.leaders.filter(l => {
-    if (l.gender && myProfile.value?.gender && l.gender !== myProfile.value.gender) return false
+  // Calculate scores and take the top matches
+  const rawMatches = calculateDgroupMatches(
+    seeker, 
+    membersStore.leaders, 
+    membersStore.activeMembers
+  ).slice(0, 5)
 
-    const currentCount = membersStore.activeMembers
-      .filter(m => m.dgroupLeader === `${l.firstName} ${l.lastName}`).length
-
-    const capacity = l.dgroupCapacity || 12
-    return currentCount < capacity
-  })
-
-  return leaders.map(l => {
-    let score = 0
-    let reasons = []
-
-    const groupMembers = membersStore.activeMembers
-      .filter(m => m.dgroupLeader === `${l.firstName} ${l.lastName}`)
-
-    // 🔥 LIFE STAGE SCORING BASED ON MEMBERS (NOT LEADER)
-      let sameLifeStageCount = 0
-
-      if (seekerLifeStage) {
-        sameLifeStageCount = groupMembers.filter(m =>
-          m.finalTags?.lifeStage === seekerLifeStage ||
-          m.lifeStage === seekerLifeStage
-        ).length
-
-        if (groupMembers.length > 0) {
-          const ratio = sameLifeStageCount / groupMembers.length
-          const lifeStageScore = Math.round(ratio * 40)
-
-          score += lifeStageScore
-
-          if (sameLifeStageCount > 0) {
-            reasons.push(`${sameLifeStageCount} members share your life stage`)
-          }
+  // Format data specifically for the new clean UI structure
+  return rawMatches.map((group, index) => {
+    const groupMembers = membersStore.activeMembers.filter(m => m.dgroupLeaderId === group.leaderId || m.dgroupLeader === group.leaderName);
+    
+    let minAge = Infinity, maxAge = -Infinity;
+    const lifeStageCounts = {};
+    
+    groupMembers.forEach(m => {
+        if (m.age) {
+            minAge = Math.min(minAge, Number(m.age));
+            maxAge = Math.max(maxAge, Number(m.age));
         }
-      }
+        const ls = m.finalTags?.lifeStage || m.lifeStage;
+        if (ls) {
+            lifeStageCounts[ls] = (lifeStageCounts[ls] || 0) + 1;
+        }
+    });
 
-    // INTEREST MATCHING
-    const groupInterests = l.dgroupDetails?.interests || []
-    const myInterests = seekerPrefs.interests || []
-
-    if (myInterests.length > 0 && groupInterests.length > 0) {
-      const intersection = groupInterests.filter(i => myInterests.includes(i))
-      if (intersection.length > 0) {
-        const interestScore = Math.min(
-          30,
-          (intersection.length / myInterests.length) * 30 + 10
-        )
-        score += interestScore
-        reasons.push(`${intersection.length} Shared Interests`)
-      }
+    let ageRange = 'N/A';
+    if (minAge !== Infinity) {
+        ageRange = minAge === maxAge ? `${minAge}` : `${minAge} - ${maxAge}`;
+    } else if (group.age) {
+        ageRange = `${group.age}`;
     }
-
-    // SCHEDULE MATCHING
-    const groupTime = l.dgroupDetails?.meetingTime || 'Flexible'
-
-    if (seekerPrefs.meetingTime.includes('Flexible') || groupTime === 'Flexible') {
-      score += 30
-      reasons.push('Schedule Match')
-    } else if (seekerPrefs.meetingTime.includes(groupTime)) {
-      score += 30
-      reasons.push('Exact Time Match')
+    
+    let lifeStageMode = null;
+    let maxCount = 0;
+    for (const [ls, count] of Object.entries(lifeStageCounts)) {
+        if (count > maxCount) {
+            maxCount = count;
+            lifeStageMode = ls;
+        }
     }
+    if (!lifeStageMode) {
+        lifeStageMode = group.finalTags?.lifeStage || group.lifeStage || 'Mixed';
+    }
+    
+    const formatLs = (ls) => {
+        if(ls === 'young-professional' || ls === 'Young Professional') return 'Young Professional';
+        if(ls === 'college-university' || ls === 'College/University') return 'College/University';
+        if(ls === 'high-school' || ls === 'High School') return 'High School';
+        return ls;
+    };
+
+    const matchedOn = [];
+    if (group.matchBreakdown.ageScore >= 30) matchedOn.push({ label: 'AGE', tagClass: 'tag-age' });
+    if (group.matchBreakdown.lifeStageScore >= 15) matchedOn.push({ label: 'LIFE STAGE', tagClass: 'tag-lifestage' });
+    if (group.matchBreakdown.scheduleScore >= 10) matchedOn.push({ label: 'SCHEDULE', tagClass: 'tag-schedule' });
+    if (group.matchBreakdown.interestScore > 0) matchedOn.push({ label: 'INTERESTS', tagClass: 'tag-interests' });
+
+    const nameParts = group.leaderName.split(' ');
+    const initials = nameParts.length > 1 ? nameParts[0][0] + nameParts[nameParts.length-1][0] : nameParts[0][0];
+
+    const leaderObj = membersStore.leaders.find(l => l.id === group.leaderId);
+    const leaderPhoto = leaderObj?.photoURL || leaderObj?.profilePicture || null;
 
     return {
-      leaderId: l.id,
-      leaderName: `${l.firstName} ${l.lastName}`,
-      dgroupName: l.dgroupName || `${l.firstName}'s Dgroup`,
-      dgroupId: l.dgroupId || 'N/A',
-      description: l.dgroupDescription || "A group of individuals growing together in faith and community.",
-      score: Math.min(100, Math.round(score)),
-      reasons,
-      interests: groupInterests,
-      capacity: l.dgroupCapacity || 12,
-      memberCount: groupMembers.length,
-      avgAge: l.age || 25,
-      meetingTime: groupTime,
-      meetingDays: l.dgroupDetails?.meetingDays || 'Flexible',
-      sameLifeStageCount,
-      seekerLifeStage
-    }
-  })
-  .sort((a, b) => b.score - a.score)
-  .slice(0, 5)
+        ...group,
+        originalIndex: index,
+        ageRange,
+        lifeStageMode: formatLs(lifeStageMode),
+        matchedOn,
+        leaderInitials: initials.toUpperCase(),
+        leaderPhoto,
+        leaderShortName: nameParts.length > 1 ? `${nameParts[0]} ${nameParts[nameParts.length-1][0]}.` : group.leaderName
+    };
+  });
 })
 
 function toggleInterest(id) {
@@ -162,8 +154,6 @@ function toggleInterest(id) {
     return
   }
 }
-
-
 
 function toggleTime(label) {
   const idx = seekerPrefs.meetingTime.indexOf(label)
@@ -185,6 +175,11 @@ function toggleDay(label) {
       if (idx === -1) seekerPrefs.daysAvailable.push(label)
       else seekerPrefs.daysAvailable.splice(idx, 1)
   }
+}
+
+function formatInterestLabel(id) {
+  const opt = INTEREST_OPTIONS.find(o => o.id === id);
+  return opt ? opt.label : id;
 }
 
 async function handleRequestJoin(group) {
@@ -346,70 +341,83 @@ const isNextDisabled = computed(() => {
         </div>
 
         <div class="recommendation-scroller ranked-list">
-          <div v-for="(group, index) in recommendedDgroups" :key="group.leaderId" class="match-rank-card">
-            <div v-if="index === 0" class="best-match-badge">BEST MATCH</div>
-            
-            <div class="rank-card-main">
-              <div class="rank-left">
-                <div class="group-icon-lg">
-                  <component :is="INTEREST_OPTIONS.find(i => group.interests.includes(i.id))?.icon || Users" :size="32" color="#3B82F6" />
+          
+          <!-- NEW CARD UI (More Compact & Colored Borders) -->
+          <div v-for="(group, index) in recommendedDgroups" :key="group.leaderId" class="match-card-v2" :class="{'best-match-border': index === 0}">
+            <div class="mc-header">
+                <div class="mc-avatar">
+                    <img v-if="group.leaderPhoto" :src="group.leaderPhoto" />
+                    <span v-else>{{ group.leaderInitials }}</span>
                 </div>
-                <div class="group-details-col">
-                  <div class="group-name-row">
+                <div class="mc-title-col">
+                    <div v-if="group.originalIndex === 0" class="mc-badge"><Star :size="10" fill="currentColor" /> BEST MATCH</div>
                     <h3>{{ group.dgroupName }}</h3>
-                    <span class="match-pill">{{ group.score }}% match</span>
-                  </div>
-                  <p class="group-desc">{{ group.description }}</p>
-                  
-                  <div class="tag-row">
-                    <span v-for="tag in group.interests.slice(0, 4)" :key="tag" class="interest-tag-pill">
-                      <component :is="INTEREST_OPTIONS.find(i => i.id === tag)?.icon" :size="12" />
-                      {{ INTEREST_OPTIONS.find(i => i.id === tag)?.label || tag }}
-                    </span>
-                  </div>
-
-                  <div class="stats-row">
-                  <div class="stat-item">
-                    <Users :size="14" />
-                    {{ group.memberCount }} members
-                  </div>
-
-                  <div 
-                    v-if="group.sameLifeStageCount > 0"
-                    class="stat-item"
-                  >
-                    {{ group.sameLifeStageCount }}
-                    in the same life stage
-                    
-                  </div>
-
-                  <div class="stat-item">
-                    Age Bracket: {{ group.avgAge }}
-                  </div>
+                    <p>Led by <span>{{ group.leaderShortName }}</span></p>
                 </div>
-                  
-                  <div class="schedule-info-row">
-                    <Clock :size="14" /> {{ group.meetingTime }} • {{ group.meetingDays }}
-                  </div>
+                <div class="mc-ring-col">
+                    <svg class="circular-chart" viewBox="0 0 36 36">
+                        <path class="circle-bg" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                        <path class="circle" :stroke-dasharray="group.totalScore + ', 100'" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                    </svg>
+                    <div class="percentage">
+                        <span class="num">{{ group.totalScore }}%</span>
+                        <span class="lbl">MATCH</span>
+                    </div>
                 </div>
-              </div>
-
-              <div class="rank-right">
-                <div class="score-circle">
-                  <svg class="progress-ring" width="64" height="64">
-                    <circle class="progress-ring__background" stroke="#F1F5F9" stroke-width="5" fill="transparent" r="26" cx="32" cy="32"/>
-                    <circle class="progress-ring__circle" stroke="#3B82F6" stroke-width="5" fill="transparent" r="26" cx="32" cy="32" :stroke-dasharray="2 * Math.PI * 26" :stroke-dashoffset="2 * Math.PI * 26 * (1 - group.score / 100)"/>
-                  </svg>
-                  <span class="score-number">{{ group.score }}</span>
-                </div>
-                <button class="btn-join-match" @click="handleRequestJoin(group)">Join</button>
-              </div>
             </div>
 
-            <div class="progress-bar-bottom">
-              <div class="progress-fill" :style="{ width: group.score + '%' }"></div>
+            <div class="mc-grid">
+                <div class="mc-info-box">
+                    <div class="mc-icon"><Cake :size="16" /></div>
+                    <div class="mc-info-text">
+                        <span class="lbl">AGE RANGE</span>
+                        <span class="val">{{ group.ageRange }}</span>
+                        <span class="sub" v-if="group.matchBreakdown.roundedAverageAge">Typical age: {{ group.matchBreakdown.roundedAverageAge }}</span>
+                    </div>
+                </div>
+                <div class="mc-info-box">
+                    <div class="mc-icon"><GraduationCap :size="16" /></div>
+                    <div class="mc-info-text">
+                        <span class="lbl">LIFE STAGE</span>
+                        <span class="val">{{ group.lifeStageMode }}</span>
+                    </div>
+                </div>
+                <div class="mc-info-box full">
+                    <div class="mc-icon"><Calendar :size="16" /></div>
+                    <div class="mc-info-text">
+                        <span class="lbl">SCHEDULE</span>
+                        <span class="val">{{ group.meetingDays }} · {{ group.meetingTime }}</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="mc-interests" v-if="group.interests.length">
+                <span class="lbl">INTERESTS</span>
+                <div class="mc-pill-row">
+                    <span class="mc-interest-pill" v-for="i in group.interests" :key="i">{{ formatInterestLabel(i) }}</span>
+                </div>
+            </div>
+
+            <hr class="mc-divider" />
+
+            <div class="mc-footer">
+                <div class="mc-members">
+                    <Users :size="16" /> {{ group.memberCount }} Members
+                </div>
+                <div class="mc-matched-row" v-if="group.matchedOn.length">
+                    <span class="mc-matched-lbl">MATCHED ON</span>
+                    <span v-for="tag in group.matchedOn" :key="tag.label" class="match-tag" :class="tag.tagClass">
+                        <span class="dot"></span> {{ tag.label }}
+                    </span>
+                </div>
+            </div>
+
+            <div class="mc-action">
+                <button class="btn-request" @click="handleRequestJoin(group)">Request to Join</button>
             </div>
           </div>
+          <!-- END NEW CARD UI -->
+
         </div>
 
         <div class="footer-actions-column">
@@ -562,100 +570,160 @@ h1 { font-size: 32px; font-weight: 900; margin: 0 0 10px; color: #0F172A; letter
 
 .card-label { font-size: 13px; font-weight: 800; color: #1E293B; text-align: center; }
 
-/* Life Stage Layout */
-.lifestage-grid {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  margin-bottom: 30px;
-}
-
-.lifestage-card {
-  background: #FFFFFF;
-  border: 2px solid #F1F5F9;
-  border-radius: 24px;
-  padding: 24px;
-  display: flex;
-  align-items: center;
-  gap: 20px;
-  cursor: pointer;
-  transition: all 0.3s;
-}
-
-.lifestage-card:hover { border-color: #3B82F6; transform: translateX(8px); }
-.lifestage-card.selected { background: #EFF6FF; border-color: #3B82F6; }
-
-.icon-wrapper-lg {
-  width: 64px; height: 64px;
-  border-radius: 20px;
-  display: flex; align-items: center; justify-content: center;
-}
-
-.card-label-lg { font-size: 20px; font-weight: 800; color: #0F172A; }
-
-.section-title {
-  font-size: 12px; font-weight: 800; color: #3B82F6;
-  text-transform: uppercase; margin-bottom: 16px; letter-spacing: 0.1em;
-}
-
 /* Schedule */
 .interest-card.compact { padding: 16px 8px; border-radius: 20px; }
 .card-label.sm { font-size: 11px; }
 
-/* Matches */
-.match-rank-card {
-  background: #FFFFFF;
-  border: 2px solid #F1F5F9;
-  border-radius: 28px;
-  overflow: hidden;
-  position: relative;
+/* ========================================================
+   NEW MATCH CARD V2 (Mockup Match - Compact Version)
+   ======================================================== */
+.match-card-v2 {
+  background: white;
+  border: 2px solid #E0E7FF; /* Colored border instead of gray */
+  border-radius: 20px;
+  padding: 20px 24px; /* Reduced from 24px 32px */
+  box-shadow: 0 4px 6px -1px rgba(99, 102, 241, 0.05), 0 10px 15px -3px rgba(99, 102, 241, 0.05);
+  margin-bottom: 16px; /* Reduced from 24px */
   transition: all 0.3s;
-  margin-bottom: 20px;
 }
-.match-rank-card:hover { border-color: #3B82F6; box-shadow: 0 12px 20px -5px rgba(0, 0, 0, 0.05); }
-
-.best-match-badge {
-  position: absolute; top: 0; right: 0;
-  background: #3B82F6; color: white;
-  font-size: 11px; font-weight: 900;
-  padding: 6px 16px; border-bottom-left-radius: 20px; z-index: 5;
+.match-card-v2.best-match-border {
+  border: 2px solid #6366F1; /* Stronger colored border for the top match */
+  background: #FAFAFF; /* Subtle tint for best match */
 }
+.mc-header {
+  display: flex;
+  align-items: center;
+  gap: 16px; /* Reduced from 20px */
+  margin-bottom: 16px; /* Reduced from 24px */
+}
+.mc-avatar {
+  width: 56px; /* Reduced from 64px */
+  height: 56px; /* Reduced from 64px */
+  border-radius: 14px;
+  background: #6366F1;
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px; /* Reduced from 24px */
+  font-weight: 800;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.mc-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.mc-title-col {
+  flex: 1;
+}
+.mc-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: #EEF2FF;
+  color: #6366F1;
+  font-size: 10px; /* Reduced */
+  font-weight: 800;
+  padding: 4px 10px;
+  border-radius: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 6px;
+}
+.mc-title-col h3 {
+  margin: 0 0 2px 0; /* Reduced */
+  font-size: 18px; /* Reduced from 22px */
+  font-weight: 900;
+  color: #111827;
+}
+.mc-title-col p {
+  margin: 0;
+  font-size: 13px; /* Reduced from 15px */
+  color: #6B7280;
+}
+.mc-title-col p span {
+  font-weight: 600;
+  color: #4B5563;
+}
+.mc-ring-col {
+  position: relative;
+  width: 60px; /* Reduced from 72px */
+  height: 60px; /* Reduced from 72px */
+  flex-shrink: 0;
+}
+.circular-chart { display: block; max-width: 100%; max-height: 100%; }
+.circle-bg { fill: none; stroke: #EEF2FF; stroke-width: 3.5; }
+.circle { fill: none; stroke: #4F46E5; stroke-width: 3.5; stroke-linecap: round; transition: stroke-dasharray 1s ease-out; }
+.mc-ring-col .percentage {
+  position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+}
+.mc-ring-col .num { font-size: 15px; /* Reduced from 18px */ font-weight: 900; color: #4F46E5; line-height: 1.1; }
+.mc-ring-col .lbl { font-size: 7px; /* Reduced */ font-weight: 800; color: #818CF8; letter-spacing: 0.05em; }
 
-.rank-card-main { padding: 32px; display: flex; justify-content: space-between; align-items: center; }
-.rank-left { display: flex; gap: 24px; flex: 1; }
-
-.group-icon-lg {
-  width: 72px; height: 72px;
+.mc-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px; /* Reduced from 16px */
+  margin-bottom: 12px; /* Reduced from 16px */
+}
+.mc-info-box {
+  background: #FFFFFF; /* Changed to match mockup slightly better */
+  border: 1px solid #F1F5F9;
+  border-radius: 12px; /* Reduced */
+  padding: 12px; /* Reduced from 16px */
+  display: flex;
+  gap: 10px; /* Reduced from 12px */
+  align-items: flex-start;
+}
+.mc-info-box.full { grid-column: span 2; margin-bottom: 16px; /* Reduced from 24px */ }
+.mc-icon {
   background: #F8FAFC;
-  border-radius: 24px; display: flex;
-  align-items: center; justify-content: center; flex-shrink: 0;
-  border: 2px solid #F1F5F9;
+  padding: 6px; /* Reduced from 8px */
+  border-radius: 8px;
+  color: #6366F1;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
 }
+.mc-info-text { display: flex; flex-direction: column; gap: 2px; }
+.mc-info-text .lbl { font-size: 10px; /* Reduced from 11px */ font-weight: 800; color: #94A3B8; text-transform: uppercase; letter-spacing: 0.05em; }
+.mc-info-text .val { font-size: 14px; /* Reduced from 16px */ font-weight: 700; color: #1E293B; }
+.mc-info-text .sub { font-size: 11px; /* Reduced from 13px */ font-weight: 500; color: #64748B; margin-top: 2px; }
 
-.group-name-row h3 { margin: 0; font-size: 22px; font-weight: 900; color: #0F172A; }
-.match-pill { background: #EFF6FF; color: #3B82F6; font-size: 12px; font-weight: 800; padding: 4px 12px; border-radius: 10px; }
+.mc-interests { margin-bottom: 16px; /* Reduced from 28px */ }
+.mc-interests .lbl { display: block; font-size: 10px; /* Reduced */ font-weight: 800; color: #94A3B8; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 8px; }
+.mc-pill-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.mc-interest-pill { background: #F8FAFC; border: 1px solid #E2E8F0; color: #475569; font-size: 12px; /* Reduced */ font-weight: 600; padding: 6px 12px; /* Reduced */ border-radius: 16px; }
 
-.group-desc { font-size: 14px; color: #64748B; margin: 8px 0 16px; line-height: 1.6; font-weight: 500; }
+.mc-divider { border: 0; height: 1px; background: #F1F5F9; margin: 0 0 16px 0; /* Reduced */ }
 
-.tag-row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 20px; }
-.interest-tag-pill { background: #F8FAFC; color: #475569; font-size: 11px; font-weight: 700; padding: 6px 12px; border-radius: 12px; display: flex; align-items: center; gap: 6px; border: 1px solid #F1F5F9; }
+.mc-footer { display: flex; align-items: center; justify-content: flex-start; flex-wrap: wrap; gap: 16px; /* Reduced */ margin-bottom: 16px; /* Reduced */ }
+.mc-members { display: flex; align-items: center; gap: 6px; font-size: 13px; /* Reduced */ font-weight: 700; color: #64748B; }
+.mc-matched-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.mc-matched-lbl { font-size: 10px; /* Reduced */ font-weight: 800; color: #94A3B8; text-transform: uppercase; letter-spacing: 0.05em; margin-right: 4px; }
 
-.stats-row { display: flex; gap: 20px; font-size: 13px; color: #64748B; margin-bottom: 8px; font-weight: 600; }
-.stat-item { display: flex; align-items: center; gap: 6px; }
+.match-tag { display: inline-flex; align-items: center; gap: 4px; font-size: 9px; /* Reduced */ font-weight: 800; padding: 4px 8px; /* Reduced */ border-radius: 12px; text-transform: uppercase; letter-spacing: 0.05em; }
+.match-tag .dot { width: 6px; height: 6px; border-radius: 50%; }
+.tag-age { background: #FEF3C7; color: #92400E; } .tag-age .dot { background: #F59E0B; }
+.tag-lifestage { background: #F3E8FF; color: #6B21A8; } .tag-lifestage .dot { background: #A855F7; }
+.tag-schedule { background: #DCFCE7; color: #166534; } .tag-schedule .dot { background: #22C55E; }
+.tag-interests { background: #FCE7F3; color: #9D174D; } .tag-interests .dot { background: #EC4899; }
 
-.rank-right { display: flex; flex-direction: column; align-items: center; gap: 20px; padding-left: 28px; border-left: 2px solid #F1F5F9; }
-
-.score-circle { position: relative; display: flex; align-items: center; justify-content: center; }
-.score-number { position: absolute; font-size: 18px; font-weight: 900; color: #0F172A; }
-.progress-ring__circle { transition: stroke-dashoffset 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275); transform: rotate(-90deg); transform-origin: 50% 50%; }
-
-.btn-join-match {
-  background: #0F172A; color: white; border: none; padding: 10px 32px; border-radius: 14px; font-weight: 800; font-size: 14px; cursor: pointer; transition: all 0.2s;
+.mc-action .btn-request {
+  background: #0F172A;
+  color: white;
+  border: none;
+  padding: 12px 24px; /* Reduced */
+  border-radius: 12px;
+  font-weight: 700;
+  font-size: 14px; /* Reduced */
+  cursor: pointer;
+  transition: all 0.2s;
+  width: auto;
 }
-.btn-join-match:hover { background: #3B82F6; transform: translateY(-2px); box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3); }
-
-.progress-bar-bottom { height: 6px; background: #F1F5F9; width: 100%; }
-.progress-fill { height: 100%; background: linear-gradient(to right, #3B82F6, #60A5FA); border-radius: 0 10px 10px 0; }
+.mc-action .btn-request:hover { background: #1E293B; transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
 
 /* Actions */
 .btn-next-step {
