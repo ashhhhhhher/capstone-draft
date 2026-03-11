@@ -71,17 +71,8 @@ async function finalizeAttendance(member, ministryRole) {
 
 async function handleVolunteerSelection(ministry) {
   if (!pendingMember.value) return
-  const member = pendingMember.value;
-  // Ensure only one volunteer ministry is stored — replace any existing list
-  const updatedFinalTags = { ...member.finalTags, isVolunteer: true, volunteerMinistry: [ministry], isRegular: false };
-  const updatedMember = { ...member, finalTags: updatedFinalTags };
-  try {
-    // Persist the change and update the pending member to reflect the latest finalTags
-    await membersStore.updateMember(updatedMember);
-    pendingMember.value = updatedMember;
-  } catch (e) { console.error(e) }
-  // Use the updated pendingMember when finalizing attendance
-  finalizeAttendance(pendingMember.value, ministry)
+  const member = pendingMember.value
+    finalizeAttendance(member, ministry)
 }
 
 // When a member who is currently tagged as a volunteer is scanned butchosen as regular,

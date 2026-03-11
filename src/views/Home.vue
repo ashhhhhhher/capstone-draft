@@ -193,11 +193,23 @@ async function handleEndCurrentEvent() {
   <Modal v-if="showCalendarModal" @close="showCalendarModal = false" size="xl"><CalendarModal @close="showCalendarModal = false" @createEvent="handleCreateEvent" @editEvent="handleEditEvent" /></Modal>
   <Modal v-if="showEventDetailsModal" @close="showEventDetailsModal = false" size="xl">
     <div class="event-details-content">
-      <div class="details-header"><h3>{{ currentEvent?.name }}</h3><span class="badge">{{ currentEvent?.eventType }}</span></div>
+      <div class="details-header">
+        <h3>{{ currentEvent?.name }}</h3>
+        <span v-if="currentEvent?.eventType" class="badge">{{ currentEvent?.eventType }}</span>
+      </div>
       <div class="details-grid">
-        <div class="info-item"><strong>Date:</strong> {{ formattedEventDate }}</div>
-        <div class="info-item"><strong>Location:</strong> {{ currentEvent?.eventLocation }}</div>
-        <div class="info-item"><strong>Speaker:</strong> {{ currentEvent?.eventSpeaker || 'TBA' }}</div>
+        <div class="info-item">
+          <span class="info-label">Date</span>
+          <span class="info-value">{{ formattedEventDate }}</span>
+        </div>
+        <div class="info-item">
+          <span class="info-label">Location</span>
+          <span class="info-value">{{ currentEvent?.eventLocation || 'TBA' }}</span>
+        </div>
+        <div class="info-item">
+          <span class="info-label">Speaker</span>
+          <span class="info-value">{{ currentEvent?.eventSpeaker || 'TBA' }}</span>
+        </div>
       </div>
       <div class="actions">
         <button class="end-event-btn" @click="handleEndCurrentEvent">End Event</button>
@@ -239,9 +251,20 @@ async function handleEndCurrentEvent() {
 .create-btn { background: #0d47a1; color: #fff; border: none; padding: 12px 28px; border-radius: 12px; font-weight: 700; margin-top: 16px; cursor: pointer; box-shadow: 0 4px 12px rgba(13, 71, 161, 0.2); }
 @media (max-width: 1200px) { .hero-layout { grid-template-columns: 1fr; } .stats-grid { grid-template-columns: 1fr 1fr; } }
 @media (max-width: 640px) { .dashboard-container { padding: 0; } .main-content { padding: 16px; } .stats-grid { grid-template-columns: 1fr; } .events-grid { grid-template-columns: 1fr; } }
-.event-details-content { padding: 12px; }
-.details-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; }
-.details-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; background: #f8fafc; padding: 20px; border-radius: 16px; margin-bottom: 24px; }
-.end-event-btn { background: #ef4444; color: white; border: none; padding: 12px 24px; border-radius: 12px; font-weight: 700; cursor: pointer; }
-.cancel-btn { background: transparent; border: 1px solid #e2e8f0; padding: 12px 24px; border-radius: 12px; font-weight: 700; margin-left: 12px; cursor: pointer; }
+.event-details-content { padding: 16px; background: #fff; border-radius: 20px; }
+.details-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 20px; }
+.details-header h3 { margin: 0; font-size: 24px; font-weight: 900; letter-spacing: -0.02em; color: #0f172a; }
+.badge { background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; border-radius: 999px; padding: 6px 12px; font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; }
+.details-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-bottom: 20px; }
+.info-item { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 14px; padding: 14px 16px; display: flex; flex-direction: column; gap: 4px; }
+.info-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: #64748b; font-weight: 800; }
+.info-value { font-size: 15px; color: #0f172a; font-weight: 700; line-height: 1.35; }
+.actions { display: flex; justify-content: flex-end; gap: 10px; padding-top: 4px; }
+.end-event-btn,
+.cancel-btn { padding: 11px 20px; border-radius: 12px; font-weight: 800; cursor: pointer; transition: all 0.2s ease; }
+.end-event-btn { background: #ef4444; color: white; border: 1px solid #ef4444; box-shadow: 0 6px 14px rgba(239, 68, 68, 0.2); }
+.end-event-btn:hover { background: #dc2626; border-color: #dc2626; transform: translateY(-1px); }
+.cancel-btn { background: #fff; border: 1px solid #e2e8f0; color: #475569; }
+.cancel-btn:hover { background: #f8fafc; border-color: #cbd5e1; }
+@media (max-width: 900px) { .details-grid { grid-template-columns: 1fr; } .details-header h3 { font-size: 20px; } }
 </style>
