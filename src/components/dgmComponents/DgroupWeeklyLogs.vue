@@ -107,25 +107,23 @@ const filteredLogs = computed(() => {
 })
 
 const weekTotals = computed(() => {
-  return (filteredLogs.value || []).reduce((acc, log) => {
-    acc.c += (log.campusDmember || 0)
-    acc.e += (log.evangelized || 0)
-    acc.g += (log.guests || 0)
-    const entries = Object.entries(log.attendees || {})
-    const presentEntries = entries.filter(([id, a]) => a && a.isPresent)
-    acc.attendance += presentEntries.length
-    
-    presentEntries.forEach(([id, a]) => {
-      const tag = a.tag
-      if (tag === 'BDL') acc.bdl += 1
-      else if (tag === 'EDL') acc.edl += 1
-      else if (tag === 'BDM') acc.bdm += 1
-      else if (tag === 'EDM') acc.edm += 1
-      else if (tag === 'BN') acc.bn += 1
-      else if (tag === 'EN') acc.en += 1
-    })
-    return acc
-  }, { c:0, e:0, g:0, attendance:0, bdl:0, edl:0, bdm:0, edm:0, bn:0, en:0 })
+  const totals = { c: 0, e: 0, g: 0, attendance: 0, bdl: 0, edl: 0, bdm: 0, edm: 0, bn: 0, en: 0 };
+  for (const log of filteredLogs.value) {
+    totals.c += log.campusDmember || 0;
+    totals.e += log.evangelized || 0;
+    totals.g += log.guests || 0;
+
+    const presentAttendees = Object.values(log.attendees || {}).filter(a => a?.isPresent);
+    totals.attendance += presentAttendees.length;
+
+    for (const attendee of presentAttendees) {
+      const tagKey = attendee.tag?.toLowerCase();
+      if (totals.hasOwnProperty(tagKey)) {
+        totals[tagKey]++;
+      }
+    }
+  }
+  return totals;
 })
 
 const maxWeekStart = computed(() => {
