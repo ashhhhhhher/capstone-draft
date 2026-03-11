@@ -349,7 +349,7 @@ function clearTcError() {
               <ul>
                 <li>Attendance records for Dgroup meetings, WKND services, and B1G services</li>
                 <li>Meeting and service details (date, time, venue)</li>
-                <li>Reported statistics such as conversations, evangelized count, and guests</li>
+                <li>Reported statistics such as campus Dmember count, evangelized count, and guests</li>
               </ul>
 
               <h4>2. Purpose of Data Collection</h4>
