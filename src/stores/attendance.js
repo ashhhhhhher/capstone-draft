@@ -126,7 +126,7 @@ export const useAttendanceStore = defineStore('attendance', () => {
       attendees: attendanceMap,   // ⚠ match createDgroupEvent field name
       guests: typeof meetingData.guests === 'number' ? meetingData.guests : 0,
       evangelized: typeof meetingData.evangelized === 'number' ? meetingData.evangelized : 0,
-      conversations: typeof meetingData.conversations === 'number' ? meetingData.conversations : 0,
+      campusDmember: typeof meetingData.campusDmember === 'number' ? meetingData.campusDmember : 0,
       locked: !!meetingData.locked,
       ended: true,
       submittedBy:
