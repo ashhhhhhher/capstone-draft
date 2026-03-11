@@ -1,11 +1,11 @@
 <script setup>
 import { ref, computed } from 'vue'
 import ExportButton from './ExportButton.vue'
-import { ChevronLeft, ChevronRight, Plus, MapPin } from 'lucide-vue-next'
+import { ChevronLeft, ChevronRight, Plus, MapPin, Calendar, Edit2, Trash2 } from 'lucide-vue-next'
 import { storeToRefs } from 'pinia'
 import { useEventsStore } from '../../stores/events'
 
-const emit = defineEmits(['close', 'createEvent'])
+const emit = defineEmits(['close', 'createEvent', 'editEvent'])
 const props = defineProps({
   isMember: { type: Boolean, default: false }
 })
@@ -73,6 +73,43 @@ function handleDayClick(cell) {
         selectedDayEvents.value = cell.events;
     } else {
         selectedDayEvents.value = [];
+    }
+}
+
+function getEventStartDateTime(event) {
+    if (!event?.date) return null
+
+    const normalizedTime = event.time && /^\d{2}:\d{2}/.test(event.time)
+        ? event.time.slice(0, 5)
+        : '00:00'
+
+    const dateTime = new Date(`${event.date}T${normalizedTime}`)
+    return Number.isNaN(dateTime.getTime()) ? new Date(`${event.date}T00:00:00`) : dateTime
+}
+
+function isUpcomingEvent(event) {
+    const startDateTime = getEventStartDateTime(event)
+    if (!startDateTime) return false
+
+    return !event.ended && startDateTime >= new Date()
+}
+
+function handleEditEvent(event) {
+    emit('editEvent', event)
+}
+
+async function handleDeleteEvent(event) {
+    if (!event?.id) return
+
+    const confirmed = confirm(`Are you sure you want to delete "${event.name}"?`)
+    if (!confirmed) return
+
+    try {
+        await eventsStore.deleteEvent(event.id)
+        selectedDayEvents.value = selectedDayEvents.value.filter(item => item.id !== event.id)
+    } catch (error) {
+        console.error('Failed to delete event:', error)
+        alert('Failed to delete event.')
     }
 }
 
@@ -151,6 +188,22 @@ function handleDayClick(cell) {
                             <h4>{{ event.name }}</h4>
                         </div>
                         <div class="action-buttons" v-if="!props.isMember">
+                            <button
+                                v-if="isUpcomingEvent(event)"
+                                class="btn-icon edit-btn"
+                                title="Edit event"
+                                @click.stop="handleEditEvent(event)"
+                            >
+                                <Edit2 :size="14" />
+                            </button>
+                            <button
+                                v-if="isUpcomingEvent(event)"
+                                class="btn-icon delete-btn"
+                                title="Delete event"
+                                @click.stop="handleDeleteEvent(event)"
+                            >
+                                <Trash2 :size="14" />
+                            </button>
 
                             <!-- Export button: uses centralized export logic in ExportButton.vue -->
                             <ExportButton exportType="events" :singleEvent="event" iconOnly />
@@ -325,6 +378,10 @@ overflow-x: hidden;   }
     width: 30px; height: 30px; display: flex; align-items: center;
     justify-content: center; cursor: pointer;
 }
+.btn-icon.edit-btn { color: #1976D2; }
+.btn-icon.edit-btn:hover { background: #E3F2FD; }
+.btn-icon.delete-btn { color: #D32F2F; }
+.btn-icon.delete-btn:hover { background: #FFEBEE; }
 
 .detail-body p { margin: 0 0 5px 0; font-size: 14px; color: #333; }
 .location-detail { display: flex; align-items: center; gap: 5px; color: #546E7A; }
