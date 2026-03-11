@@ -50,7 +50,8 @@ const editGroupForm = reactive({
   capacity: 12,
   interests: [],
   meetingTime: 'Flexible',
-  meetingDays: 'Flexible'
+  meetingDays: 'Flexible',
+  civilStatus: 'N/A' // Added Civil Status Field
 })
 
 const dgroupIdInput = ref('')
@@ -165,6 +166,7 @@ function openEditGroupModal() {
   editGroupForm.interests = myProfile.value.dgroupDetails?.interests || []
   editGroupForm.meetingTime = myProfile.value.dgroupDetails?.meetingTime || 'Flexible'
   editGroupForm.meetingDays = myProfile.value.dgroupDetails?.meetingDays || 'Flexible'
+  editGroupForm.civilStatus = myProfile.value.civilStatus || 'N/A' // Load Civil Status
   showEditGroupModal.value = true
 }
 
@@ -179,6 +181,7 @@ async function saveGroupDetails() {
     await authStore.updateExtendedProfile({
       dgroupName: editGroupForm.dgroupName,
       dgroupCapacity: editGroupForm.capacity,
+      civilStatus: editGroupForm.civilStatus, // Save Civil Status
       dgroupDetails: {
         interests: editGroupForm.interests,
         meetingTime: editGroupForm.meetingTime,
@@ -482,6 +485,15 @@ function isPersonLeader(person) {
           <div class="form-section">
             <label>Group Name</label>
             <input v-model="editGroupForm.dgroupName" class="modern-input" />
+          </div>
+
+          <div class="form-section">
+            <label>Dgroup Leader Civil Status</label>
+            <select v-model="editGroupForm.civilStatus" class="modern-select">
+              <option value="N/A">N/A</option>
+              <option value="Single">Single</option>
+              <option value="Married">Married</option>
+            </select>
           </div>
 
           <div class="form-section">

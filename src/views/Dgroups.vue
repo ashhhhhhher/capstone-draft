@@ -11,7 +11,8 @@ import {
   ChevronDown, 
   ChevronUp, 
   Copy,
-  MoveRight
+  MoveRight,
+  X
 } from 'lucide-vue-next'
 
 // Components
@@ -19,7 +20,6 @@ import DgroupWeeklyLogs from '../components/dgmComponents/DgroupWeeklyLogs.vue'
 import DgroupMatchingSection from '../components/dgmComponents/DgroupMatchingSection.vue'
 import MemberDetailsModal from '../components/dgmComponents/MemberDetailsModal.vue' 
 import Modal from '../components/dgmComponents/Modal.vue'
-import MemberCard from '../components/dgmComponents/MemberCard.vue'
 
 import { useRoute } from 'vue-router'
 
@@ -27,7 +27,7 @@ import { useRoute } from 'vue-router'
 const membersStore = useMembersStore()
 const { activeMembers, leaders, seekers } = storeToRefs(membersStore)
 const attendanceStore = useAttendanceStore()
-const { currentEventAttendees } = storeToRefs(attendanceStore)
+const { currentEventAttendees, activeEvent } = storeToRefs(attendanceStore)
 
 // --- State ---
 const currentTab = ref('directory') // 'directory', 'attendance', 'matching'
@@ -42,6 +42,12 @@ const selectedMember = ref(null)
 const showMoveModal = ref(false)
 const memberToMove = ref(null)
 const newLeaderIdSelection = ref('')
+
+// --- Computed: Check if an event is currently active ---
+const isEventActive = computed(() => {
+    // If activeEvent exists or there are attendees marked, mechanics will be visible
+    return !!activeEvent?.value || (currentEventAttendees.value && currentEventAttendees.value.length > 0)
+})
 
 // --- Computed: Present Members Set ---
 const presentMemberIds = computed(() => {
@@ -64,10 +70,11 @@ const sortedDgroups = computed(() => {
       dgroupId: leader.dgroupId || 'No ID',
       leaderGender: leader.gender,
       capacity: leader.dgroupCapacity || 12,
-      // Pulling prescriptive data for display
       meetingTime: leader.dgroupDetails?.meetingTime || 'Flexible',
       meetingDays: leader.dgroupDetails?.meetingDays || 'Flexible',
       interests: leader.dgroupDetails?.interests || [],
+      leaderCivilStatus: leader.civilStatus || 'N/A', // Captured civil status for the badge
+      leaderObj: leader, // Pass entire leader object for details modal
       members: [],
       isLeaderPresent: presentMemberIds.value.has(leader.id)
     }
@@ -129,7 +136,7 @@ const INTEREST_MAP = {
 }
 
 const INTEREST_COLORS = {
-  'music': { color: '#2563EB', bg: '#EFF6FF', border: '#BFDBFE' },       // Blue
+  'music': { color: '#2563EB', bg: '#EFF6FF', border: '#BFDBFE' },      // Blue
   'arts': { color: '#DB2777', bg: '#FDF2F8', border: '#FBCFE8' },        // Pink
   'sports': { color: '#D97706', bg: '#FFFBEB', border: '#FEF3C7' },      // Amber
   'tech': { color: '#0891B2', bg: '#ECFEFF', border: '#A5F3FC' },        // Cyan
@@ -319,8 +326,8 @@ function handleRestoreMember(memberId) {
             class="dgroup-card"
             :class="{ 
               'expanded': expandedDgroups.includes(group.leaderName),
-              'is-present': group.isLeaderPresent,
-              'is-absent': !group.isLeaderPresent
+              'is-present': isEventActive && group.isLeaderPresent,
+              'is-absent': isEventActive && !group.isLeaderPresent
             }"
           >
             <div class="card-header" @click.self="toggleDgroup(group.leaderName)">
@@ -340,7 +347,8 @@ function handleRestoreMember(memberId) {
 
               <div class="header-content" @click="toggleDgroup(group.leaderName)">
                 <div class="group-title">
-                  <h4>{{ group.leaderName }}</h4>
+                  <h4>{{ group.dgroupName }}</h4>
+                  <div class="dl-subtitle">DL: {{ group.leaderName }}</div>
                 </div>
                 
                 <div class="id-row">
@@ -377,21 +385,50 @@ function handleRestoreMember(memberId) {
             </div>
 
             <div v-if="expandedDgroups.includes(group.leaderName)" class="card-body">
-               <div v-if="group.members.length === 0" class="no-members">No members assigned.</div>
-               <div class="members-list" v-else>
-                  <div class="member-list-item-wrapper" v-for="member in group.members" :key="member.id">
-                    <MemberCard 
-                      :member="member" 
-                      :isPresent="presentMemberIds.has(member.id)"
-                      :hideDetails="true"
-                      @click="openMemberDetails(member)"
-                      style="flex: 1;"
-                    />
-                    <!-- Move Member Button -->
-                    <button class="btn-move-member" @click.stop="openMoveModal(member)" title="Move to another Dgroup">
-                      <MoveRight :size="16" />
-                    </button>
+               <div class="members-list">
+                  
+                  <!-- LEADER HIGHLIGHT CARD -->
+                  <div class="leader-highlight-card" @click="openMemberDetails(group.leaderObj)">
+                    <div class="lh-avatar">
+                       <img v-if="group.leaderProfilePic" :src="group.leaderProfilePic" />
+                       <div v-else>{{ group.leaderFirstName.charAt(0) }}</div>
+                    </div>
+                    <div class="lh-info">
+                       <span class="lh-name">{{ group.leaderName }}</span>
+                       <div class="lh-tags">
+                          <span class="lh-tag dl-tag">DL</span>
+                          <span class="lh-tag civil-tag">{{ group.leaderCivilStatus }}</span>
+                       </div>
+                    </div>
+                    <!-- Attendance indicator active only during event -->
+                    <div v-if="isEventActive" class="attendance-badge" :class="group.isLeaderPresent ? 'present' : 'absent'">
+                        {{ group.isLeaderPresent ? 'Present' : 'Absent' }}
+                    </div>
                   </div>
+
+                  <div class="list-divider" v-if="group.members.length > 0">Members</div>
+
+                  <!-- MEMBERS LIST -->
+                  <div v-if="group.members.length === 0" class="no-members">No members assigned.</div>
+                  <template v-else>
+                    <div class="member-list-item-wrapper" v-for="member in group.members" :key="member.id">
+                      <!-- Custom Member Row replacing MemberCard for accurate Attendance Control -->
+                      <div class="custom-member-row" @click="openMemberDetails(member)">
+                        <div class="cm-avatar">{{ member.firstName.charAt(0) }}</div>
+                        <div class="cm-info">
+                           <span class="cm-name">{{ member.firstName }} {{ member.lastName }}</span>
+                        </div>
+                        <div v-if="isEventActive" class="attendance-badge" :class="presentMemberIds.has(member.id) ? 'present' : 'absent'">
+                           {{ presentMemberIds.has(member.id) ? 'Present' : 'Absent' }}
+                        </div>
+                      </div>
+                      
+                      <!-- Move Member Button -->
+                      <button class="btn-move-member" @click.stop="openMoveModal(member)" title="Move to another Dgroup">
+                        <MoveRight :size="16" />
+                      </button>
+                    </div>
+                  </template>
                </div>
             </div>
           </div>
@@ -408,8 +445,8 @@ function handleRestoreMember(memberId) {
             class="dgroup-card"
             :class="{ 
               'expanded': expandedDgroups.includes(group.leaderName),
-              'is-present': group.isLeaderPresent,
-              'is-absent': !group.isLeaderPresent
+              'is-present': isEventActive && group.isLeaderPresent,
+              'is-absent': isEventActive && !group.isLeaderPresent
             }"
           >
             <div class="card-header" @click.self="toggleDgroup(group.leaderName)">
@@ -429,7 +466,8 @@ function handleRestoreMember(memberId) {
 
               <div class="header-content" @click="toggleDgroup(group.leaderName)">
                 <div class="group-title">
-                  <h4>{{ group.leaderName }}</h4>
+                  <h4>{{ group.dgroupName }}</h4>
+                  <div class="dl-subtitle">DL: {{ group.leaderName }}</div>
                 </div>
                 
                 <div class="id-row">
@@ -466,21 +504,50 @@ function handleRestoreMember(memberId) {
             </div>
 
             <div v-if="expandedDgroups.includes(group.leaderName)" class="card-body">
-               <div v-if="group.members.length === 0" class="no-members">No members assigned.</div>
-               <div class="members-list" v-else>
-                  <div class="member-list-item-wrapper" v-for="member in group.members" :key="member.id">
-                    <MemberCard 
-                      :member="member" 
-                      :isPresent="presentMemberIds.has(member.id)"
-                      :hideDetails="true"
-                      @click="openMemberDetails(member)"
-                      style="flex: 1;"
-                    />
-                    <!-- Move Member Button -->
-                    <button class="btn-move-member" @click.stop="openMoveModal(member)" title="Move to another Dgroup">
-                      <MoveRight :size="16" />
-                    </button>
+               <div class="members-list">
+                  
+                  <!-- LEADER HIGHLIGHT CARD -->
+                  <div class="leader-highlight-card" @click="openMemberDetails(group.leaderObj)">
+                    <div class="lh-avatar">
+                       <img v-if="group.leaderProfilePic" :src="group.leaderProfilePic" />
+                       <div v-else>{{ group.leaderFirstName.charAt(0) }}</div>
+                    </div>
+                    <div class="lh-info">
+                       <span class="lh-name">{{ group.leaderName }}</span>
+                       <div class="lh-tags">
+                          <span class="lh-tag dl-tag">DL</span>
+                          <span class="lh-tag civil-tag">{{ group.leaderCivilStatus }}</span>
+                       </div>
+                    </div>
+                    <!-- Attendance indicator active only during event -->
+                    <div v-if="isEventActive" class="attendance-badge" :class="group.isLeaderPresent ? 'present' : 'absent'">
+                        {{ group.isLeaderPresent ? 'Present' : 'Absent' }}
+                    </div>
                   </div>
+
+                  <div class="list-divider" v-if="group.members.length > 0">Members</div>
+
+                  <!-- MEMBERS LIST -->
+                  <div v-if="group.members.length === 0" class="no-members">No members assigned.</div>
+                  <template v-else>
+                    <div class="member-list-item-wrapper" v-for="member in group.members" :key="member.id">
+                      <!-- Custom Member Row replacing MemberCard for accurate Attendance Control -->
+                      <div class="custom-member-row" @click="openMemberDetails(member)">
+                        <div class="cm-avatar">{{ member.firstName.charAt(0) }}</div>
+                        <div class="cm-info">
+                           <span class="cm-name">{{ member.firstName }} {{ member.lastName }}</span>
+                        </div>
+                        <div v-if="isEventActive" class="attendance-badge" :class="presentMemberIds.has(member.id) ? 'present' : 'absent'">
+                           {{ presentMemberIds.has(member.id) ? 'Present' : 'Absent' }}
+                        </div>
+                      </div>
+                      
+                      <!-- Move Member Button -->
+                      <button class="btn-move-member" @click.stop="openMoveModal(member)" title="Move to another Dgroup">
+                        <MoveRight :size="16" />
+                      </button>
+                    </div>
+                  </template>
                </div>
             </div>
           </div>
@@ -735,6 +802,15 @@ function handleRestoreMember(memberId) {
   color: #263238;
   font-weight: 700;
 }
+.dl-subtitle {
+  font-size: 13px;
+  color: #1976D2;
+  font-weight: 700;
+  margin-top: 2px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
 
 /* ID ROW */
 .id-row {
@@ -828,6 +904,74 @@ function handleRestoreMember(memberId) {
   flex-direction: column;
   gap: 8px;
 }
+
+/* NEW LEADER HIGHLIGHT CARD */
+.leader-highlight-card {
+  display: flex;
+  align-items: center;
+  background: #E3F2FD;
+  border: 1px solid #90CAF9;
+  border-radius: 12px;
+  padding: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+  width: 100%;
+  box-sizing: border-box;
+}
+.leader-highlight-card:hover {
+  background: #BBDEFB;
+}
+.lh-avatar {
+  width: 40px; 
+  height: 40px; 
+  border-radius: 50%; 
+  background: #1976D2; 
+  color: white; 
+  display: flex; 
+  align-items: center; 
+  justify-content: center; 
+  font-weight: bold; 
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.lh-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.lh-info { flex: 1; margin-left: 12px; display: flex; flex-direction: column; gap: 4px; }
+.lh-name { font-weight: 700; color: #0D47A1; font-size: 15px; }
+.lh-tags { display: flex; gap: 6px; }
+.lh-tag { font-size: 10px; padding: 2px 8px; border-radius: 12px; font-weight: 800; text-transform: uppercase; }
+.dl-tag { background: #1565C0; color: white; }
+.civil-tag { background: white; color: #1565C0; border: 1px solid #1565C0; }
+
+.list-divider {
+  font-size: 11px;
+  font-weight: 700;
+  color: #94A3B8;
+  text-transform: uppercase;
+  margin: 8px 0 4px 4px;
+}
+
+/* CUSTOM MEMBER ROW */
+.custom-member-row {
+  display: flex; 
+  align-items: center; 
+  background: white; 
+  border: 1px solid #E2E8F0; 
+  border-radius: 12px; 
+  padding: 10px 12px; 
+  flex: 1; 
+  cursor: pointer; 
+  transition: all 0.2s;
+}
+.custom-member-row:hover { border-color: #CBD5E1; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+.cm-avatar { width: 32px; height: 32px; border-radius: 50%; background: #F1F5F9; color: #475569; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 13px; flex-shrink: 0; }
+.cm-info { flex: 1; margin-left: 12px; }
+.cm-name { font-weight: 600; color: #334155; font-size: 14px; }
+
+/* SHARED ATTENDANCE BADGES */
+.attendance-badge { font-size: 11px; padding: 4px 10px; border-radius: 12px; font-weight: 700; display: inline-flex; align-items: center; margin-left: 8px; }
+.attendance-badge.present { background: #DCFCE7; color: #16A34A; }
+.attendance-badge.absent { background: #FEE2E2; color: #DC2626; }
+
 
 .no-members {
   text-align: center;
