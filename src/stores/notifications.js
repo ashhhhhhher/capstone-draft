@@ -272,7 +272,7 @@ async function notifyAdminsAbsenceReport(branchId, memberName, reportDetails) {
       type: "ABSENCE_REPORT",
       header: `Absence Report: ${memberName}`,
       body: reportDetails,
-      focus: "members"
+      reference: "members"
     });
   }
 }

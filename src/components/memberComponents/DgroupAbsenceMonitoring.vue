@@ -3,16 +3,18 @@ import { ref, computed, onMounted } from 'vue'
 import { useAuthStore } from '../../stores/auth'
 import { useChatStore } from '../../stores/chat'
 import { db } from '../../firebase'
-import { collection, query, where, getDocs, limit } from 'firebase/firestore'
+import { collection, query, where, getDocs, limit, addDoc, serverTimestamp } from 'firebase/firestore'
 import { useMembersStore } from '../../stores/members'
 import { useAttendanceStore } from '../../stores/attendance'
 import { useEventsStore } from '../../stores/events'
+import { useNotificationsStore } from '../../stores/notifications'
 
 const authStore = useAuthStore()
 const membersStore = useMembersStore()
 const attendanceStore = useAttendanceStore()
 const eventsStore = useEventsStore()
 const chatStore = useChatStore()
+const notificationsStore = useNotificationsStore()
 
 const isLoading = ref(true)
 const messagedMembers = ref(new Set())
@@ -189,8 +191,6 @@ function severityClass(count) {
 /* ------------------------------------------
    ACTIONS: message and report
 -------------------------------------------*/
-import { useNotificationsStore } from '../../stores/notifications'
-
 function messageMember(member) {
   if (!member.id) {
     alert('Member ID not found.')
@@ -211,7 +211,6 @@ function messageMember(member) {
 }
 
 async function reportToAdmin(member) {
-  const notificationsStore = useNotificationsStore()
   const memberName = `${member.firstName} ${member.lastName}`
   const reportDetails = `Member: ${memberName}\nDGroup Leader: ${member.dgroupLeader || '—'}\nConsecutive absences: ${member.consecutive}\nLast seen: ${member.lastSeenName || 'Never'} ${member.lastSeenDate ? `— ${member.lastSeenDate}` : ''}\nMember ID: ${member.id}`
 
@@ -222,7 +221,29 @@ async function reportToAdmin(member) {
       return
     }
 
-    await notificationsStore.notifyAdminsAbsenceReport(authStore.branchId, memberName, reportDetails)
+    const reportsRef = collection(db, 'branches', authStore.branchId, 'absenceReports')
+
+    await addDoc(reportsRef, {
+      type: 'ABSENCE_REPORT',
+      memberId: member.id,
+      memberName,
+      dgroupLeader: member.dgroupLeader || '',
+      consecutiveAbsences: member.consecutive,
+      lastSeenName: member.lastSeenName || '',
+      lastSeenDate: member.lastSeenDate || null,
+      reportDetails,
+      status: 'open',
+      reportedBy: authStore.userProfile?.id || null,
+      createdAt: serverTimestamp()
+    })
+
+    // Keep admin notifications for compatibility while storing the canonical report doc.
+    await notificationsStore.notifyAdminsAbsenceReport(
+      authStore.branchId,
+      memberName,
+      reportDetails
+    )
+
     reportedMembers.value.add(member.id)
     alert(`Report for ${memberName} sent to admin.`)
   } catch (err) {

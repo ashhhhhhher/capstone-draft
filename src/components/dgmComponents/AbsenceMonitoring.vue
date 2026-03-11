@@ -20,24 +20,21 @@ function buildAbsenceNotifications() {
 let unsub = null
 onMounted(() => {
   if (!authStore.branchId || !authStore.user?.uid) return
-  // Listen to admin's personal notification collection
-  const colRef = collection(db, 'branches', authStore.branchId, 'dgms', authStore.user.uid, 'notifications')
+  // Listen to branch-level absence reports collection
+  const colRef = collection(db, 'branches', authStore.branchId, 'absenceReports')
   const q = query(colRef, orderBy('createdAt', 'desc'))
 
   unsub = onSnapshot(q, (snap) => {
-    const items = []
-    snap.docs.forEach(d => {
+    reports.value = snap.docs.map(d => {
       const data = d.data()
-      // Filter for absence reports
-      if (data.type === 'ABSENCE_REPORT') {
-        // extract memberId from body if present
-        const memberIdMatch = data.body ? data.body.match(/Member ID:\s*(\S+)/m) : null
-        const memberId = memberIdMatch ? memberIdMatch[1] : null
-        const name = data.header.replace('Absence Report: ', '')
-        items.push({ id: d.id, name, memberId, message: data.body || '', createdAt: data.createdAt })
+      return {
+        id: d.id,
+        name: data.memberName || 'Unknown Member',
+        memberId: data.memberId || null,
+        message: data.reportDetails || '',
+        createdAt: data.createdAt
       }
     })
-    reports.value = items
   })
 })
 
@@ -66,7 +63,7 @@ async function archiveMember(memberId, reportId) {
 
     // Delete the report after successful archiving
     if (reportId) {
-      const reportRef = doc(db, 'branches', authStore.branchId, 'dgms', authStore.user.uid, 'notifications', reportId)
+      const reportRef = doc(db, 'branches', authStore.branchId, 'absenceReports', reportId)
       await deleteDoc(reportRef)
       reports.value = reports.value.filter(r => r.id !== reportId)
     }
@@ -87,7 +84,7 @@ async function deleteReport(reportId) {
   if (!confirm('Delete this report? This cannot be undone.')) return
 
   try {
-    const reportRef = doc(db, 'branches', authStore.branchId, 'dgms', authStore.user.uid, 'notifications', reportId)
+    const reportRef = doc(db, 'branches', authStore.branchId, 'absenceReports', reportId)
     await deleteDoc(reportRef)
     // Optimistically remove from local list; onSnapshot will update too
     reports.value = reports.value.filter(r => r.id !== reportId)
