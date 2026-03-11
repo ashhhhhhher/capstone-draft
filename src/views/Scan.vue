@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { Html5QrcodeScanner } from 'html5-qrcode'
 import { storeToRefs } from 'pinia'
 import { useMembersStore } from '../stores/members'
@@ -50,8 +50,7 @@ async function processMemberId(memberId) {
 
 async function finalizeAttendance(member, ministryRole) {
   isProcessing.value = true
-  // AUTOMATION: Pass the member's specific tag (DL/DM) to the store
-  // If they are a leader, we pass 'DL', otherwise default to 'DM'
+
   const tag = member.finalTags?.isDgroupLeader ? 'DL' : 'DM'
 
   const result = await attendanceStore.markAttendance(member.id, currentEvent.value.id, ministryRole, tag)
@@ -72,15 +71,11 @@ async function finalizeAttendance(member, ministryRole) {
 async function handleVolunteerSelection(ministry) {
   if (!pendingMember.value) return
   const member = pendingMember.value
-    finalizeAttendance(member, ministry)
+  finalizeAttendance(member, ministry)
 }
 
-// When a member who is currently tagged as a volunteer is scanned butchosen as regular,
-// update their profile so exports will place them under Regulars going forward.
 async function handleRegularAttendance() {
   if (!pendingMember.value) return
-  // Do NOT modify the member's persistent volunteer tag when they are marked as regular for this event.
-  // We only record per-event attendance (ministry='N/A') so their profile volunteer status remains until an admin changes it.
   await finalizeAttendance(pendingMember.value, 'N/A')
 }
 const cancelVolunteerPrompt = () => { showVolunteerPrompt.value = false; if (scannerInstance?.getState() === 3) scannerInstance.resume() }
@@ -93,7 +88,20 @@ function startScanner() {
   scannerInstance = new Html5QrcodeScanner("qr-reader", { fps: 10, qrbox: 250, rememberLastUsedCamera: true, supportedScanTypes: [0] }, false)
   scannerInstance.render(onScanSuccess, onScanError)
 }
-onUnmounted(() => { if (scannerInstance) scannerInstance.clear().catch(e => console.error(e)) })
+
+onBeforeUnmount(() => { 
+  const stopBtn = document.getElementById('html5-qrcode-button-camera-stop')
+  if (stopBtn) {
+    stopBtn.click()
+  }
+  if (scannerInstance) {
+    scannerInstance.clear().catch(error => {
+      // It's normal for this to throw an error during unmount, so we suppress it silently
+      console.warn("Scanner clear gracefully ignored: ", error)
+    })
+    scannerInstance = null
+  }
+})
 </script>
 
 <template>
