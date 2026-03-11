@@ -4,7 +4,7 @@ import { useMembersStore } from '../../stores/members'
 import { db } from '../../firebase'
 import { collectionGroup, onSnapshot } from 'firebase/firestore'
 import { useAuthStore } from '../../stores/auth'
-import { Download, Users, ClipboardList, Heart, UserPlus, TrendingUp, GraduationCap, UserCheck } from 'lucide-vue-next'
+import { Download, Users, ClipboardList, MessageCircle, Heart, UserPlus, TrendingUp } from 'lucide-vue-next'
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
 
@@ -105,31 +105,19 @@ onMounted(() => {
 
   const weekTotals = computed(() => {
     return (filteredLogs.value || []).reduce((acc, log) => {
+      acc.c += (log.conversations || 0)
       acc.e += (log.evangelized || 0)
       acc.g += (log.guests || 0)
-      acc.cdm += (log.campusDmember || 0)
-      
       const entries = Object.entries(log.attendees || {})
       const presentEntries = entries.filter(([id, a]) => a && a.isPresent)
-      
       acc.attendance += presentEntries.length
-      
-      presentEntries.forEach(([id, attData]) => {
+      presentEntries.forEach(([id]) => {
         const m = membersStore.activeMembers.find(x => x.id === id)
-        const isDL = m?.finalTags?.isDgroupLeader
-        
-        if (isDL) {
-          acc.dl += 1
-        } else {
-          // If not DL, it's a D-Member
-          acc.dm += 1
-          // Sub-categorize within DM status
-          if (attData.tag === 'EN' || m?.status === 'EN') acc.en += 1
-          if (attData.tag === 'BN' || m?.status === 'BN') acc.bn += 1
-        }
+        if (m && m.finalTags?.isDgroupLeader) acc.dl += 1
+        else acc.dm += 1
       })
       return acc
-    }, { e:0, g:0, attendance:0, dl:0, dm:0, en:0, bn:0, cdm:0 })
+    }, { c:0, e:0, g:0, attendance:0, dl:0, dm:0, nw:0, new:0 })
   })
 
   // helper: latest week that has data (week start)
@@ -158,29 +146,26 @@ const exportLogs = () => {
   doc.setFontSize(10);
   doc.text(`Report Date: ${weekLabel} | Generated: ${new Date().toLocaleString()}`, 14, 22);
 
-  const headers = [["Date", "Dgroup Leaders", "DL", "DM", "EN", "BN", "G", "E", "CDM", "Total"]];
+  const headers = [["Date", "Dgroup Leaders", "DL", "DM", "New", "G", "NW", "E", "C", "Total"]];
 
   const rows = filteredLogs.value.map(log => {
     const presentEntries = Object.entries(log.attendees || {}).filter(([id, a]) => a && a.isPresent)
-    
     const countTag = (tag) => {
       if (tag === 'DL') return presentEntries.filter(([id]) => (membersStore.activeMembers.find(m => m.id === id)?.finalTags?.isDgroupLeader)).length
       if (tag === 'DM') return presentEntries.filter(([id]) => !(membersStore.activeMembers.find(m => m.id === id)?.finalTags?.isDgroupLeader)).length
-      if (tag === 'EN') return presentEntries.filter(([id, a]) => a.tag === 'EN' || (membersStore.activeMembers.find(m => m.id === id)?.status === 'EN')).length
-      if (tag === 'BN') return presentEntries.filter(([id, a]) => a.tag === 'BN' || (membersStore.activeMembers.find(m => m.id === id)?.status === 'BN')).length
       return 0
     }
 
     return [
       formatDateISO(log.meetingDate),
       log.submittedBy,
-      countTag('DL') || '0',
-      countTag('DM') || '0',
-      countTag('EN') || '0',
-      countTag('BN') || '0',
-      log.guests || '0',
-      log.evangelized || '0',
-      log.campusDmember || '0',
+      countTag('DL') || '',
+      countTag('DM') || '',
+      '',
+      log.guests || '',
+      '',
+      log.evangelized || '',
+      log.conversations || '',
       presentEntries.length
     ];
   });
@@ -190,11 +175,11 @@ const exportLogs = () => {
     "GRAND TOTAL",
     totals.value.dl || '0',
     totals.value.dm || '0',
-    totals.value.en || '0',
-    totals.value.bn || '0',
+    totals.value.new || '0',
     totals.value.g || '0',
+    totals.value.nw || '0',
     totals.value.e || '0',
-    totals.value.cdm || '0',
+    totals.value.c || '0',
     totals.value.attendance || '0'
   ];
 
@@ -219,6 +204,7 @@ const exportLogs = () => {
     }
   });
 
+  // filename: use ISO range for safe filename characters
   doc.save(`DGM_Weekly_Report_${weekStart}_to_${weekEnd}.pdf`);
 }
 </script>
@@ -237,7 +223,14 @@ const exportLogs = () => {
           <div class="stat-icon"><Users :size="20" /></div>
           <div class="stat-content">
             <span class="value">{{ totals.attendance }}</span>
-            <span class="label">Total Attendance</span>
+            <span class="label">Total Dgroup Meet Attendance</span>
+          </div>
+        </div>
+        <div class="stat-card blue">
+          <div class="stat-icon"><MessageCircle :size="20" /></div>
+          <div class="stat-content">
+            <span class="value">{{ totals.c }}</span>
+            <span class="label">Conversations</span>
           </div>
         </div>
         <div class="stat-card green">
@@ -247,15 +240,7 @@ const exportLogs = () => {
             <span class="label">Evangelized</span>
           </div>
         </div>
-        <div class="stat-card teal">
-          <div class="stat-icon"><GraduationCap :size="20" /></div>
-          <div class="stat-content">
-            <span class="value">{{ totals.cdm }}</span>
-            <span class="label">Campus D-Members</span>
-          </div>
-        </div>
-        <!-- Status-based counts (EN/BN removed as requested) -->
-        <div class="stat-card light-orange">
+        <div class="stat-card orange">
           <div class="stat-icon"><UserPlus :size="20" /></div>
           <div class="stat-content">
             <span class="value">{{ totals.g }}</span>
@@ -301,8 +286,7 @@ const exportLogs = () => {
             <tr>
               <th>Date</th>
               <th>Leader</th>
-              <th class="text-center">E-G</th>
-              <th class="text-center">CDM</th>
+              <th class="text-center">C-E-G</th>
               <th class="text-center">Attendance</th>
             </tr>
           </thead>
@@ -312,19 +296,10 @@ const exportLogs = () => {
               <td class="leader-cell">{{ log.submittedBy }}</td>
               <td class="text-center">
                 <div class="ceg-badges">
+                  <span class="ceg-b c" title="Conversations">{{ log.conversations || 0 }}</span>
                   <span class="ceg-b e" title="Evangelized">{{ log.evangelized || 0 }}</span>
                   <span class="ceg-b g" title="Guests">{{ log.guests || 0 }}</span>
-                  <!-- EN and BN are now visualized here as statuses -->
-                  <span class="ceg-b en" title="Elevate New Status" v-if="Object.values(log.attendees || {}).filter(a => a.isPresent && a.tag === 'EN').length">
-                    {{ Object.values(log.attendees || {}).filter(a => a.isPresent && a.tag === 'EN').length }}
-                  </span>
-                  <span class="ceg-b bn" title="B1G New Status" v-if="Object.values(log.attendees || {}).filter(a => a.isPresent && a.tag === 'BN').length">
-                    {{ Object.values(log.attendees || {}).filter(a => a.isPresent && a.tag === 'BN').length }}
-                  </span>
                 </div>
-              </td>
-              <td class="text-center">
-                <span class="cdm-val">{{ log.campusDmember || 0 }}</span>
               </td>
               <td class="text-center">
                 <span class="attendance-pill">
@@ -345,25 +320,23 @@ const exportLogs = () => {
 .section-title { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; padding-left: 4px; }
 .section-title h4 { margin: 0; font-size: 14px; text-transform: uppercase; letter-spacing: 0.5px; color: #455A64; font-weight: 700; }
 
-.summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 8px; }
+.summary-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 8px; }
 
 @media (max-width: 900px) {
   .summary-grid { grid-template-columns: repeat(2, 1fr); }
 }
 
 .stat-card { background: white; padding: 16px; border-radius: 12px; display: flex; align-items: center; gap: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
-.stat-icon { width: 36px; height: 36px; border-radius: 8px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.stat-icon { width: 36px; height: 36px; border-radius: 8px; display: flex; align-items: center; justify-content: center; }
 
 .purple .stat-icon { background: #F3E5F5; color: #7B1FA2; }
 .blue .stat-icon { background: #E3F2FD; color: #1976D2; }
 .green .stat-icon { background: #E8F5E9; color: #2E7D32; }
-.orange .stat-icon { background: #E0F7FA; color: #00838F; }
-.light-orange .stat-icon { background: #FFF3E0; color: #F57C00; }
-.teal .stat-icon { background: #E0F2F1; color: #00796B; }
+.orange .stat-icon { background: #FFF3E0; color: #F57C00; }
 
-.stat-content { display: flex; flex-direction: column; overflow: hidden; }
+.stat-content { display: flex; flex-direction: column; }
 .stat-content .value { font-size: 20px; font-weight: 800; color: #263238; line-height: 1.2; }
-.stat-content .label { font-size: 10px; color: #78909C; font-weight: 600; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.stat-content .label { font-size: 11px; color: #78909C; font-weight: 600; text-transform: uppercase; }
 
 .logs-card { background: white; border-radius: 12px; padding: 24px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
 .logs-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
@@ -380,14 +353,11 @@ td { padding: 12px; border-bottom: 1px solid #F5F7F9; }
 .date-cell { font-weight: 600; color: #1976D2; white-space: nowrap; }
 .leader-cell { color: #37474F; font-weight: 500; }
 
-.ceg-badges { display: flex; justify-content: center; gap: 4px; flex-wrap: wrap; }
-.ceg-b { width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; border-radius: 6px; font-size: 10px; font-weight: 800; }
+.ceg-badges { display: flex; justify-content: center; gap: 4px; }
+.ceg-b { width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; border-radius: 6px; font-size: 11px; font-weight: 800; }
+.ceg-b.c { background: #E3F2FD; color: #1976D2; }
 .ceg-b.e { background: #E8F5E9; color: #2E7D32; }
 .ceg-b.g { background: #FFF3E0; color: #F57C00; }
-.ceg-b.en { background: #FCE4EC; color: #C2185B; border: 1px solid #F8BBD0; }
-.ceg-b.bn { background: #E8EAF6; color: #303F9F; border: 1px solid #C5CAE9; }
-
-.cdm-val { font-weight: 700; color: #00796B; background: #E0F2F1; padding: 2px 8px; border-radius: 4px; font-size: 12px; }
 
 .attendance-pill { background: #F5F7F9; color: #546E7A; padding: 4px 10px; border-radius: 20px; font-weight: 700; font-size: 12px; border: 1px solid #ECEFF1; }
 .placeholder { padding: 40px; text-align: center; color: #90A4AE; }

@@ -6,10 +6,10 @@ import { useAuthStore } from '../../stores/auth'
 import { ClipboardCheck } from 'lucide-vue-next'
 
 const props = defineProps({
-    group: { type: Object, required: true },
-    members: { type: Array, required: true },
-    leaderId: { type: String, required: false },
-    meeting: { type: Object, required: false }
+	group: { type: Object, required: true },
+	members: { type: Array, required: true },
+	leaderId: { type: String, required: false },
+	meeting: { type: Object, required: false }
 })
 const emit = defineEmits(['close','saved'])
 
@@ -18,253 +18,256 @@ const membersStore = useMembersStore()
 const authStore = useAuthStore()
 
 const isLeader = computed(() => {
-    const user = authStore.userProfile
-    if (user?.finalTags?.isDgroupLeader) return true
-    const me = membersStore.activeMembers.find(m => m.id === user?.id)
-    return !!(me && me.finalTags && me.finalTags.isDgroupLeader)
+	const user = authStore.userProfile
+	if (user?.finalTags?.isDgroupLeader) return true
+	const me = membersStore.activeMembers.find(m => m.id === user?.id)
+	return !!(me && me.finalTags && me.finalTags.isDgroupLeader)
 })
 
 const show = ref(true)
 const showConfirm = ref(false)
 
 const attendanceForm = reactive({
-    date: props.meeting?.meetingDate || new Date().toISOString().split('T')[0],
-    conversations: 0,
-    evangelized: 0,
-    elevateNew: 0,
-    b1gNew: 0,
-    guests: 0,
-    campusDmember: 0,
-    attendees: {}
+	date: props.meeting?.meetingDate || new Date().toISOString().split('T')[0],
+	conversations: 0,
+	evangelized: 0,
+	guests: 0,
+	attendees: {}
 })
 
 const meetingLoading = ref(false)
 
 async function buildChecklist() {
-    meetingLoading.value = true
-    const today = new Date().toISOString().split('T')[0]
-    let serviceScans = []
-    try {
-        serviceScans = await attendanceStore.getAttendanceByDate(today)
-    } catch (e) {
-        console.error('Failed to fetch service scans:', e)
-    }
+	meetingLoading.value = true
+	const today = new Date().toISOString().split('T')[0]
+	let serviceScans = []
+	try {
+		serviceScans = await attendanceStore.getAttendanceByDate(today)
+	} catch (e) {
+		console.error('Failed to fetch service scans:', e)
+	}
 
-    const checklist = {}
-    // Prefer deriving members from the members store by leader id (dgroupLeaderId)
-    let membersList = []
-    function resolveLeaderId() {
-    if (props.leaderId) return props.leaderId
-    const user = authStore.userProfile
-    if (!user) return null
-    if (user.finalTags?.isDgroupLeader) {
-        return user.id
-    }
-    return user.dgroupLeaderId || null
-    }
+	const checklist = {}
+	// Prefer deriving members from the members store by leader id (dgroupLeaderId)
+	let membersList = []
+	function resolveLeaderId() {
+	if (props.leaderId) return props.leaderId
+	const user = authStore.userProfile
+	if (!user) return null
+	if (user.finalTags?.isDgroupLeader) {
+		return user.id
+	}
+	return user.dgroupLeaderId || null
+	}
 
-    const leaderPointer = resolveLeaderId()
-    if (leaderPointer) {
-        membersList = membersStore.activeMembers.filter(m => m.id === leaderPointer || m.dgroupLeaderId === leaderPointer)
-    }
-    // Fallback to props.members if store-based list is empty
-    if (!membersList || membersList.length === 0) {
-        membersList = props.members || []
-    }
+	const leaderPointer = resolveLeaderId()
+	if (leaderPointer) {
+		membersList = membersList = membersStore.activeMembers.filter(m => m.id === leaderPointer || m.dgroupLeaderId === leaderPointer)
+	}
+	// Fallback to props.members if store-based list is empty
+	if (!membersList || membersList.length === 0) {
+		membersList = props.members || []
+	}
 
-    membersList.forEach(m => {
-        // m may be either a member object or an id string
-        const memberId = m.id || m
-        const storeMember = membersStore.activeMembers.find(am => am.id === memberId)
-        const firstName = storeMember?.firstName || m.firstName || ''
-        const lastName = storeMember?.lastName || m.lastName || ''
-        const finalTags = storeMember?.finalTags || m.finalTags || {}
-        const hasScanned = serviceScans.some(scan => scan.memberId === memberId)
-        // Defaulting to Elevate terms, the user can change to B1G in dropdown
-        const autoTag = finalTags?.isDgroupLeader ? 'EDL' : 'EDM'
-        checklist[memberId] = {
-            name: `${firstName} ${lastName}`.trim(),
-            isPresent: hasScanned,
-            scanned: hasScanned,
-            tag: autoTag
-        }
-    })
-    attendanceForm.attendees = checklist
-    meetingLoading.value = false
+	membersList.forEach(m => {
+		// m may be either a member object or an id string
+		const memberId = m.id || m
+		const storeMember = membersStore.activeMembers.find(am => am.id === memberId)
+		const firstName = storeMember?.firstName || m.firstName || ''
+		const lastName = storeMember?.lastName || m.lastName || ''
+		const finalTags = storeMember?.finalTags || m.finalTags || {}
+		const hasScanned = serviceScans.some(scan => scan.memberId === memberId)
+		const autoTag = finalTags?.isDgroupLeader ? 'DL' : 'DM'
+		checklist[memberId] = {
+			name: `${firstName} ${lastName}`.trim(),
+			isPresent: hasScanned,
+			scanned: hasScanned,
+			tag: autoTag
+		}
+	})
+	attendanceForm.attendees = checklist
+	meetingLoading.value = false
 }
 
+// Rebuild when props.members or the members store updates
 // Rebuild when props.members, props.group, or the members store updates
 watch([
-    () => props.members,
-    () => props.group,
-    () => membersStore.activeMembers
+	() => props.members,
+	() => props.group,
+	() => membersStore.activeMembers
 ], () => buildChecklist(), { immediate: true, deep: true })
 
 // Keep attendance date in sync if a meeting prop is provided/changes
 watch(() => props.meeting, (m) => {
-    if (m && m.meetingDate) attendanceForm.date = m.meetingDate
+	if (m && m.meetingDate) attendanceForm.date = m.meetingDate
 }, { immediate: true })
 
 function close() {
-    show.value = false
-    emit('close')
+	show.value = false
+	emit('close')
 }
 
 async function submitAttendance() {
-    if (!isLeader.value) {
-        alert('Only Dgroup leaders can submit attendance.')
-        return
-    }
-        // determine leaderId: prefer explicit prop, then group fields, then auth profile
-        const resolvedLeaderId = props.group?.dgroupLeaderId
+	if (!isLeader.value) {
+		alert('Only Dgroup leaders can submit attendance.')
+		return
+	}
+		// determine leaderId: prefer explicit prop, then group fields, then auth profile
+		const resolvedLeaderId = props.group?.dgroupLeaderId
 
-        const payload = {
-        dgroupLeaderId: resolvedLeaderId,
-        meetingDate: attendanceForm.date,
-        attendees: attendanceForm.attendees,
-        conversations: attendanceForm.conversations || 0,
-        evangelized: attendanceForm.evangelized || 0,
-        elevateNew: attendanceForm.elevateNew || 0,
-        b1gNew: attendanceForm.b1gNew || 0,
-        guests: attendanceForm.guests || 0,
-        campusDmember: attendanceForm.campusDmember || 0,
-        locked: false
-        };
+		const payload = {
+		dgroupLeaderId: resolvedLeaderId,
+		meetingDate: attendanceForm.date,
+		attendees: attendanceForm.attendees,
+		conversations: attendanceForm.conversations || 0,
+		evangelized: attendanceForm.evangelized || 0,
+		guests: attendanceForm.guests || 0,
+		locked: false
+		};
 
 
-    console.debug('Submitting Dgroup attendance payload:', payload, 'props.group:', props.group, 'props.leaderId:', props.leaderId, 'auth.dgroupLeaderId:', authStore.userProfile?.dgroupLeaderId)
+	console.debug('Submitting Dgroup attendance payload:', payload, 'props.group:', props.group, 'props.leaderId:', props.leaderId, 'auth.dgroupLeaderId:', authStore.userProfile?.dgroupLeaderId)
 
-        try {
-        const res = await attendanceStore.logDgroupMeeting(payload)
-        if (res && res.status === 'success') {
-            alert('Attendance logged successfully!')
-            emit('saved', res)
-            close()
-            // reset stats
-            attendanceForm.conversations = 0
-            attendanceForm.evangelized = 0
-            attendanceForm.elevateNew = 0
-            attendanceForm.b1gNew = 0
-            attendanceForm.guests = 0
-            attendanceForm.campusDmember = 0
-        } else {
-            alert(res?.message || 'Failed to save attendance.')
-        }
-    } catch (e) {
-        console.error('Save Error:', e)
-        alert('Error saving attendance.')
-    }
+		try {
+		const res = await attendanceStore.logDgroupMeeting(payload)
+		if (res && res.status === 'success') {
+			alert('Attendance logged successfully!')
+			emit('saved', res)
+			close()
+			// reset stats
+			attendanceForm.conversations = 0
+			attendanceForm.evangelized = 0
+			attendanceForm.guests = 0
+		} else {
+			alert(res?.message || 'Failed to save attendance.')
+		}
+	} catch (e) {
+		console.error('Save Error:', e)
+		alert('Error saving attendance.')
+	}
 }
 
 function openEndMeetingConfirm() {
-    showConfirm.value = true
+	showConfirm.value = true
 }
 
 function cancelEndMeeting() {
-    showConfirm.value = false
+	showConfirm.value = false
 }
 
 async function confirmEndMeeting() {
-    showConfirm.value = false
-    await submitAttendance()
+	showConfirm.value = false
+	await submitAttendance()
 }
 
 </script>
 
 <template>
-    <div v-if="show" class="modal-overlay">
-        <div class="modal create-modal attendance-scroll-modal">
-            <h3>Weekly Dgroup Report<span v-if="props.meeting"> - {{ props.meeting.meetingTitle || props.meeting.description || props.meeting.meetingDate }}</span></h3>
-            <p class="modal-desc">Service scans from today are automatically checked.</p>
-            <p class="modal-desc deadline-text">Deadline of attendance every MONDAY until 11:59 P.M.</p>
+	<div v-if="show" class="modal-overlay">
+		<div class="modal create-modal attendance-scroll-modal">
+			<h3>Weekly Dgroup Report<span v-if="props.meeting"> - {{ props.meeting.meetingTitle || props.meeting.description || props.meeting.meetingDate }}</span></h3>
+			<p class="modal-desc">Service scans from today are automatically checked.</p>
 
-            <div class="separator"></div>
+			<div class="separator"></div>
 
-            <label class="section-label">Members & Status</label>
-            <div class="attendance-checklist-updated">
-                <div v-for="(data, id) in attendanceForm.attendees" :key="id" class="attendance-item">
-                    <input type="checkbox" v-model="data.isPresent" :disabled="!isLeader" />
-                    <div class="member-info-stack" style="flex: 1; margin-left: 8px;">
-                        <span class="member-name" :style="{ fontWeight: data.scanned ? '400' : '400' }">{{ data.name }}</span>
-                    </div>
-                    <select v-model="data.tag" class="status-select" :disabled="!data.isPresent || !isLeader">
-                        <option value="EDL" title="Elevate DLeader">EDL</option>
-                        <option value="BDL" title="B1G DLeader">BDL</option>
-                        <option value="EDM" title="Elevate member active for at least 4 consecutive meets">EDM</option>
-                        <option value="BDM" title="B1G member active for at least 4 consecutive meets">BDM</option>
-                        <option value="EN" title="Elevate NEW (2 months and below)">EN</option>
-                        <option value="BN" title="B1G NEW (2 months and below)">BN</option>
-                    </select>
-                </div>
-            </div>
+			<label class="section-label">Members & Status</label>
+			<div class="attendance-checklist-updated">
+				<div v-for="(data, id) in attendanceForm.attendees" :key="id" class="attendance-item">
+					<input type="checkbox" v-model="data.isPresent" :disabled="!isLeader" />
+					<div class="member-info-stack" style="flex: 1; margin-left: 8px;">
+						<span class="member-name" :style="{ fontWeight: data.scanned ? '400' : '400' }">{{ data.name }}</span>
 
-            <div class="separator"></div>
+					</div>
+					<select v-model="data.tag" class="status-select" :disabled="!data.isPresent || !isLeader">
+						<option value="DL">DL</option>
+						<option value="DM">DM</option>
+						<option value="NW">NW</option>
+						<option value="NEW">NEW</option>
+					</select>
+				</div>
+			</div>
 
-            <div class="group-stats">
-                <div class="stat-input" title="Evangelized, shared the Gospel">
-                    <label>Evang. (E)</label>
-                    <input type="number" v-model="attendanceForm.evangelized" min="0" :disabled="!isLeader" />
-                </div>
-                <div class="stat-input" title="Not an official member of your Dgroup/WKNDer">
-                    <label>Guests (G)</label>
-                    <input type="number" v-model="attendanceForm.guests" min="0" :disabled="!isLeader" />
-                </div>
-                <div class="stat-input" title="Campus Dmember, not yet WKNDer">
-                    <label>Campus DM (CD)</label>
-                    <input type="number" v-model="attendanceForm.campusDmember" min="0" :disabled="!isLeader" />
-                </div>
-            </div>
+			<div class="separator"></div>
 
-            <div class="actions">
-                <button @click="close" class="cancel">Close</button>
-                <button v-if="isLeader" @click="openEndMeetingConfirm" class="end-meeting">End Meeting</button>
-            </div>
+									<div class="group-stats">
+				<div class="stat-input">
+					<label>Conv. (C)</label>
+										<input type="number" v-model="attendanceForm.conversations" min="0" :disabled="!isLeader" />
+				</div>
+				<div class="stat-input">
+					<label>Evang. (E)</label>
+										<input type="number" v-model="attendanceForm.evangelized" min="0" :disabled="!isLeader" />
+				</div>
+				<div class="stat-input">
+					<label>Guests (G)</label>
+										<input type="number" v-model="attendanceForm.guests" min="0" :disabled="!isLeader" />
+				</div>
+			</div>
 
-            <div v-if="!isLeader" class="info-note" style="margin-top:8px;color:#607D8B;font-size:13px;font-weight:600;">Only Dgroup leaders can submit attendance; members can view meeting details.</div>
+			<div class="actions">
+				<button @click="close" class="cancel">Close</button>
+				<button v-if="isLeader" @click="openEndMeetingConfirm" class="end-meeting">End Meeting</button>
+			</div>
 
-            <!-- Confirmation popup -->
-            <div v-if="showConfirm" class="confirm-overlay">
-                <div class="confirm-box">
-                    <p class="confirm-text">Are you sure you want to end the meeting?</p>
-                    <div class="confirm-actions">
-                        <button @click="confirmEndMeeting" class="confirm-yes">Yes, submit report</button>
-                        <button @click="cancelEndMeeting" class="confirm-no">No, not yet.</button>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
+			<div v-if="!isLeader" class="info-note" style="margin-top:8px;color:#607D8B;font-size:13px;font-weight:600;">Only Dgroup leaders can submit attendance; members can view meeting details.</div>
+
+			<!-- Confirmation popup -->
+			<div v-if="showConfirm" class="confirm-overlay">
+				<div class="confirm-box">
+					<p class="confirm-text">Are you sure you want to end the meeting?</p>
+					<div class="confirm-actions">
+						<button @click="confirmEndMeeting" class="confirm-yes">Yes, submit report</button>
+						<button @click="cancelEndMeeting" class="confirm-no">No, not yet.</button>
+					</div>
+				</div>
+			</div>
+		</div>
+	</div>
 </template>
+
 
 <style scoped>
 .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 200; display: flex; align-items: center; justify-content: center; }
 .modal.create-modal { background: #ffffff; width: 94%; max-width: 680px; border-radius: 12px; padding: 30px; max-height: 90vh; overflow-y: auto; box-shadow: 0 10px 30px rgba(9,30,66,0.08); }
 .attendance-scroll-modal { max-height: 80vh; }
 .modal h3 { margin: 0 0 8px 0; font-size: 18px; color: #263238; }
-.modal-desc { margin: 6px 0 12px 0; color: #607D8B; font-size: 13px; }
-.deadline-text { color: #C62828; font-weight: 700; margin-top: -8px; }
+.modal-desc { margin: 6px 0 12px 0; color: #607D8B; font-size: 13px }
 .status-banner { padding: 10px; border-radius: 8px; margin-bottom: 12px; font-weight: 700; }
-.status-banner.error { background: #FFEBEE; color: #C62828; }
-.separator { height: 1px; background-color: #ECEFF1; margin: 16px 0; width: 98%; }
+.status-banner.error { background: #FFEBEE; color: #C62828 }
+
+.separator {
+  height: 1px;
+  background-color: #ECEFF1;
+  margin: 16px 0;
+  width: 98%;}
+
 .attendance-checklist-updated { display: flex; flex-direction: column; gap: 10px; margin-top: 10px; }
 .attendance-item { display: flex; align-items: center; gap: 12px; padding: 10px; border-radius: 10px; background: #FAFBFC; border: 1px solid #F1F3F5; }
 .attendance-item:hover { background: #F7F9FB; }
 .attendance-item input[type="checkbox"] { width: 18px; height: 18px; accent-color: #1976D2; }
 .member-info-stack { display:flex; flex-direction:column; }
-.member-name { color: #3c4f58; font-size: small; }
+.member-name { color: #3c4f58; font-size: small;}
 .status-select { padding: 6px; border-radius: 8px; border: 1px solid #E0E0E0; background: white; font-weight: 100; }
-.group-stats { display:flex; flex-wrap: wrap; gap:12px; margin-top:12px; align-items: center; }
-.stat-input { flex: 1; min-width: 80px; }
-.stat-input label { display:block; font-size:12px; color:#90A4AE; margin-bottom:4px; white-space: nowrap; }
-.stat-input input { width:100%; padding:8px; border-radius:8px; border:1px solid #EDEFF1; box-sizing: border-box; }
+
+.group-stats { display:flex; gap:12px; margin-top:12px; align-items: center }
+.stat-input label { display:block; font-size:12px; color:#90A4AE; margin-bottom:4px }
+.stat-input input { width:100px; padding:8px; border-radius:8px; border:1px solid #EDEFF1 }
+
 .actions { display:flex; gap:8px; justify-content:flex-end; margin-top:16px; }
-.cancel { background:transparent; border:1px solid #CFD8DC; padding:8px 14px; border-radius:8px; color:#37474F; font-weight:700; }
-.end-meeting { background:#C62828; color:white; padding:8px 14px; border-radius:8px; border:none; font-weight:700; }
+.cancel { background:transparent; border:1px solid #CFD8DC; padding:8px 14px; border-radius:8px; color:#37474F; font-weight:700 }
+.end-meeting { background:#C62828; color:white; padding:8px 14px; border-radius:8px; border:none; font-weight:700 }
+
+/* Confirmation overlay styles */
 .confirm-overlay { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; z-index: 300; background: rgba(2,6,23,0.45); }
 .confirm-box { background: white; padding: 18px; border-radius: 12px; box-shadow: 0 8px 24px rgba(9,30,66,0.12); width: 92%; max-width: 460px; text-align: center; }
-.confirm-text { font-weight: 800; margin-bottom: 14px; color: #263238; font-size: 15px; }
+.confirm-text { font-weight: 800; margin-bottom: 14px; color: #263238; font-size: 15px }
 .confirm-actions { display:flex; gap: 10px; justify-content: center; }
-.confirm-yes { background: #1976D2; color: white; padding: 10px 14px; border-radius: 8px; border: none; font-weight: 800; }
-.confirm-no { background: transparent; border: 1px solid #E0E0E0; padding: 10px 14px; border-radius: 8px; color:#37474F; font-weight:700; }
-@media (max-width: 600px) { .modal.create-modal { padding: 14px; } .attendance-item { padding: 8px; gap: 8px; } }
+.confirm-yes { background: #1976D2; color: white; padding: 10px 14px; border-radius: 8px; border: none; font-weight: 800 }
+.confirm-no { background: transparent; border: 1px solid #E0E0E0; padding: 10px 14px; border-radius: 8px; color:#37474F; font-weight:700 }
+
+@media (max-width: 600px) {
+	.modal.create-modal { padding: 14px; }
+	.stat-input input { width:80px }
+	.attendance-item { padding: 8px; gap: 8px }
+}
 </style>
