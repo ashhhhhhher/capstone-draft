@@ -1,10 +1,12 @@
 <script setup>
 import { ref, computed, onMounted, watch, nextTick } from 'vue'
+import { useRoute } from 'vue-router'
 import { useChatStore } from '../stores/chat'
 import { useAuthStore } from '../stores/auth'
 import { useMembersStore } from '../stores/members'
 import { X, Send, Search, ChevronLeft, Plus, Users, Check } from 'lucide-vue-next'
 
+const route = useRoute()
 const chatStore = useChatStore()
 const authStore = useAuthStore()
 const membersStore = useMembersStore()
@@ -21,6 +23,11 @@ const showCreateGroupModal = ref(false)
 const newGroupName = ref('')
 const groupSearchQuery = ref('')
 const selectedMemberIds = ref([])
+
+// Hide chat box entirely on auth pages (so it doesn't overlap transitions)
+const hideChatBox = computed(() => {
+  return ['/login', '/signup'].includes(route.path)
+})
 
 // Init listeners when profile is ready
 watch(
@@ -174,15 +181,15 @@ function formatTime(timestamp) {
 </script>
 
 <template>
-  <div class="chat-system">
+  <div class="chat-system" v-if="!hideChatBox">
     
     <!-- FLOATING TOGGLE BUTTON -->
     <button class="chat-fab" @click="toggleChat" :class="{ 'is-open': isOpen }">
-      <div v-if="!isOpen" class="icon-bubble">
+      <template v-if="!isOpen">
         <img src="/qonnectchat.png" alt="Chat" class="q-logo" />
         <!-- Notification Badge (Red Dot) -->
         <span v-if="unreadCount > 0" class="notif-badge">{{ unreadCount }}</span>
-      </div>
+      </template>
       <X v-else :size="28" color="white" />
     </button>
 
@@ -390,24 +397,24 @@ function formatTime(timestamp) {
 .chat-system { position: fixed; bottom: 24px; right: 24px; z-index: 9999; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
 @media (max-width: 768px) { .chat-system { bottom: 80px; right: 16px; } }
 
-.chat-fab { width: 75px; height: 60px; border-radius: 100%; background: #2962FF; border: none; box-shadow: 0 4px 12px rgba(41, 98, 255, 0.4); cursor: pointer; display: flex; align-items: center; justify-content: center; transition: transform 0.2s, background 0.2s; position: relative; z-index: 10001; }
+.chat-fab { width: 65px; height: 65px; border-radius: 16px; background: transparent; border: none; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15); cursor: pointer; display: flex; align-items: center; justify-content: center; transition: transform 0.2s, background 0.2s, border-radius 0.2s; position: relative; z-index: 10001; padding: 0; }
 .chat-fab:hover { transform: scale(1.05); }
-.chat-fab.is-open { background: #ef4444; transform: rotate(90deg); }
-.icon-bubble { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; border-radius: 50%; overflow: hidden; background: white; position: relative; }
-.q-logo { width: 70%; height: 70%; object-fit: contain; }
+.chat-fab.is-open { background: #ef4444; border-radius: 50%; transform: rotate(90deg); box-shadow: 0 4px 12px rgba(239, 68, 68, 0.4); }
+
+.q-logo { width: 100%; height: 100%; object-fit: cover; border-radius: 16px; }
 
 /* Notification Badge on FAB */
 .notif-badge { 
   position: absolute; 
-  top: -2px; 
-  right: -2px; 
+  top: -6px; 
+  right: -6px; 
   background: #FF0000; 
   color: white; 
-  font-size: 11px; 
+  font-size: 12px; 
   font-weight: 800; 
-  min-width: 20px; 
-  height: 20px; 
-  border-radius: 50%; 
+  min-width: 22px; 
+  height: 22px; 
+  border-radius: 11px; 
   display: flex; 
   align-items: center; 
   justify-content: center; 
