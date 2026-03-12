@@ -73,7 +73,8 @@ export const useNotificationsStore = defineStore('notifications', () => {
         header: docSnap.data().header,
         body: docSnap.data().body,
         type: docSnap.data().type || 'info',
-        focus: docSnap.data().reference || null,
+        // support both payload styles used in the app: `focus` and legacy `reference`
+        focus: docSnap.data().focus || docSnap.data().reference || null,
         read: docSnap.data().read || false,
         createdAt: docSnap.data().createdAt
       }))
@@ -88,7 +89,8 @@ export const useNotificationsStore = defineStore('notifications', () => {
     type,
     header,
     body,
-    reference = null
+    reference = null,
+    focus = null
   }) {
     if (!branchId || !targetUid || !roleTarget) return
 
@@ -98,13 +100,16 @@ export const useNotificationsStore = defineStore('notifications', () => {
         : ["branches", branchId, "members", targetUid, "notifications"]
 
     const colRef = collection(db, ...basePath)
+    const focusKey = focus || reference || null
 
     await addDoc(colRef, {
       type,
       header,
       body,
       roleTarget,
-      reference: reference || null,
+      // keep both keys for compatibility with existing readers/writers
+      reference: focusKey,
+      focus: focusKey,
       read: false,
       createdAt: serverTimestamp()
     })
@@ -161,7 +166,7 @@ async function notifyAdminsOfPending(branchId, newMemberId, displayName) {
         header: "New Pending Member",
         body: `${displayName} is awaiting approval.`,
         roleTarget: "admin",
-        focus: "matching",
+        focus: "pending",
         read: false,
         createdAt: serverTimestamp()
       }
@@ -176,8 +181,7 @@ async function notifyMemberApproved(branchId, memberId, displayName) {
     roleTarget: "member",
     type: "MEMBER_APPROVED",
     header: "You're Approved!",
-    body: `Welcome ${displayName}! Your membership has been approved.`,
-    focus: "memberDgroup"
+    body: `Welcome ${displayName}! Your membership has been approved.`
   });
 }
 
@@ -214,7 +218,7 @@ async function notifyMemberJoinRejected(branchId, memberId) {
     type: "DGROUP_REQUEST_REJECTED",
     header: "Join Request Declined",
     body: "Your request was declined. Please try another group or contact an admin.",
-    focus: "matching"
+    focus: "memberDgroup"
   });
 }
 
@@ -272,6 +276,7 @@ async function notifyAdminsAbsenceReport(branchId, memberName, reportDetails) {
       type: "ABSENCE_REPORT",
       header: `Absence Report: ${memberName}`,
       body: reportDetails,
+      focus: "absenceReports",
       reference: "members"
     });
   }

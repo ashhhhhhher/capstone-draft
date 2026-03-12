@@ -1,5 +1,6 @@
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { Search, Archive, Filter } from 'lucide-vue-next'
 import { storeToRefs } from 'pinia'
 import { useMembersStore } from '../stores/members'
@@ -20,6 +21,8 @@ const { activeMembers, archivedMembers, pendingMembers } = storeToRefs(membersSt
 const attendanceStore = useAttendanceStore()
 const { currentEventAttendees } = storeToRefs(attendanceStore)
 const authStore = useAuthStore()
+const route = useRoute()
+const router = useRouter()
 
 // --- Lifecycle Hook: Enforce Archive Policy ---
 onMounted(() => {
@@ -154,6 +157,16 @@ async function rejectSelected() {
   selectedPending.value = null;
 }
 
+function handleFocusQuery(focusKey) {
+  if (focusKey === 'pending') {
+    showPendingModal.value = true
+    showArchived.value = false
+  } else if (focusKey === 'absenceReports' || focusKey === 'members') {
+    showAbsenceMonitoringModal.value = true
+    showArchived.value = false
+  }
+}
+
 // --- Reports count (admin) ---
 const reportsCount = ref(0)
 let _unsubReports = null
@@ -173,6 +186,30 @@ onMounted(() => {
   })
 })
 onUnmounted(() => { if (_unsubReports) _unsubReports() })
+
+onMounted(() => {
+  handleFocusQuery(route.query?.focus)
+})
+
+watch(() => route.query?.focus, (newFocus) => {
+  handleFocusQuery(newFocus)
+})
+
+watch(showPendingModal, (isOpen) => {
+  // clear handled focus query once modal is closed
+  if (!isOpen && route.query?.focus === 'pending') {
+    const { focus, ...rest } = route.query
+    router.replace({ query: rest })
+  }
+})
+
+watch(showAbsenceMonitoringModal, (isOpen) => {
+  // clear handled focus query once modal is closed
+  if (!isOpen && (route.query?.focus === 'absenceReports' || route.query?.focus === 'members')) {
+    const { focus, ...rest } = route.query
+    router.replace({ query: rest })
+  }
+})
 
 </script>
 

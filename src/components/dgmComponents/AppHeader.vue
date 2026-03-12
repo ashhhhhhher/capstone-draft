@@ -85,6 +85,8 @@ const firstName = computed(() => authStore.userProfile?.firstName || authStore.u
 function openNotificationFocus(focusKey) {
   showNotifications.value = false
   if (focusKey === 'matching') router.push({ path: '/dgroups', query: { tab: 'matching' } }) 
+  else if (focusKey === 'pending') router.push({ path: '/members', query: { focus: 'pending' } })
+  else if (focusKey === 'absenceReports' || focusKey === 'members') router.push({ path: '/members', query: { focus: 'absenceReports' } })
   else if (focusKey === 'memberDgroup') router.push({ name: 'memberDgroup' }) 
   else if (focusKey === 'memberAttendance') router.push({ name: 'memberAttendance' }) 
   else if (focusKey === 'leaderRequests') router.push({ name: 'memberDgroup', query: { tab: 'downline' } }) 
@@ -183,8 +185,9 @@ onUnmounted(() => {
 .header-at-top .header-icon-btn { background: rgba(255, 255, 255, 0.15); color: #ffffff; }
 .header-icon-btn:hover { background: #e2e8f0; transform: translateY(-2px); }
 .header-at-top .header-icon-btn:hover { background: rgba(255, 255, 255, 0.25); }
-.notif-dot { position: absolute; top: 8px; right: 8px; width: 6px; height: 6px; background: #1976D2; border: 1.5px solid #ffffff; border-radius: 50%; }
-.header-at-top .notif-dot { background: #ffffff; border-color: #1976D2; }
+.notif-btn {position: relative;}
+.notif-dot { position: absolute; top: 6px; right: 6px; width: 6px; height: 6px; background: #1976D2; border: 1.5px solid #e2e8f0; border-radius: 50%; }
+.header-at-top .notif-dot { background: #e2e8f0; border-color: #1976D2; }
 .profile-trigger { display: flex; align-items: center; gap: 6px; cursor: pointer; padding: 2px 6px; border-radius: 12px; background: #f1f5f9; transition: all 0.3s ease; color: #475569; }
 .header-at-top .profile-trigger { background: rgba(255, 255, 255, 0.1); color: #ffffff; }
 .profile-avatar { width: 30px; height: 30px; border-radius: 8px; background-color: #1976D2; display: flex; align-items: center; justify-content: center; overflow: hidden; color: #ffffff; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1); transition: all 0.3s ease; }

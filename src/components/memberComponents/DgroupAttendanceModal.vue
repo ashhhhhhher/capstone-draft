@@ -3,6 +3,7 @@ import { reactive, onMounted, watch, ref, computed } from 'vue'
 import { useAttendanceStore } from '../../stores/attendance'
 import { useMembersStore } from '../../stores/members'
 import { useAuthStore } from '../../stores/auth'
+import { useDgroupEventsStore } from '../../stores/dgroupevents'
 import { ClipboardCheck } from 'lucide-vue-next'
 
 const props = defineProps({
@@ -16,6 +17,7 @@ const emit = defineEmits(['close','saved'])
 const attendanceStore = useAttendanceStore()
 const membersStore = useMembersStore()
 const authStore = useAuthStore()
+const dgroupEventsStore = useDgroupEventsStore()
 
 const isLeader = computed(() => {
     const user = authStore.userProfile
@@ -136,6 +138,33 @@ async function confirmEndMeeting() {
     showConfirm.value = false
     await submitAttendance()
 }
+
+async function cancelCurrentMeeting() {
+    if (!isLeader.value) return
+
+    const meetingDate = props.meeting?.meetingDate || attendanceForm.date
+    const dgroupLeaderId = props.group?.dgroupLeaderId || props.meeting?.dgroupLeaderId || props.leaderId || authStore.userProfile?.id
+
+    if (!meetingDate || !dgroupLeaderId) {
+        alert('Unable to cancel meeting: missing meeting date or leader ID.')
+        return
+    }
+
+    const ok = confirm(`Cancel this meeting on ${meetingDate}? This will delete the whole meeting record.`)
+    if (!ok) return
+
+    try {
+        const res = await dgroupEventsStore.deleteDgroupEvent(dgroupLeaderId, meetingDate)
+        if (res?.status === 'success') {
+            close()
+            return
+        }
+        alert(res?.message || 'Failed to cancel meeting.')
+    } catch (e) {
+        console.error('Cancel meeting error:', e)
+        alert('Failed to cancel meeting.')
+    }
+}
 </script>
 
 <template>
@@ -183,6 +212,7 @@ async function confirmEndMeeting() {
 
             <div class="actions">
                 <button @click="close" class="cancel">Close</button>
+                <button v-if="isLeader" @click="cancelCurrentMeeting" class="cancel-meeting">Cancel Meeting</button>
                 <button v-if="isLeader" @click="openEndMeetingConfirm" class="end-meeting">End Meeting</button>
             </div>
 
@@ -216,6 +246,7 @@ async function confirmEndMeeting() {
 .stat-input input { width:100px; padding:8px; border-radius:8px; border:1px solid #EDEFF1 }
 .actions { display:flex; gap:8px; justify-content:flex-end; margin-top:16px; }
 .cancel { background:transparent; border:1px solid #CFD8DC; padding:8px 14px; border-radius:8px; color:#37474F; font-weight:700 }
+.cancel-meeting { background:#fff3e0; color:#e65100; padding:8px 14px; border-radius:8px; border:1px solid #ffcc80; font-weight:700 }
 .end-meeting { background:#C62828; color:white; padding:8px 14px; border-radius:8px; border:none; font-weight:700 }
 .confirm-overlay { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; z-index: 300; background: rgba(2,6,23,0.45); }
 .confirm-box { background: white; padding: 18px; border-radius: 12px; box-shadow: 0 8px 24px rgba(9,30,66,0.12); width: 92%; max-width: 460px; text-align: center; }
