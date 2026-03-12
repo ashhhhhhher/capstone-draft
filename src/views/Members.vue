@@ -144,6 +144,41 @@ function openAbsenceMonitoring() { showAbsenceMonitoringModal.value = true; }
 function openPendingList() { showPendingModal.value = true; }
 function openPendingDetails(p) { selectedPending.value = p; }
 function toggleHeaderMenu() { showHeaderMenu.value = !showHeaderMenu.value }
+
+async function quickRestoreMember(member) {
+  if (!member?.id) return
+  if (!confirm(`Restore ${member.firstName} ${member.lastName}?`)) return
+  await membersStore.restoreMember(member.id)
+}
+
+async function quickApprovePending(p) {
+  if (!p?.id) return
+  if (!confirm(`Approve ${p.firstName} ${p.lastName}?`)) return
+  await membersStore.approvePending(p.id)
+  if (selectedPending.value?.id === p.id) selectedPending.value = null
+}
+
+async function quickRejectPending(p) {
+  if (!p?.id) return
+  if (!confirm(`Reject ${p.firstName} ${p.lastName} and delete this registration?`)) return
+  await membersStore.rejectPending(p.id)
+  if (selectedPending.value?.id === p.id) selectedPending.value = null
+}
+
+async function approveAllPending() {
+  const allPending = pendingMembers.value || []
+  if (!allPending.length) return
+  const ok = confirm(`Approve all ${allPending.length} pending members?`)
+  if (!ok) return
+
+  for (const p of allPending) {
+    if (p?.id) {
+      await membersStore.approvePending(p.id)
+    }
+  }
+  selectedPending.value = null
+}
+
 async function approveSelected() {
   if (!selectedPending.value) return;
   if (!confirm('Approve this registration?')) return;
@@ -277,7 +312,12 @@ watch(showAbsenceMonitoringModal, (isOpen) => {
     <!-- LIST VIEW -->
     <div class="member-list-view">
       <div v-if="showArchived" class="simple-list">
-        <MemberCard v-for="member in filteredMembers" :key="member.id" :member="member" :isPresent="presentMemberIds.has(member.id)" @click="openMemberDetails(member)" />
+        <div v-for="member in filteredMembers" :key="member.id" class="member-action-row archived-row">
+          <MemberCard :member="member" :isPresent="presentMemberIds.has(member.id)" @click="openMemberDetails(member)" />
+          <div class="row-actions">
+            <button class="row-btn restore" @click.stop="quickRestoreMember(member)">Restore</button>
+          </div>
+        </div>
         <div v-if="filteredMembers.length === 0" class="no-results">No archived members found.</div>
       </div>
       <div v-else class="columns-grid">
@@ -334,12 +374,19 @@ watch(showAbsenceMonitoringModal, (isOpen) => {
   <!-- PENDING APPROVALS MODAL -->
   <Modal v-if="showPendingModal" @close="showPendingModal = false" size="lg">
     <div class="pending-modal">
-      <header class="pending-header"><h3>Pending Registrations</h3></header>
+      <header class="pending-header">
+        <h3>Pending Registrations</h3>
+        <button class="approve-all-btn" @click="approveAllPending" :disabled="!pendingMembers.length">Approve All</button>
+      </header>
       <div class="pending-body">
         <div class="pending-list">
           <div v-if="pendingMembers.length === 0" class="empty-text">No pending registrations.</div>
-          <div v-for="p in pendingMembers" :key="p.id" :class="['pending-item', { selected: selectedPending && selectedPending.id === p.id }]" @click="openPendingDetails(p)">
-            <MemberCard :member="p" :hideStatus="true" :hideDetails="false" />
+          <div v-for="p in pendingMembers" :key="p.id" :class="['pending-item', { selected: selectedPending && selectedPending.id === p.id }]">
+            <MemberCard :member="p" :hideStatus="true" :hideDetails="false" @click="openPendingDetails(p)" />
+            <div class="pending-item-actions">
+              <button class="pending-quick-btn approve" @click.stop="quickApprovePending(p)">Approve</button>
+              <button class="pending-quick-btn reject" @click.stop="quickRejectPending(p)">Reject</button>
+            </div>
           </div>
         </div>
         <div class="pending-details" v-if="selectedPending">
@@ -409,8 +456,10 @@ watch(showAbsenceMonitoringModal, (isOpen) => {
 
 
 /* Header separation */
-.pending-header { padding-bottom: 10px; border-bottom: 1px solid #bcbbbb; }
+.pending-header { padding-bottom: 10px; border-bottom: 1px solid #bcbbbb; display:flex; align-items:center; justify-content:space-between; gap:10px; }
 .pending-header h3 { margin: 0; font-size: 18px; color: #263238; }
+.approve-all-btn { background:#2E7D32; color:white; border:none; padding:8px 12px; border-radius:8px; font-weight:700; cursor:pointer; }
+.approve-all-btn:disabled { background:#CFD8DC; cursor:not-allowed; }
 
 .controls-wrapper { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; gap: 16px; }
 .search-bar { flex-grow: 1; position: relative; }
@@ -433,6 +482,19 @@ watch(showAbsenceMonitoringModal, (isOpen) => {
 .list-content { display: flex; flex-direction: column; gap: 12px; }
 .simple-list { display: flex; flex-direction: column; gap: 12px; }
 .empty-col { text-align: center; color: #B0BEC5; font-style: italic; padding: 20px; background: #FAFAFA; border-radius: 12px; }
+
+.member-action-row { position:relative; width:100%; }
+.member-action-row :deep(.member-card) { width:100%; padding-right:100px; }
+.row-actions { position:absolute; right:12px; top:50%; transform:translateY(-50%); display:flex; align-items:center; }
+.row-btn { border:none; border-radius:10px; padding:8px 12px; font-weight:700; cursor:pointer; font-size:12px; }
+.row-btn.restore { background:#E8F5E9; color:#2E7D32; border:1px solid #C8E6C9; }
+
+.pending-item { position:relative; }
+.pending-item :deep(.member-card) { width:100%; padding-right:170px; }
+.pending-item-actions { position:absolute; right:10px; top:50%; transform:translateY(-50%); display:flex; gap:6px; }
+.pending-quick-btn { border:none; border-radius:8px; padding:7px 10px; font-size:12px; font-weight:700; cursor:pointer; }
+.pending-quick-btn.approve { background:#E8F5E9; color:#2E7D32; border:1px solid #C8E6C9; }
+.pending-quick-btn.reject { background:#FFEBEE; color:#C62828; border:1px solid #FFCDD2; }
 
 /* NEW MEMBER CARD STYLES FOR ATTENDANCE */
 .member-card-item {
