@@ -9,6 +9,7 @@ const emit = defineEmits(['close'])
 
 const scrollContainer = ref(null)
 const selectedFeature = ref(null)
+const isMobileMenuOpen = ref(false) // Added state for mobile menu
 
 const features = {
   unite: { 
@@ -44,11 +45,18 @@ watch(() => props.isOpen, (newVal) => {
   }
 });
 
-function handleClose() { emit('close'); selectedFeature.value = null; }
+function handleClose() { 
+  emit('close'); 
+  selectedFeature.value = null; 
+  isMobileMenuOpen.value = false; // Close mobile menu if open
+}
+
 function scrollToSection(id) { 
+  isMobileMenuOpen.value = false; // Auto close mobile menu on click
   const el = document.getElementById(id); 
   if (el) el.scrollIntoView({ behavior: 'smooth' }) 
 }
+
 function openFeature(key) { selectedFeature.value = features[key] }
 function closeFeature() { selectedFeature.value = null }
 </script>
@@ -96,7 +104,19 @@ function closeFeature() { selectedFeature.value = null }
 
       <nav class="about-internal-nav">
         <button class="nav-back-circle" @click="handleClose">←</button>
-        <div class="nav-links">
+
+        <!-- Hamburger Icon (Mobile Only) -->
+        <button 
+          class="hamburger" 
+          :class="{ 'nav-active': isMobileMenuOpen }" 
+          @click="isMobileMenuOpen = !isMobileMenuOpen"
+        >
+          <span></span>
+          <span></span>
+          <span></span>
+        </button>
+
+        <div class="nav-links" :class="{ 'nav-active': isMobileMenuOpen }">
           <button @click="scrollToSection('hero')">Home</button>
           <button @click="scrollToSection('mission-vision')">Mission</button>
           <button @click="scrollToSection('whatwedo')">Programs</button>
@@ -183,11 +203,19 @@ function closeFeature() { selectedFeature.value = null }
 .custom-scrollbar::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 10px; }
 .custom-scrollbar::-webkit-scrollbar-thumb { background: #D32F2F; border-radius: 10px; }
 .about-internal-nav { position: absolute; top: 0; left: 0; right: 0; z-index: 3100; height: 80px; display: flex; align-items: center; padding: 0 5%; background: linear-gradient(to bottom, rgba(0,0,0,0.8), transparent); justify-content: space-between; }
-.nav-back-circle { width: 45px; height: 45px; border-radius: 50%; border: 1px solid rgba(255,255,255,0.2); background: rgba(0,0,0,0.3); color: white; cursor: pointer; backdrop-filter: blur(5px); transition: 0.3s; display: flex; align-items: center; justify-content: center; }
+.nav-back-circle { width: 45px; height: 45px; border-radius: 50%; border: 1px solid rgba(255,255,255,0.2); background: rgba(0,0,0,0.3); color: white; cursor: pointer; backdrop-filter: blur(5px); transition: 0.3s; display: flex; align-items: center; justify-content: center; z-index: 3200; }
 .nav-back-circle:hover { background: #D32F2F; border-color: #D32F2F; transform: scale(1.1); }
 .nav-links { display: flex; gap: 25px; }
 .nav-links button { background: none; border: none; color: #aaa; font-weight: 700; cursor: pointer; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 2px; transition: 0.3s; }
 .nav-links button:hover { color: #fff; }
+
+/* Hamburger Menu Button Styles */
+.hamburger { display: none; flex-direction: column; justify-content: space-around; width: 30px; height: 24px; background: transparent; border: none; cursor: pointer; padding: 0; z-index: 3200; }
+.hamburger span { width: 100%; height: 3px; background: #fff; border-radius: 10px; transition: all 0.3s linear; position: relative; transform-origin: 1px; }
+.hamburger.nav-active span:first-child { transform: rotate(45deg); }
+.hamburger.nav-active span:nth-child(2) { opacity: 0; }
+.hamburger.nav-active span:nth-child(3) { transform: rotate(-45deg); }
+
 .hero-section, .verse-section { min-height: 100vh; background-size: cover; background-position: center; display: flex; align-items: center; justify-content: center; }
 .dark-grad { background: linear-gradient(rgba(0,0,0,0.3), rgba(0,0,0,0.9)); padding: 40px; text-align: center; width: 100%; height: 100%; display: flex; flex-direction: column; justify-content: center; align-items: center; }
 .black-tint { background: rgba(0,0,0,0.7); width: 100%; height: 100%; display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 40px; }
@@ -266,6 +294,92 @@ function closeFeature() { selectedFeature.value = null }
 .slide-up-enter-from, .slide-up-leave-to { transform: translateY(100%); opacity: 0; }
 .fade-enter-active, .fade-leave-active { transition: opacity 0.3s; }
 .fade-enter-from, .fade-leave-to { opacity: 0; }
-@media (max-width: 1024px) { .modal-flex-container { flex-direction: column; overflow-y: auto; } .modal-visual-pane { flex: none; height: 50vh; padding: 30px; border-right: none; border-bottom: 1px solid #eee; } .modal-info-pane { flex: none; padding: 40px 30px; overflow: visible; } .gallery-card-large { min-width: 300px; } .title-main, .title-sub { font-size: 2.5rem; } .feature-modal-content.premium-layout { height: 95vh; border-radius: 20px; } }
-@media (min-width: 1025px) { .feature-col { min-width: 33.333%; } .modal-info-pane { max-height: 100%; } }
+
+/* Desktop/Tablet Adjustments */
+@media (max-width: 1024px) { 
+  .modal-flex-container { flex-direction: column; overflow-y: auto; } 
+  .modal-visual-pane { flex: none; height: auto; min-height: 40vh; padding: 30px; border-right: none; border-bottom: 1px solid #eee; } 
+  .modal-info-pane { flex: none; padding: 40px 30px; overflow: visible; } 
+  .gallery-card-large { min-width: 280px; } 
+  .title-main, .title-sub { font-size: 2.5rem; } 
+  .feature-modal-content.premium-layout { height: 95vh; border-radius: 20px; width: 95%; margin: auto;} 
+}
+
+/* Mobile-Specific Adjustments */
+@media (max-width: 768px) {
+  /* Display Hamburger */
+  .hamburger { display: flex; }
+  
+  /* Mobile Dropdown Menu (Top Right Corner) */
+  .nav-links {
+    position: fixed; 
+    top: 80px; /* Just below the navbar */
+    right: 5%; /* Aligned with the screen padding */
+    width: 200px; 
+    height: auto;
+    background: rgba(15, 15, 15, 0.95); 
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 16px;
+    padding: 20px;
+    flex-direction: column; 
+    align-items: flex-end; 
+    justify-content: flex-start;
+    gap: 20px;
+    
+    /* Animation state hidden */
+    transform: translateY(-20px);
+    opacity: 0;
+    visibility: hidden;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); 
+    z-index: 3150; 
+    box-shadow: 0 15px 35px rgba(0,0,0,0.5);
+  }
+  
+  /* Animation state active */
+  .nav-links.nav-active { 
+    transform: translateY(0);
+    opacity: 1;
+    visibility: visible;
+  }
+  
+  /* Adjust links for the dropdown */
+  .nav-links button { 
+    font-size: 0.9rem; 
+    text-align: right;
+    width: 100%;
+    padding: 5px 0;
+  }
+  
+  /* Feature Grid Vertical Stacking */
+  .what-we-do-grid { flex-direction: column; }
+  .feature-col { min-width: 100%; min-height: 400px; flex-basis: 100%; }
+
+  /* Typography & Spacing Scale Downs */
+  .hero-text { font-size: 1.1rem; }
+  .hero-logo { width: 90%; }
+  .bible-verse { font-size: 1.3rem; }
+  .section-title { font-size: 2rem; }
+  .divider-header h2 { font-size: 1.8rem; }
+  
+  .mission-vision-section { padding: 80px 20px; }
+  .mv-inner { padding: 40px 20px; }
+  .mv-card h3 { font-size: 1.8rem; }
+  
+  .info-section.white-bg { padding: 80px 20px; }
+  
+  .contact-section { padding: 80px 20px; }
+  .contact-card { min-width: 100%; }
+
+  /* Modal Specific Adjustments for Mobile */
+  .gallery-card-large { min-width: 80%; }
+  .title-main, .title-sub { font-size: 2rem; }
+  .premium-desc { font-size: 1rem; }
+  .modal-close-circle { top: 15px; right: 15px; width: 40px; height: 40px; font-size: 1rem; }
+}
+
+@media (min-width: 1025px) { 
+  .feature-col { min-width: 33.333%; } 
+  .modal-info-pane { max-height: 100%; } 
+}
 </style>
