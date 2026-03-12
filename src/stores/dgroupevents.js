@@ -6,6 +6,7 @@ import {
   doc,
   setDoc,
   updateDoc,
+  deleteDoc,
   getDoc,
   getDocs,
   query,
@@ -15,6 +16,8 @@ import {
   serverTimestamp
 } from 'firebase/firestore'
 import { useAuthStore } from './auth'
+
+const DEFAULT_DGROUP_BG = '/DGBG.jpg'
 
 export const useDgroupEventsStore = defineStore('dgroupevents', () => {
   // minimal state
@@ -55,6 +58,7 @@ export const useDgroupEventsStore = defineStore('dgroupevents', () => {
         meetingDate: payload.meetingDate,
         meetingTime: payload.meetingTime || '',
         venue: payload.venue || '',
+        photoURL: payload.photoURL || DEFAULT_DGROUP_BG,
         // store meeting title under `meetingTitle` (preferred)
         meetingTitle: payload.meetingTitle || payload.description || '',
         dgroupLeader: payload.dgroupLeader || dgLeaderName || '',
@@ -134,11 +138,58 @@ export const useDgroupEventsStore = defineStore('dgroupevents', () => {
         await updateDoc(refDoc, updateObj)
       } else {
         // create doc with minimal required fields plus the updates
-        await setDoc(refDoc, { dgroupLeaderId, meetingDate, ...updateObj })
+        await setDoc(refDoc, { dgroupLeaderId, meetingDate, photoURL: DEFAULT_DGROUP_BG, ...updateObj })
       }
       return { status: 'success' }
     } catch (error) {
       console.error('updateDgroupMeeting error:', error)
+      return { status: 'error', message: error.message }
+    }
+  }
+
+  /**
+   * Edit a scheduled dgroup event details (leader scheduling fields only)
+   */
+  async function editDgroupEvent(dgroupLeaderId, meetingDate, updates) {
+    const authStore = useAuthStore()
+    if (!authStore.branchId || !dgroupLeaderId || !meetingDate) {
+      return { status: 'error', message: 'Missing branch, dgroupLeaderId, or meetingDate' }
+    }
+
+    try {
+      const refDoc = doc(db, 'branches', authStore.branchId, 'dgroupEvents', dgroupLeaderId, 'meetings', meetingDate)
+      const allowed = ['meetingTime', 'venue', 'meetingTitle', 'photoURL']
+      const updateObj = { submittedAt: serverTimestamp() }
+      allowed.forEach((k) => {
+        if (updates[k] !== undefined) updateObj[k] = updates[k]
+      })
+
+      if (Object.keys(updateObj).length <= 1) {
+        return { status: 'error', message: 'No valid fields to update.' }
+      }
+
+      await updateDoc(refDoc, updateObj)
+      return { status: 'success', message: 'Dgroup event updated.' }
+    } catch (error) {
+      console.error('editDgroupEvent error:', error)
+      return { status: 'error', message: error.message }
+    }
+  }
+
+  /**
+   * Delete a scheduled dgroup event by meeting date
+   */
+  async function deleteDgroupEvent(dgroupLeaderId, meetingDate) {
+    const authStore = useAuthStore()
+    if (!authStore.branchId || !dgroupLeaderId || !meetingDate) {
+      return { status: 'error', message: 'Missing branch, dgroupLeaderId, or meetingDate' }
+    }
+    try {
+      const refDoc = doc(db, 'branches', authStore.branchId, 'dgroupEvents', dgroupLeaderId, 'meetings', meetingDate)
+      await deleteDoc(refDoc)
+      return { status: 'success', message: 'Dgroup event deleted.' }
+    } catch (error) {
+      console.error('deleteDgroupEvent error:', error)
       return { status: 'error', message: error.message }
     }
   }
@@ -152,7 +203,9 @@ export const useDgroupEventsStore = defineStore('dgroupevents', () => {
     // real-time listener: callback receives array of docs [{id, ...data}]
     listenToDgroupMeetings,
     // allow updating an existing meeting doc with attendance/stats
-    updateDgroupMeeting
+    updateDgroupMeeting,
+    editDgroupEvent,
+    deleteDgroupEvent
   }
 })
 

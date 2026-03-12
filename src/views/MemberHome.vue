@@ -43,6 +43,7 @@ const todayEvent = computed(() => {
 })
 
 const showScheduleDgroupModal = ref(false)
+const selectedDgroupMeeting = ref(null)
 const dgroupEventsStore = useDgroupEventsStore()
 const membersStore = useMembersStore()
 
@@ -77,6 +78,10 @@ const upcomingDgroupMeetings = computed(() => {
     .filter(m => m && m.meetingDate && m.meetingDate > today && !m.ended)
     .sort((a, b) => (a.meetingDate || '').localeCompare(b.meetingDate || ''))
 })
+
+function getDgroupMeetingPhotoURL(meeting) {
+  return meeting?.photoURL || '/DGBG.jpg'
+}
 
 function stopMeetingsListener() { if (typeof meetingsUnsub === 'function') { meetingsUnsub(); meetingsUnsub = null } }
 
@@ -139,6 +144,17 @@ function openEventDetails(event) {
   showFullImage.value = false;
 }
 
+function openDgroupMeetingEditor(meeting) {
+  if (!isDgroupLeader.value) return
+  selectedDgroupMeeting.value = meeting
+  showScheduleDgroupModal.value = true
+}
+
+function closeDgroupMeetingModal() {
+  showScheduleDgroupModal.value = false
+  selectedDgroupMeeting.value = null
+}
+
 function formatShortDate(dateStr) { if (!dateStr) return ''; return new Date(dateStr).toLocaleString('default', { month: 'short', day: 'numeric' }) }
 </script>
 
@@ -178,7 +194,13 @@ function formatShortDate(dateStr) { if (!dateStr) return ''; return new Date(dat
       </div>
     </section>
 
-    <DgroupMeetingModal v-if="showScheduleDgroupModal" @close="showScheduleDgroupModal = false" />
+    <DgroupMeetingModal
+      v-if="showScheduleDgroupModal"
+      :meeting-to-edit="selectedDgroupMeeting"
+      @scheduled="closeDgroupMeetingModal"
+      @deleted="closeDgroupMeetingModal"
+      @close="closeDgroupMeetingModal"
+    />
 
     <div class="section-header"><h3><Calendar :size="18" /> Happening Today</h3></div>
     <section class="today-section">
@@ -190,7 +212,12 @@ function formatShortDate(dateStr) { if (!dateStr) return ''; return new Date(dat
         </div>
       </div>
 
-      <div v-if="todayMeeting" class="today-banner dgroup-theme" @click="showAttendanceModal = true">
+      <div
+        v-if="todayMeeting"
+        class="today-banner dgroup-theme"
+        :style="{ backgroundImage: `url(${getDgroupMeetingPhotoURL(todayMeeting)})` }"
+        @click="showAttendanceModal = true"
+      >
         <div class="banner-overlay">
           <div class="badge-pill warning-pill">DGROUP SESSION</div>
           <h2 class="banner-title">{{ todayMeeting.meetingTitle || 'Dgroup Meeting' }}</h2>
@@ -217,13 +244,16 @@ function formatShortDate(dateStr) { if (!dateStr) return ''; return new Date(dat
     <section class="upcoming-column">
       <div v-if="meetingsLoading" class="loading-state">Syncing meetings...</div>
       <div v-else-if="upcomingDgroupMeetings.length > 0" class="events-grid">
-        <div v-for="m in upcomingDgroupMeetings" :key="m.id || m.meetingDate" class="mini-meeting-card">
-          <div class="meeting-card-image">
-            <img v-if="m.photoURL" :src="m.photoURL" alt="Dgroup" />
-            <div v-else class="meeting-mesh"></div>
-            <div class="meeting-date-tag">{{ formatShortDate(m.meetingDate) }}</div>
-          </div>
+        <div
+          v-for="m in upcomingDgroupMeetings"
+          :key="m.id || m.meetingDate"
+          :class="['mini-meeting-card', { editable: isDgroupLeader }]"
+          :style="{ '--card-bg': `url(${getDgroupMeetingPhotoURL(m)})` }"
+          @click="openDgroupMeetingEditor(m)"
+        >
+          <div class="mini-meeting-overlay"></div>
           <div class="meeting-card-body">
+            <div class="meeting-date-tag">{{ formatShortDate(m.meetingDate) }}</div>
             <h4 class="meeting-name">{{ m.meetingTitle || 'Dgroup Meeting' }}</h4>
             <div class="meeting-loc"><MapPin :size="12" /> {{ m.venue || 'TBD' }}</div>
             <div class="meeting-time-pill" v-if="m.meetingTime">{{ m.meetingTime }}</div>
@@ -326,14 +356,16 @@ function formatShortDate(dateStr) { if (!dateStr) return ''; return new Date(dat
 .empty-state-card{background:#fff;padding:32px;border-radius:28px;text-align:center;border:2px dashed #e2e8f0;display:flex;flex-direction:column;align-items:center;gap:8px}
 .empty-icon-ring{width:60px;height:60px;border-radius:50%;background:#f8fafc;display:flex;align-items:center;justify-content:center;color:#94a3b8}
 .events-grid{display:grid;grid-template-columns:repeat(auto-fill, minmax(280px, 1fr));gap:16px;padding:8px 0 24px}
-.mini-meeting-card{background:#fff;border-radius:24px;overflow:hidden;box-shadow:0 4px 15px rgba(0,0,0,0.03);border:1px solid #f1f5f9;cursor:pointer}
-.meeting-card-image{height:100px;position:relative}
-.meeting-mesh-default{height:100%;background:linear-gradient(45deg, #6366f1, #a855f7)}
-.meeting-date-tag{position:absolute;top:10px;right:10px;background:white;padding:2px 8px;border-radius:6px;font-size:10px;font-weight:800;color:#4338ca}
-.meeting-card-body{padding:12px}
-.meeting-name{margin:0;font-size:14px;font-weight:700;color:#1e293b}
-.meeting-loc{display:flex;align-items:center;gap:4px;font-size:11px;color:#64748b;margin-top:4px}
-.meeting-time-pill{display:inline-block;margin-top:8px;padding:2px 8px;background:#f1f5f9;border-radius:4px;font-size:10px;font-weight:700;color:#475569}
+.mini-meeting-card{position:relative;height:250px;width:250px;border-radius:24px;overflow:hidden;box-shadow:0 8px 20px rgba(0,0,0,0.12);border:1px solid rgba(255,255,255,0.18);cursor:default}
+.mini-meeting-card.editable{cursor:pointer}
+.mini-meeting-card::before{content:'';position:absolute;inset:0;background-image:var(--card-bg);background-size:cover;background-position:center;background-repeat:no-repeat;transform:scale(1);transition:transform 0.45s ease}
+.mini-meeting-card.editable:hover::before{transform:scale(1.08)}
+.mini-meeting-overlay{position:absolute;inset:0;background:linear-gradient(180deg, rgba(0,0,0,0.28) 0%, rgba(0,0,0,0.72) 100%)}
+.meeting-date-tag{align-self:flex-end;background:rgba(255,255,255,0.94);padding:3px 10px;border-radius:8px;font-size:10px;font-weight:800;color:#312e81;margin-bottom:auto}
+.meeting-card-body{position:relative;z-index:1;height:100%;padding:12px;display:flex;flex-direction:column}
+.meeting-name{margin:0;font-size:16px;font-weight:800;color:#ffffff;text-shadow:0 2px 10px rgba(0,0,0,0.5);display:-webkit-box;-webkit-line-clamp:2;line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.meeting-loc{display:flex;align-items:center;gap:4px;font-size:11px;color:rgba(255,255,255,0.95);margin-top:6px}
+.meeting-time-pill{display:inline-block;margin-top:10px;width:45px;padding:3px 9px;background:rgba(255,255,255,0.2);backdrop-filter:blur(2px);border:1px solid rgba(255,255,255,0.35);border-radius:999px;font-size:10px;font-weight:700;color:#fff}
 .modal-backdrop{position:fixed;inset:0;background:rgba(15, 23, 42, 0.7);backdrop-filter:blur(8px);z-index:1000;display:flex;align-items:center;justify-content:center;padding:16px}
 .modern-modal{background:#fff;width:100%;max-width:480px;border-radius:32px;overflow:hidden;box-shadow:0 30px 60px -12px rgba(0,0,0,0.3)}
 

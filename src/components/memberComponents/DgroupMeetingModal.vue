@@ -1,21 +1,37 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import Modal from '../dgmComponents/Modal.vue'
 import DatePicker from '../dgmComponents/DatePicker.vue'
 import { useAuthStore } from '../../stores/auth'
 import { useDgroupEventsStore } from '../../stores/dgroupevents'
+import { storage } from '../../firebase'
+import { ref as storageRef, uploadBytesResumable, getDownloadURL } from 'firebase/storage'
 
 const show = ref(true)
 const scheduleDate = ref('')
 const scheduleTime = ref('')
 const scheduleVenue = ref('')
-const scheduleDescription = ref('')
 const scheduleTitle = ref('')
+const scheduleImageFile = ref(null)
+const scheduleImagePreview = ref('')
+const isUploadingImage = ref(false)
+const uploadProgress = ref(0)
 const scheduleStatus = ref({ type: '', message: '' })
 
-const emit = defineEmits(['close','scheduled'])
+const DEFAULT_DGROUP_BG = '/DGBG.jpg'
+
+const props = defineProps({
+  meetingToEdit: {
+    type: Object,
+    default: null
+  }
+})
+
+const emit = defineEmits(['close', 'scheduled', 'deleted'])
 const authStore = useAuthStore()
 const dgroupEventsStore = useDgroupEventsStore()
+
+const isEditMode = computed(() => !!props.meetingToEdit?.meetingDate)
 
 const isLeader = computed(() => {
   const user = authStore.userProfile
@@ -28,6 +44,71 @@ function close() {
   emit('close')
 }
 
+function resetForm() {
+  scheduleDate.value = ''
+  scheduleTime.value = ''
+  scheduleVenue.value = ''
+  scheduleTitle.value = ''
+  scheduleImageFile.value = null
+  scheduleImagePreview.value = ''
+  uploadProgress.value = 0
+  isUploadingImage.value = false
+  scheduleStatus.value = { type: '', message: '' }
+}
+
+function applyMeetingToForm(meeting) {
+  if (!meeting) {
+    resetForm()
+    return
+  }
+
+  scheduleDate.value = meeting.meetingDate || ''
+  scheduleTime.value = meeting.meetingTime || ''
+  scheduleVenue.value = meeting.venue || ''
+  scheduleTitle.value = meeting.meetingTitle || ''
+  scheduleImageFile.value = null
+  scheduleImagePreview.value = meeting.photoURL || ''
+  uploadProgress.value = 0
+  isUploadingImage.value = false
+  scheduleStatus.value = { type: '', message: '' }
+}
+
+watch(() => props.meetingToEdit, (meeting) => {
+  applyMeetingToForm(meeting)
+}, { immediate: true })
+
+function onScheduleImageChange(e) {
+  const file = e?.target?.files?.[0]
+  if (!file) {
+    scheduleImageFile.value = null
+    scheduleImagePreview.value = ''
+    return
+  }
+  scheduleImageFile.value = file
+  scheduleImagePreview.value = URL.createObjectURL(file)
+}
+
+function uploadScheduleImage(file) {
+  return new Promise((resolve, reject) => {
+    const safeName = (file.name || 'dgroup-bg').replace(/\s+/g, '-')
+    const filePath = `dgroup_event_images/${Date.now()}-${safeName}`
+    const fileRef = storageRef(storage, filePath)
+    const uploadTask = uploadBytesResumable(fileRef, file)
+
+    uploadTask.on(
+      'state_changed',
+      (snapshot) => {
+        uploadProgress.value = (snapshot.bytesTransferred / snapshot.totalBytes) * 100
+      },
+      (error) => reject(error),
+      async () => {
+        const downloadURL = await getDownloadURL(uploadTask.snapshot.ref)
+        resolve(downloadURL)
+      }
+    )
+  })
+}
+
 async function handleScheduleSubmit() {
   if (!isLeader.value) {
     scheduleStatus.value = { type: 'error', message: 'Only Dgroup leaders can schedule meetings.' }
@@ -38,9 +119,29 @@ async function handleScheduleSubmit() {
     return
   }
 
-  const dgroupId = authStore.userProfile?.dgroupId
-  if (!dgroupId) {
-    scheduleStatus.value = { type: 'error', message: 'You are not assigned to a Dgroup.' }
+  if (!isEditMode.value) {
+    const dgroupId = authStore.userProfile?.dgroupId
+    if (!dgroupId) {
+      scheduleStatus.value = { type: 'error', message: 'You are not assigned to a Dgroup.' }
+      return
+    }
+  }
+
+  isUploadingImage.value = true
+  uploadProgress.value = 0
+  let uploadedPhotoURL = ''
+
+  try {
+    if (scheduleImageFile.value) {
+      uploadedPhotoURL = await uploadScheduleImage(scheduleImageFile.value)
+    }
+  } catch (uploadErr) {
+    console.error('Dgroup image upload failed:', uploadErr)
+    isUploadingImage.value = false
+    scheduleStatus.value = {
+      type: 'error',
+      message: 'Image upload failed. Please try again.'
+    }
     return
   }
 
@@ -48,10 +149,11 @@ async function handleScheduleSubmit() {
     meetingDate: scheduleDate.value,
     meetingTime: scheduleTime.value,
     venue: scheduleVenue.value,
-    meetingTitle: scheduleTitle.value || scheduleDescription.value
+    meetingTitle: scheduleTitle.value,
+    photoURL: uploadedPhotoURL || scheduleImagePreview.value || DEFAULT_DGROUP_BG
   }
 
-const dgroupLeaderId = authStore.userProfile?.id
+const dgroupLeaderId = props.meetingToEdit?.dgroupLeaderId || authStore.userProfile?.id
 
     if (!dgroupLeaderId) {
       scheduleStatus.value = {
@@ -61,20 +163,61 @@ const dgroupLeaderId = authStore.userProfile?.id
       return
     }
 
-    const res = await dgroupEventsStore.createDgroupEvent(
-      dgroupLeaderId,
-      payload
-    )
+    let res
+    if (isEditMode.value) {
+      const originalMeetingDate = props.meetingToEdit.meetingDate
+      const dateChanged = scheduleDate.value !== originalMeetingDate
+
+      if (dateChanged) {
+        // When date changes, move the meeting to a new document ID (meetingDate)
+        const createRes = await dgroupEventsStore.createDgroupEvent(dgroupLeaderId, payload)
+        if (createRes?.status !== 'success') {
+          res = createRes
+        } else {
+          const deleteRes = await dgroupEventsStore.deleteDgroupEvent(dgroupLeaderId, originalMeetingDate)
+          res = deleteRes?.status === 'success'
+            ? { status: 'success', message: 'Dgroup event moved to new date.' }
+            : { status: 'error', message: deleteRes?.message || 'Meeting was created on new date, but old date could not be removed.' }
+        }
+      } else {
+        res = await dgroupEventsStore.editDgroupEvent(dgroupLeaderId, originalMeetingDate, payload)
+      }
+    } else {
+      res = await dgroupEventsStore.createDgroupEvent(dgroupLeaderId, payload)
+    }
 
     if (res && res.status === 'success') {
+      isUploadingImage.value = false
       emit('scheduled')
       close()
     } else {
+      isUploadingImage.value = false
       scheduleStatus.value = {
         type: 'error',
         message: res?.message || 'Failed to schedule meeting.'
       }
     }
+}
+
+async function handleDeleteMeeting() {
+  if (!isLeader.value || !isEditMode.value) return
+  const confirmed = confirm(`Delete meeting on ${scheduleDate.value}?`)
+  if (!confirmed) return
+
+  const dgroupLeaderId = props.meetingToEdit?.dgroupLeaderId || authStore.userProfile?.id
+  if (!dgroupLeaderId || !props.meetingToEdit?.meetingDate) {
+    scheduleStatus.value = { type: 'error', message: 'Missing meeting info for delete.' }
+    return
+  }
+
+  const res = await dgroupEventsStore.deleteDgroupEvent(dgroupLeaderId, props.meetingToEdit.meetingDate)
+  if (res?.status === 'success') {
+    emit('deleted')
+    close()
+    return
+  }
+
+  scheduleStatus.value = { type: 'error', message: res?.message || 'Failed to delete meeting.' }
 }
 </script>
 
@@ -82,7 +225,7 @@ const dgroupLeaderId = authStore.userProfile?.id
   <Modal @close="close">
     <div class="form-container">
       <div class="form-header">
-        <h2>Schedule Weekly Dgroup Meeting</h2>
+        <h2>{{ isEditMode ? 'Edit Upcoming Dgroup Meeting' : 'Schedule Weekly Dgroup Meeting' }}</h2>
       </div>
 
       <div class="separator"></div>
@@ -112,9 +255,23 @@ const dgroupLeaderId = authStore.userProfile?.id
           <input v-model="scheduleTitle" placeholder="e.g. Weekly Bible Study" />
         </div>
 
+        <div class="form-group">
+          <label>Background Picture (Optional)</label>
+          <input type="file" accept="image/png, image/jpeg, image/webp" @change="onScheduleImageChange" />
+          <small class="field-hint">If none is uploaded, default image will be used.</small>
+          <div v-if="scheduleImagePreview" class="image-preview-wrap">
+            <img :src="scheduleImagePreview" alt="Dgroup background preview" class="image-preview" />
+          </div>
+        </div>
+
+        <div v-if="isUploadingImage" class="upload-state">
+          Uploading image... {{ Math.round(uploadProgress) }}%
+        </div>
+
         <div class="actions" style="margin-top: 12px;">
+          <button v-if="isEditMode" type="button" class="delete" @click="handleDeleteMeeting">Delete</button>
           <button type="button" class="cancel" @click="close">Cancel</button>
-          <button type="submit" class="confirm" :disabled="!isLeader">Schedule</button>
+          <button type="submit" class="confirm" :disabled="!isLeader || isUploadingImage">{{ isEditMode ? 'Save Changes' : 'Schedule' }}</button>
         </div>
         <div v-if="!isLeader" style="margin-top:8px;color:#607D8B;font-weight:600;">Only Dgroup leaders can schedule meetings.</div>
       </form>
@@ -134,7 +291,12 @@ const dgroupLeaderId = authStore.userProfile?.id
 .form-group { margin-bottom: 8px; }
 .form-group label { display:block; font-weight:700; font-size:12px; margin-bottom:4px }
 .form-group input { width:95%; padding:8px; border-radius:6px; border:1px solid #E0E0E0 }
+.field-hint { display:block; margin-top:4px; color:#607D8B; font-size:11px }
+.image-preview-wrap { margin-top:8px }
+.image-preview { width:95%; max-height:140px; object-fit:cover; border-radius:6px; border:1px solid #E0E0E0 }
+.upload-state { margin-top:8px; font-size:12px; color:#1565C0; font-weight:600 }
 .actions { display:flex; justify-content:flex-end; gap:8px }
+.delete { background:#ffebee; color:#c62828; border:1px solid #ffcdd2; padding:8px 12px; border-radius:6px }
 .cancel { background:#fff; border:1px solid #E0E0E0; padding:8px 12px; border-radius:6px }
 .confirm { background:#1976D2; color:white; padding:8px 12px; border-radius:6px; border:none }
 .status-banner { padding:8px; border-radius:6px; margin-bottom:8px }
