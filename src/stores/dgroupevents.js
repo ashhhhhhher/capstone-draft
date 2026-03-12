@@ -33,20 +33,25 @@ export const useDgroupEventsStore = defineStore('dgroupevents', () => {
     }
 
   /**
-   * Create or overwrite a scheduled dgroup event (document id = meetingDate YYYY-MM-DD)
-   * payload should include at least meetingDate (YYYY-MM-DD string)
+   * Create or overwrite a scheduled dgroup event (document id = meetingWeekId like 260308-14)
+   * payload should include at least meetingWeekId (YYMMDD-DD format) or meetingDate (YYYY-MM-DD to convert)
    */
   async function createDgroupEvent(dgroupLeaderId, payload) {
     const authStore = useAuthStore()
-    if (!authStore.branchId || !dgroupLeaderId || !payload || !payload.meetingDate) {
-      return { status: 'error', message: 'Missing branch, dgroupLeaderId, or meetingDate' }
+    if (!authStore.branchId || !dgroupLeaderId || !payload) {
+      return { status: 'error', message: 'Missing branch, dgroupLeaderId, or payload' }
     }
 
     try {
       const col = getDgroupCollection(dgroupLeaderId)
       if (!col) return { status: 'error', message: 'Invalid branch or dgroupLeaderId' }
 
-      const meetingId = payload.meetingDate
+      // Use weekId if available, otherwise use meetingDate
+      const meetingId = payload.meetingWeekId || payload.meetingDate
+      if (!meetingId) {
+        return { status: 'error', message: 'Missing meetingWeekId or meetingDate in payload' }
+      }
+
       // Prefer explicit doc path to avoid any collection reference ambiguity
       const refDoc = doc(db, 'branches', authStore.branchId, 'dgroupEvents', dgroupLeaderId, 'meetings', meetingId)
       console.debug('createDgroupEvent: writing to', `branches/${authStore.branchId}/dgroupEvents/${dgroupLeaderId}/meetings/${meetingId}`)
@@ -56,6 +61,7 @@ export const useDgroupEventsStore = defineStore('dgroupevents', () => {
       const docData = {
         dgroupLeaderId: dgroupLeaderId,
         meetingDate: payload.meetingDate,
+        meetingWeekId: payload.meetingWeekId || meetingId,
         meetingTime: payload.meetingTime || '',
         venue: payload.venue || '',
         photoURL: payload.photoURL || DEFAULT_DGROUP_BG,
@@ -119,16 +125,16 @@ export const useDgroupEventsStore = defineStore('dgroupevents', () => {
 
   /**
    * Update (or create) a meeting document with attendance and stats
-   * meetingDate should be YYYY-MM-DD string
+   * meetingId should be a week ID (YYMMDD-DD format) or date (YYYY-MM-DD string)
    */
-  async function updateDgroupMeeting(dgroupLeaderId, meetingDate, updates) {
+  async function updateDgroupMeeting(dgroupLeaderId, meetingId, updates) {
     const authStore = useAuthStore()
-    if (!authStore.branchId || !dgroupLeaderId || !meetingDate) return { status: 'error', message: 'Missing branch, dgroupLeaderId, or meetingDate' }
+    if (!authStore.branchId || !dgroupLeaderId || !meetingId) return { status: 'error', message: 'Missing branch, dgroupLeaderId, or meetingId' }
     try {
-      const refDoc = doc(db, 'branches', authStore.branchId, 'dgroupEvents', dgroupLeaderId, 'meetings', meetingDate)
+      const refDoc = doc(db, 'branches', authStore.branchId, 'dgroupEvents', dgroupLeaderId, 'meetings', meetingId)
       const snap = await getDoc(refDoc)
       // Only update allowed meeting fields to avoid overwriting schedule data
-      const allowed = ['attendees', 'guests', 'evangelized', 'campusDmember', 'locked', 'ended', 'submittedBy', 'submittedById']
+      const allowed = ['attendees', 'guests', 'evangelized', 'campusDmember', 'locked', 'submittedBy', 'submittedById', 'loggingDate', 'submittedAt', 'isResubmitted']
       const updateObj = { submittedAt: serverTimestamp() }
       allowed.forEach((k) => {
         if (updates[k] !== undefined) updateObj[k] = updates[k]
@@ -138,7 +144,7 @@ export const useDgroupEventsStore = defineStore('dgroupevents', () => {
         await updateDoc(refDoc, updateObj)
       } else {
         // create doc with minimal required fields plus the updates
-        await setDoc(refDoc, { dgroupLeaderId, meetingDate, photoURL: DEFAULT_DGROUP_BG, ...updateObj })
+        await setDoc(refDoc, { dgroupLeaderId, meetingId, photoURL: DEFAULT_DGROUP_BG, ...updateObj })
       }
       return { status: 'success' }
     } catch (error) {
@@ -149,15 +155,16 @@ export const useDgroupEventsStore = defineStore('dgroupevents', () => {
 
   /**
    * Edit a scheduled dgroup event details (leader scheduling fields only)
+   * meetingId should be a week ID (YYMMDD-DD format) or date (YYYY-MM-DD string)
    */
-  async function editDgroupEvent(dgroupLeaderId, meetingDate, updates) {
+  async function editDgroupEvent(dgroupLeaderId, meetingId, updates) {
     const authStore = useAuthStore()
-    if (!authStore.branchId || !dgroupLeaderId || !meetingDate) {
-      return { status: 'error', message: 'Missing branch, dgroupLeaderId, or meetingDate' }
+    if (!authStore.branchId || !dgroupLeaderId || !meetingId) {
+      return { status: 'error', message: 'Missing branch, dgroupLeaderId, or meetingId' }
     }
 
     try {
-      const refDoc = doc(db, 'branches', authStore.branchId, 'dgroupEvents', dgroupLeaderId, 'meetings', meetingDate)
+      const refDoc = doc(db, 'branches', authStore.branchId, 'dgroupEvents', dgroupLeaderId, 'meetings', meetingId)
       const allowed = ['meetingTime', 'venue', 'meetingTitle', 'photoURL']
       const updateObj = { submittedAt: serverTimestamp() }
       allowed.forEach((k) => {
@@ -177,15 +184,16 @@ export const useDgroupEventsStore = defineStore('dgroupevents', () => {
   }
 
   /**
-   * Delete a scheduled dgroup event by meeting date
+   * Delete a scheduled dgroup event by meeting ID
+   * meetingId should be a week ID (YYMMDD-DD format) or date (YYYY-MM-DD string)
    */
-  async function deleteDgroupEvent(dgroupLeaderId, meetingDate) {
+  async function deleteDgroupEvent(dgroupLeaderId, meetingId) {
     const authStore = useAuthStore()
-    if (!authStore.branchId || !dgroupLeaderId || !meetingDate) {
-      return { status: 'error', message: 'Missing branch, dgroupLeaderId, or meetingDate' }
+    if (!authStore.branchId || !dgroupLeaderId || !meetingId) {
+      return { status: 'error', message: 'Missing branch, dgroupLeaderId, or meetingId' }
     }
     try {
-      const refDoc = doc(db, 'branches', authStore.branchId, 'dgroupEvents', dgroupLeaderId, 'meetings', meetingDate)
+      const refDoc = doc(db, 'branches', authStore.branchId, 'dgroupEvents', dgroupLeaderId, 'meetings', meetingId)
       await deleteDoc(refDoc)
       return { status: 'success', message: 'Dgroup event deleted.' }
     } catch (error) {

@@ -5,7 +5,9 @@ const props = defineProps({
   modelValue: { type: String, default: '' },
   required: { type: Boolean, default: false },
   // optional override for min attribute (YYYY-MM-DD). If null -> no min; if undefined -> default to today
-  min: { type: [String, null], default: undefined }
+  min: { type: [String, null], default: undefined },
+  // optional override for max attribute (YYYY-MM-DD). If null -> no max
+  max: { type: [String, null], default: null }
 })
 const emit = defineEmits(['update:modelValue'])
 
@@ -34,6 +36,7 @@ function onInput(e) {
     :value="valueRef"
     @input="onInput"
     :min="minDate"
+    :max="props.max || undefined"
     :required="props.required"
     class="date-input"
   />

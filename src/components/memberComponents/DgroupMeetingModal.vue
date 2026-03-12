@@ -6,6 +6,7 @@ import { useAuthStore } from '../../stores/auth'
 import { useDgroupEventsStore } from '../../stores/dgroupevents'
 import { storage } from '../../firebase'
 import { ref as storageRef, uploadBytesResumable, getDownloadURL } from 'firebase/storage'
+import { generateWeekId, parseWeekId, formatWeekIdDisplay } from '../../utils/weeklyMeetingUtils'
 
 const show = ref(true)
 const scheduleDate = ref('')
@@ -145,72 +146,77 @@ async function handleScheduleSubmit() {
     return
   }
 
+  // Convert meeting date to week ID (e.g., 260308-14)
+  const weekId = generateWeekId(scheduleDate.value)
+
   const payload = {
     meetingDate: scheduleDate.value,
+    meetingWeekId: weekId,
     meetingTime: scheduleTime.value,
     venue: scheduleVenue.value,
     meetingTitle: scheduleTitle.value,
     photoURL: uploadedPhotoURL || scheduleImagePreview.value || DEFAULT_DGROUP_BG
   }
 
-const dgroupLeaderId = props.meetingToEdit?.dgroupLeaderId || authStore.userProfile?.id
+  const dgroupLeaderId = props.meetingToEdit?.dgroupLeaderId || authStore.userProfile?.id
 
-    if (!dgroupLeaderId) {
-      scheduleStatus.value = {
-        type: 'error',
-        message: 'Unable to determine Dgroup Leader ID.'
-      }
-      return
+  if (!dgroupLeaderId) {
+    scheduleStatus.value = {
+      type: 'error',
+      message: 'Unable to determine Dgroup Leader ID.'
     }
+    return
+  }
 
-    let res
-    if (isEditMode.value) {
-      const originalMeetingDate = props.meetingToEdit.meetingDate
-      const dateChanged = scheduleDate.value !== originalMeetingDate
+  let res
+  if (isEditMode.value) {
+    const originalMeetingWeekId = props.meetingToEdit.meetingWeekId
+    const weekChanged = weekId !== originalMeetingWeekId
 
-      if (dateChanged) {
-        // When date changes, move the meeting to a new document ID (meetingDate)
-        const createRes = await dgroupEventsStore.createDgroupEvent(dgroupLeaderId, payload)
-        if (createRes?.status !== 'success') {
-          res = createRes
-        } else {
-          const deleteRes = await dgroupEventsStore.deleteDgroupEvent(dgroupLeaderId, originalMeetingDate)
-          res = deleteRes?.status === 'success'
-            ? { status: 'success', message: 'Dgroup event moved to new date.' }
-            : { status: 'error', message: deleteRes?.message || 'Meeting was created on new date, but old date could not be removed.' }
-        }
+    if (weekChanged) {
+      // When week changes, move the meeting to a new week ID
+      const createRes = await dgroupEventsStore.createDgroupEvent(dgroupLeaderId, payload)
+      if (createRes?.status !== 'success') {
+        res = createRes
       } else {
-        res = await dgroupEventsStore.editDgroupEvent(dgroupLeaderId, originalMeetingDate, payload)
+        const deleteRes = await dgroupEventsStore.deleteDgroupEvent(dgroupLeaderId, originalMeetingWeekId)
+        res = deleteRes?.status === 'success'
+          ? { status: 'success', message: 'Dgroup event moved to new week.' }
+          : { status: 'error', message: deleteRes?.message || 'Meeting was created on new week, but old week could not be removed.' }
       }
     } else {
-      res = await dgroupEventsStore.createDgroupEvent(dgroupLeaderId, payload)
+      res = await dgroupEventsStore.editDgroupEvent(dgroupLeaderId, originalMeetingWeekId, payload)
     }
+  } else {
+    res = await dgroupEventsStore.createDgroupEvent(dgroupLeaderId, payload)
+  }
 
-    if (res && res.status === 'success') {
-      isUploadingImage.value = false
-      emit('scheduled')
-      close()
-    } else {
-      isUploadingImage.value = false
-      scheduleStatus.value = {
-        type: 'error',
-        message: res?.message || 'Failed to schedule meeting.'
-      }
+  if (res && res.status === 'success') {
+    isUploadingImage.value = false
+    emit('scheduled')
+    close()
+  } else {
+    isUploadingImage.value = false
+    scheduleStatus.value = {
+      type: 'error',
+      message: res?.message || 'Failed to schedule meeting.'
     }
+  }
 }
 
 async function handleDeleteMeeting() {
   if (!isLeader.value || !isEditMode.value) return
-  const confirmed = confirm(`Delete meeting on ${scheduleDate.value}?`)
+  const weekId = props.meetingToEdit?.meetingWeekId || generateWeekId(scheduleDate.value)
+  const confirmed = confirm(`Delete meeting for week ${formatWeekIdDisplay(weekId)}?`)
   if (!confirmed) return
 
   const dgroupLeaderId = props.meetingToEdit?.dgroupLeaderId || authStore.userProfile?.id
-  if (!dgroupLeaderId || !props.meetingToEdit?.meetingDate) {
+  if (!dgroupLeaderId || !weekId) {
     scheduleStatus.value = { type: 'error', message: 'Missing meeting info for delete.' }
     return
   }
 
-  const res = await dgroupEventsStore.deleteDgroupEvent(dgroupLeaderId, props.meetingToEdit.meetingDate)
+  const res = await dgroupEventsStore.deleteDgroupEvent(dgroupLeaderId, weekId)
   if (res?.status === 'success') {
     emit('deleted')
     close()

@@ -4,7 +4,9 @@ import { useAttendanceStore } from '../../stores/attendance'
 import { useMembersStore } from '../../stores/members'
 import { useAuthStore } from '../../stores/auth'
 import { useDgroupEventsStore } from '../../stores/dgroupevents'
+import DatePicker from '../dgmComponents/DatePicker.vue'
 import { ClipboardCheck } from 'lucide-vue-next'
+import { generateWeekId, formatWeekIdDisplay, parseWeekId } from '../../utils/weeklyMeetingUtils'
 
 const props = defineProps({
     group: { type: Object, required: true },
@@ -28,23 +30,80 @@ const isLeader = computed(() => {
 
 const show = ref(true)
 const showConfirm = ref(false)
+const loggingDate = ref(props.meeting?.meetingDate || new Date().toISOString().split('T')[0])
+const todayYMD = ref(new Date().toISOString().split('T')[0])
 
 const attendanceForm = reactive({
-    date: props.meeting?.meetingDate || new Date().toISOString().split('T')[0],
+    attendees: {},
     guests: 0,
     evangelized: 0,
-    campusDmember: 0,
-    attendees: {}
+    campusDmember: 0
 })
 
 const meetingLoading = ref(false)
+const hasSubmittedReport = ref(false)
+const existingReport = ref(null)
+
+// Compute the week ID based on logging date
+const weekId = computed(() => generateWeekId(loggingDate.value))
+
+const allowedDateMin = computed(() => {
+    const { startDate } = parseWeekId(weekId.value)
+    if (!startDate) return todayYMD.value
+    return todayYMD.value > startDate ? todayYMD.value : startDate
+})
+
+const allowedDateMax = computed(() => {
+    const { endDate } = parseWeekId(weekId.value)
+    return endDate || undefined
+})
+
+watch([allowedDateMin, allowedDateMax], ([min, max]) => {
+    if (!loggingDate.value) {
+        loggingDate.value = min
+        return
+    }
+    if (min && loggingDate.value < min) loggingDate.value = min
+    if (max && loggingDate.value > max) loggingDate.value = max
+}, { immediate: true })
+
+// Check if a report was already submitted for this week
+async function checkExistingReport() {
+    if (!isLeader.value) return
+    const leaderId = props.group?.dgroupLeaderId || props.meeting?.dgroupLeaderId || props.leaderId || authStore.userProfile?.id
+    if (!leaderId) {
+        hasSubmittedReport.value = false
+        existingReport.value = null
+        return
+    }
+    try {
+        const existing = await attendanceStore.getDgroupMeetingReport(leaderId, weekId.value)
+        existingReport.value = existing || null
+        hasSubmittedReport.value = !!existing
+
+        if (existing) {
+            attendanceForm.guests = Number(existing.guests || 0)
+            attendanceForm.evangelized = Number(existing.evangelized || 0)
+            attendanceForm.campusDmember = Number(existing.campusDmember || 0)
+        } else {
+            // Reset when no report exists for this week to avoid stale values from prior week
+            attendanceForm.guests = 0
+            attendanceForm.evangelized = 0
+            attendanceForm.campusDmember = 0
+        }
+    } catch (e) {
+        console.error('Error checking existing report:', e)
+        hasSubmittedReport.value = false
+        existingReport.value = null
+    }
+}
 
 async function buildChecklist() {
     meetingLoading.value = true
-    const today = new Date().toISOString().split('T')[0]
+    const scanDate = loggingDate.value || todayYMD.value
     let serviceScans = []
     try {
-        serviceScans = await attendanceStore.getAttendanceByDate(today)
+        serviceScans = await attendanceStore.getAttendanceByDate(scanDate)
     } catch (e) {
         console.error('Failed to fetch service scans:', e)
     }
@@ -67,6 +126,9 @@ async function buildChecklist() {
         membersList = props.members || []
     }
 
+    // Check if we have an existing report to preserve attendance data
+    const existingAttendees = existingReport.value?.attendees || {}
+
     membersList.forEach(m => {
         const memberId = m.id || m
         const storeMember = membersStore.activeMembers.find(am => am.id === memberId)
@@ -75,14 +137,15 @@ async function buildChecklist() {
         const finalTags = storeMember?.finalTags || m.finalTags || {}
         const hasScanned = serviceScans.some(scan => scan.memberId === memberId)
         
-        // Logical default tag assignment
+        // Preserve attendance data from previous submission if member was marked present
         const autoTag = finalTags?.isDgroupLeader ? 'BDL' : 'BDM'
+        const existingData = existingAttendees[memberId]
         
         checklist[memberId] = {
             name: `${firstName} ${lastName}`.trim(),
-            isPresent: hasScanned,
+            isPresent: existingData?.isPresent ? true : hasScanned,
             scanned: hasScanned,
-            tag: autoTag
+            tag: existingData?.tag || autoTag
         }
     })
     attendanceForm.attendees = checklist
@@ -92,12 +155,12 @@ async function buildChecklist() {
 watch([
     () => props.members,
     () => props.group,
-    () => membersStore.activeMembers
-], () => buildChecklist(), { immediate: true, deep: true })
-
-watch(() => props.meeting, (m) => {
-    if (m && m.meetingDate) attendanceForm.date = m.meetingDate
-}, { immediate: true })
+    () => membersStore.activeMembers,
+    () => loggingDate.value
+], async () => {
+    await checkExistingReport()
+    await buildChecklist()
+}, { immediate: true, deep: true })
 
 function close() {
     show.value = false
@@ -106,17 +169,24 @@ function close() {
 
 async function submitAttendance() {
     if (!isLeader.value) return
-    const resolvedLeaderId = props.group?.dgroupLeaderId
+    const resolvedLeaderId = props.group?.dgroupLeaderId || props.meeting?.dgroupLeaderId || props.leaderId || authStore.userProfile?.id
     const user = authStore.userProfile
+
+    if (!resolvedLeaderId) {
+        alert('Unable to submit report: missing leader ID.')
+        return
+    }
 
     const payload = {
         dgroupLeaderId: resolvedLeaderId,
-        meetingDate: attendanceForm.date,
+        meetingWeekId: weekId.value,
+        loggingDate: loggingDate.value,
         attendees: attendanceForm.attendees,
         evangelized: attendanceForm.evangelized || 0,
         guests: attendanceForm.guests || 0,
         campusDmember: attendanceForm.campusDmember || 0,
         locked: false,
+        isResubmitted: hasSubmittedReport.value,
         submittedById: user?.id,
         submittedBy: `${user?.firstName || ''} ${user?.lastName || ''}`.trim()
     };
@@ -132,9 +202,9 @@ async function submitAttendance() {
     }
 }
 
-function openEndMeetingConfirm() { showConfirm.value = true }
-function cancelEndMeeting() { showConfirm.value = false }
-async function confirmEndMeeting() {
+function openSubmitConfirm() { showConfirm.value = true }
+function cancelSubmit() { showConfirm.value = false }
+async function confirmSubmit() {
     showConfirm.value = false
     await submitAttendance()
 }
@@ -142,19 +212,18 @@ async function confirmEndMeeting() {
 async function cancelCurrentMeeting() {
     if (!isLeader.value) return
 
-    const meetingDate = props.meeting?.meetingDate || attendanceForm.date
     const dgroupLeaderId = props.group?.dgroupLeaderId || props.meeting?.dgroupLeaderId || props.leaderId || authStore.userProfile?.id
 
-    if (!meetingDate || !dgroupLeaderId) {
-        alert('Unable to cancel meeting: missing meeting date or leader ID.')
+    if (!weekId.value || !dgroupLeaderId) {
+        alert('Unable to cancel meeting: missing week ID or leader ID.')
         return
     }
 
-    const ok = confirm(`Cancel this meeting on ${meetingDate}? This will delete the whole meeting record.`)
+    const ok = confirm(`Cancel this meeting for week ${formatWeekIdDisplay(weekId.value)}? This will delete the whole meeting record.`)
     if (!ok) return
 
     try {
-        const res = await dgroupEventsStore.deleteDgroupEvent(dgroupLeaderId, meetingDate)
+        const res = await dgroupEventsStore.deleteDgroupEvent(dgroupLeaderId, weekId.value)
         if (res?.status === 'success') {
             close()
             return
@@ -170,8 +239,15 @@ async function cancelCurrentMeeting() {
 <template>
     <div v-if="show" class="modal-overlay">
         <div class="modal create-modal attendance-scroll-modal">
-            <h3>Weekly Dgroup Report<span v-if="props.meeting"> - {{ props.meeting.meetingTitle || props.meeting.meetingDate }}</span></h3>
-            <p class="modal-desc">Service scans from today are automatically checked.</p>
+            <h3>Weekly Dgroup Report</h3>
+            <p class="modal-desc">Log attendance for week: {{ formatWeekIdDisplay(weekId) }}</p>
+
+            <div class="separator"></div>
+
+            <div class="form-group">
+                <label>Logging Date (within this week)</label>
+                <DatePicker v-model="loggingDate" :min="allowedDateMin" :max="allowedDateMax" />
+            </div>
 
             <div class="separator"></div>
 
@@ -213,17 +289,19 @@ async function cancelCurrentMeeting() {
             <div class="actions">
                 <button @click="close" class="cancel">Close</button>
                 <button v-if="isLeader" @click="cancelCurrentMeeting" class="cancel-meeting">Cancel Meeting</button>
-                <button v-if="isLeader" @click="openEndMeetingConfirm" class="end-meeting">End Meeting</button>
+                <button v-if="isLeader" @click="openSubmitConfirm" :class="hasSubmittedReport ? 'resubmit-report' : 'submit-report'">
+                    {{ hasSubmittedReport ? 'Re-submit Report' : 'Submit Report' }}
+                </button>
             </div>
 
             <div v-if="!isLeader" class="info-note">Only Dgroup leaders can submit attendance.</div>
 
             <div v-if="showConfirm" class="confirm-overlay">
                 <div class="confirm-box">
-                    <p class="confirm-text">Are you sure you want to end the meeting?</p>
+                    <p class="confirm-text">Are you sure you want to {{ hasSubmittedReport ? 'update' : 'submit' }} the report?</p>
                     <div class="confirm-actions">
-                        <button @click="confirmEndMeeting" class="confirm-yes">Yes, submit report</button>
-                        <button @click="cancelEndMeeting" class="confirm-no">No, not yet.</button>
+                        <button @click="confirmSubmit" class="confirm-yes">Yes, {{ hasSubmittedReport ? 'update' : 'submit' }} report</button>
+                        <button @click="cancelSubmit" class="confirm-no">Cancel</button>
                     </div>
                 </div>
             </div>
@@ -237,6 +315,8 @@ async function cancelCurrentMeeting() {
 .attendance-scroll-modal { max-height: 80vh; }
 .modal h3 { margin: 0 0 8px 0; font-size: 18px; color: #263238; }
 .modal-desc { margin: 6px 0 12px 0; color: #607D8B; font-size: 13px }
+.form-group { margin-bottom: 16px; }
+.form-group label { display: block; font-weight: 700; font-size: 12px; margin-bottom: 4px; }
 .separator { height: 1px; background-color: #ECEFF1; margin: 16px 0; width: 98%; }
 .attendance-checklist-updated { display: flex; flex-direction: column; gap: 10px; margin-top: 10px; }
 .attendance-item { display: flex; align-items: center; gap: 12px; padding: 10px; border-radius: 10px; background: #FAFBFC; border: 1px solid #F1F3F5; }
@@ -247,7 +327,10 @@ async function cancelCurrentMeeting() {
 .actions { display:flex; gap:8px; justify-content:flex-end; margin-top:16px; }
 .cancel { background:transparent; border:1px solid #CFD8DC; padding:8px 14px; border-radius:8px; color:#37474F; font-weight:700 }
 .cancel-meeting { background:#fff3e0; color:#e65100; padding:8px 14px; border-radius:8px; border:1px solid #ffcc80; font-weight:700 }
-.end-meeting { background:#C62828; color:white; padding:8px 14px; border-radius:8px; border:none; font-weight:700 }
+.submit-report { background:#2E7D32; color:white; padding:8px 14px; border-radius:8px; border:none; font-weight:700 }
+.submit-report:hover { background:#1B5E20; }
+.resubmit-report { background:#1976D2; color:white; padding:8px 14px; border-radius:8px; border:none; font-weight:700 }
+.resubmit-report:hover { background:#1565C0; }
 .confirm-overlay { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; z-index: 300; background: rgba(2,6,23,0.45); }
 .confirm-box { background: white; padding: 18px; border-radius: 12px; box-shadow: 0 8px 24px rgba(9,30,66,0.12); width: 92%; max-width: 460px; text-align: center; }
 .confirm-text { font-weight: 800; margin-bottom: 14px; color: #263238; font-size: 15px }

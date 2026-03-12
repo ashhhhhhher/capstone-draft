@@ -7,10 +7,11 @@ import { useAuthStore } from '../../stores/auth'
 import { Download, Users, ClipboardList, MessageCircle, Heart, UserPlus, TrendingUp, FileSpreadsheet } from 'lucide-vue-next'
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
+import { generateWeekId, formatWeekIdDisplay, parseWeekId } from '../../utils/weeklyMeetingUtils'
 
 const logs = ref([])
 const loading = ref(true)
-const selectedWeekStart = ref('') // YYYY-MM-DD (Sunday)
+const selectedWeekId = ref('') // Week ID like 260308-14
 const membersStore = useMembersStore()
 
 // BUG FIX: Parse dates manually to avoid timezone shifting (the JS off-by-one date bug)
@@ -33,21 +34,32 @@ onMounted(() => {
   const cg = collectionGroup(db, 'meetings')
   onSnapshot(cg, (snapshot) => {
     const items = []
-    const today = localYMD()
     snapshot.forEach(docSnap => {
       const path = docSnap.ref.path
       if (!authStore.branchId || !path.includes(`branches/${authStore.branchId}/dgroupEvents/`)) return
       const data = docSnap.data()
-      if (data && data.meetingDate && data.meetingDate <= today) {
-        if (data.submittedBy || data.submittedById) items.push({ id: docSnap.id, ...data })
+      if (data && (data.submittedBy || data.submittedById)) {
+        // Include all submitted reports (do not gate by date; loggingDate can be future within week)
+        const logDate = data.loggingDate || data.meetingDate
+        if (logDate || data.meetingWeekId) items.push({ id: docSnap.id, ...data })
       }
     })
-    items.sort((a,b) => (b.meetingDate || '').localeCompare(a.meetingDate || ''))
+    // Sort by meetingWeekId if available, otherwise by meetingDate
+    items.sort((a, b) => {
+      const aId = a.meetingWeekId || a.id || a.meetingDate || ''
+      const bId = b.meetingWeekId || b.id || b.meetingDate || ''
+      return bId.localeCompare(aId)
+    })
     logs.value = items
     loading.value = false
-    if (!selectedWeekStart.value) {
-      const initDate = items.length > 0 ? items[0].meetingDate : localYMD()
-      selectedWeekStart.value = getWeekStartISO(initDate)
+    if (!selectedWeekId.value) {
+      if (items.length > 0) {
+        const firstLog = items[0]
+        const weekId = firstLog.meetingWeekId || generateWeekId(firstLog.meetingDate || firstLog.loggingDate || localYMD())
+        selectedWeekId.value = weekId
+      } else {
+        selectedWeekId.value = generateWeekId(localYMD())
+      }
     }
   })
   membersStore.fetchMembers()
@@ -58,23 +70,6 @@ function toISODate(d) {
   const mm = String(d.getMonth()+1).padStart(2,'0')
   const dd = String(d.getDate()).padStart(2,'0')
   return `${yyyy}-${mm}-${dd}`
-}
-
-function getWeekStartISO(dateStr) {
-  const d = parseYMD(dateStr)
-  const day = d.getDay()
-  d.setDate(d.getDate() - day)
-  return toISODate(d)
-}
-
-function formatWeekLabel(startISO) {
-  if (!startISO) return ''
-  const s = parseYMD(startISO)
-  const e = new Date(s.getTime())
-  e.setDate(e.getDate() + 6)
-  const startStr = s.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
-  const endStr = e.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
-  return `${startStr} — ${endStr}`
 }
 
 function addDaysISO(dateStr, days) {
@@ -90,20 +85,35 @@ function formatDateISO(dateISO) {
 }
 
 function prevWeek() {
-  if (!selectedWeekStart.value) return
-  selectedWeekStart.value = addDaysISO(selectedWeekStart.value, -7)
+  if (!selectedWeekId.value) return
+  const { startDate } = parseWeekId(selectedWeekId.value)
+  if (!startDate) return
+  const prevDate = addDaysISO(startDate, -7)
+  selectedWeekId.value = generateWeekId(prevDate)
 }
 
 function nextWeek() {
-  if (!selectedWeekStart.value) return
-  selectedWeekStart.value = addDaysISO(selectedWeekStart.value, 7)
+  if (!selectedWeekId.value) return
+  const { startDate } = parseWeekId(selectedWeekId.value)
+  if (!startDate) return
+  const nextDate = addDaysISO(startDate, 7)
+  selectedWeekId.value = generateWeekId(nextDate)
 }
 
 const filteredLogs = computed(() => {
-  if (!selectedWeekStart.value) return []
-  const start = selectedWeekStart.value
-  const end = addDaysISO(start, 6)
-  return logs.value.filter(l => l.meetingDate && l.meetingDate >= start && l.meetingDate <= end)
+  if (!selectedWeekId.value) return []
+  return logs.value.filter(l => {
+    // Try to match by meetingWeekId first
+    if (l.meetingWeekId === selectedWeekId.value) return true
+    
+    // Fallback: match by date range (for old data without meetingWeekId)
+    const logDate = l.meetingDate || l.loggingDate
+    if (logDate) {
+      const logWeekId = generateWeekId(logDate)
+      return logWeekId === selectedWeekId.value
+    }
+    return false
+  })
 })
 
 const weekTotals = computed(() => {
@@ -127,30 +137,32 @@ const weekTotals = computed(() => {
 })
 
 const maxWeekStart = computed(() => {
-  if (!logs.value.length) return getWeekStartISO(localYMD())
-  const latest = logs.value[0].meetingDate
-  return getWeekStartISO(latest)
+  if (!logs.value.length) return generateWeekId(localYMD())
+  const latest = logs.value[0]
+  const weekId = latest.meetingWeekId || generateWeekId(latest.meetingDate || latest.loggingDate || localYMD())
+  return weekId
 })
 
 function canGoNext() {
-  if (!selectedWeekStart.value) return false
-  return selectedWeekStart.value < maxWeekStart.value
+  if (!selectedWeekId.value) return false
+  return selectedWeekId.value < maxWeekStart.value
 }
 
 const totals = weekTotals
 
 // EXCEL (CSV) EXPORT FUNCTION
 const exportExcel = () => {
-  const weekStart = selectedWeekStart.value || (filteredLogs.value.length > 0 ? filteredLogs.value[0].meetingDate : localYMD())
+  const weekId = selectedWeekId.value || generateWeekId(localYMD())
   
   const headers = ["Date", "Leader", "BDL", "EDL", "BDM", "EDM", "BN", "EN", "Campus Dmembers", "Evangelized", "Guests", "Total Attendance"]
   
   const rows = filteredLogs.value.map(log => {
     const attendees = Object.values(log.attendees || {}).filter(a => a.isPresent)
     const count = (t) => attendees.filter(a => a.tag === t).length
+    const logDate = log.meetingDate || log.loggingDate
     
     return [
-      formatDateISO(log.meetingDate),
+      formatDateISO(logDate),
       `"${log.submittedBy || ''}"`, // Quotes to prevent breakage if a name contains a comma
       count('BDL') || '0',
       count('EDL') || '0',
@@ -190,7 +202,7 @@ const exportExcel = () => {
   const link = document.createElement("a")
   const url = URL.createObjectURL(blob)
   link.setAttribute("href", url)
-  link.setAttribute("download", `DGM_Weekly_Report_${weekStart}.csv`)
+  link.setAttribute("download", `DGM_Weekly_Report_${weekId}.csv`)
   link.style.visibility = 'hidden'
   document.body.appendChild(link)
   link.click()
@@ -199,8 +211,8 @@ const exportExcel = () => {
 
 const exportLogs = () => {
   const doc = new jsPDF('l', 'mm', 'a4'); 
-  const weekStart = selectedWeekStart.value || (filteredLogs.value.length > 0 ? filteredLogs.value[0].meetingDate : localYMD())
-  const weekLabel = formatWeekLabel(weekStart)
+  const weekId = selectedWeekId.value || generateWeekId(localYMD())
+  const weekLabel = formatWeekIdDisplay(weekId)
   
   doc.setFontSize(14);
   doc.text(`DGROUP MINISTRY WEEKLY REPORT`, 14, 15);
@@ -212,9 +224,10 @@ const exportLogs = () => {
   const rows = filteredLogs.value.map(log => {
     const attendees = Object.values(log.attendees || {}).filter(a => a.isPresent)
     const count = (t) => attendees.filter(a => a.tag === t).length
+    const logDate = log.meetingDate || log.loggingDate
     
     return [
-      formatDateISO(log.meetingDate),
+      formatDateISO(logDate),
       log.submittedBy,
       count('BDL') || '0',
       count('EDL') || '0',
@@ -264,7 +277,7 @@ const exportLogs = () => {
     }
   });
 
-  doc.save(`DGM_Weekly_Report_${weekStart}.pdf`);
+  doc.save(`DGM_Weekly_Report_${weekId}.pdf`);
 }
 </script>
 
@@ -316,7 +329,7 @@ const exportLogs = () => {
             <div class="week-picker">
             <button class="week-btn" @click="prevWeek">◀</button>
             <div class="week-label">
-              <span>{{ selectedWeekStart ? formatWeekLabel(selectedWeekStart) : '—' }}</span>
+              <span>{{ selectedWeekId ? formatWeekIdDisplay(selectedWeekId) : '—' }}</span>
             </div>
             <button class="week-btn" :disabled="!canGoNext()" @click="nextWeek">▶</button>
           </div>
@@ -347,7 +360,7 @@ const exportLogs = () => {
           </thead>
           <tbody>
             <tr v-for="log in filteredLogs" :key="log.id">
-              <td class="date-cell">{{ formatDateISO(log.meetingDate) }}</td>
+              <td class="date-cell">{{ formatDateISO(log.meetingDate || log.loggingDate) }}</td>
               <td class="leader-cell">{{ log.submittedBy }}</td>
               <td class="text-center">
                 <div class="ceg-badges">

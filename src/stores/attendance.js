@@ -85,88 +85,167 @@ export const useAttendanceStore = defineStore('attendance', () => {
 
   /**
    * Log Weekly DGroup Meeting
+   * Now supports week-based meeting IDs. Preserves attendance data on re-submission.
    */
- async function logDgroupMeeting(meetingData) {
-  const authStore = useAuthStore()
-  if (!authStore.branchId) {
-    return { status: 'error', message: 'Branch ID missing' }
-  }
-
-  if (!meetingData || !meetingData.dgroupLeaderId) {
-    return { status: 'error', message: 'Missing dgroupLeaderId in meeting data' }
-  }
-
-  try {
-    const membersStore = useMembersStore()
-    const rawAttendees = meetingData.attendees || {}
-    const attendanceMap = {}
-
-    Object.keys(rawAttendees).forEach(memberId => {
-      const a = rawAttendees[memberId] || {}
-
-      let displayName = a.name || ''
-      if (!displayName) {
-        const m = (membersStore.activeMembers || [])
-          .find(x => x.id === memberId)
-        if (m) displayName =
-          `${m.firstName || ''} ${m.lastName || ''}`.trim()
-      }
-
-      attendanceMap[memberId] = {
-        isPresent: !!a.isPresent,
-        name: displayName || 'Unknown'
-      }
-    })
-
-    const meetingDate =
-      meetingData.meetingDate ||
-      new Date().toISOString().split('T')[0]
-
-    const payload = {
-      attendees: attendanceMap,   // ⚠ match createDgroupEvent field name
-      guests: typeof meetingData.guests === 'number' ? meetingData.guests : 0,
-      evangelized: typeof meetingData.evangelized === 'number' ? meetingData.evangelized : 0,
-      campusDmember: typeof meetingData.campusDmember === 'number' ? meetingData.campusDmember : 0,
-      locked: !!meetingData.locked,
-      ended: true,
-      submittedBy:
-        `${authStore.userProfile?.firstName || ''} ${authStore.userProfile?.lastName || ''}`.trim(),
-      submittedById: authStore.userProfile?.id || 'unknown'
+  async function logDgroupMeeting(meetingData) {
+    const authStore = useAuthStore()
+    if (!authStore.branchId) {
+      return { status: 'error', message: 'Branch ID missing' }
     }
 
-    const dgroupStore = useDgroupEventsStore()
+    if (!meetingData || !meetingData.dgroupLeaderId) {
+      return { status: 'error', message: 'Missing dgroupLeaderId in meeting data' }
+    }
 
-    console.log(
-      "Updating meeting for leader:",
-      meetingData.dgroupLeaderId,
-      "date:",
-      meetingDate
-    )
+    try {
+      const membersStore = useMembersStore()
+      const rawAttendees = meetingData.attendees || {}
+      const attendanceMap = {}
 
-    const res = await dgroupStore.updateDgroupMeeting(
-      meetingData.dgroupLeaderId,
-      meetingDate,
-      payload
-    )
+      // Always load existing report when possible so re-submission never wipes data
+      let existingReport = null
+      let existingAttendees = {}
+      const meetingWeekId = meetingData.meetingWeekId
+      if (meetingWeekId) {
+        try {
+          existingReport = await getDgroupMeetingReport(meetingData.dgroupLeaderId, meetingWeekId)
+          if (existingReport && existingReport.attendees) {
+            existingAttendees = existingReport.attendees
+          }
+        } catch (e) {
+          console.warn('Could not load existing attendance data:', e)
+        }
+      }
 
-    if (res && res.status === 'success') {
-      currentGroupHasLogged.value = true
+      const isResubmission = !!existingReport || !!meetingData.isResubmitted
+
+      // Merge raw and existing member IDs so existing checkmarks are never dropped
+      const memberIds = new Set([
+        ...Object.keys(existingAttendees || {}),
+        ...Object.keys(rawAttendees || {})
+      ])
+
+      memberIds.forEach(memberId => {
+        const a = rawAttendees[memberId] || {}
+        const existingData = existingAttendees[memberId]
+
+        let displayName = a.name || ''
+        if (!displayName) {
+          const m = (membersStore.activeMembers || [])
+            .find(x => x.id === memberId)
+          if (m) displayName =
+            `${m.firstName || ''} ${m.lastName || ''}`.trim()
+        }
+
+        // Preserve attendance: if member was present in previous submission, keep them present
+        const isPresent = !!(existingData?.isPresent || a.isPresent)
+        const tag = existingData?.tag || a.tag || 'BDM'
+
+        attendanceMap[memberId] = {
+          isPresent: isPresent,
+          name: displayName || 'Unknown',
+          tag: tag
+        }
+      })
+
+      const meetingIdForUpdate = meetingData.meetingWeekId || meetingData.meetingDate || new Date().toISOString().split('T')[0]
+
+      const existingGuests = Number(existingReport?.guests || 0)
+      const existingEvangelized = Number(existingReport?.evangelized || 0)
+      const existingCampus = Number(existingReport?.campusDmember || 0)
+
+      const incomingGuests = Number(meetingData.guests)
+      const incomingEvangelized = Number(meetingData.evangelized)
+      const incomingCampus = Number(meetingData.campusDmember)
+
+      // Always honor user-entered values on this submission (including 0).
+      // Fallback to existing only when incoming is not a valid number.
+      const mergedGuests = Number.isFinite(incomingGuests) ? incomingGuests : existingGuests
+      const mergedEvangelized = Number.isFinite(incomingEvangelized) ? incomingEvangelized : existingEvangelized
+      const mergedCampus = Number.isFinite(incomingCampus) ? incomingCampus : existingCampus
+
+      const payload = {
+        attendees: attendanceMap,
+        guests: mergedGuests,
+        evangelized: mergedEvangelized,
+        campusDmember: mergedCampus,
+        locked: !!meetingData.locked,
+        submittedBy:
+          `${authStore.userProfile?.firstName || ''} ${authStore.userProfile?.lastName || ''}`.trim(),
+        submittedById: authStore.userProfile?.id || 'unknown',
+        loggingDate: meetingData.loggingDate || new Date().toISOString().split('T')[0],
+        submittedAt: new Date().toISOString(),
+        isResubmitted: isResubmission
+      }
+
+      const dgroupStore = useDgroupEventsStore()
+
+      console.log(
+        "Updating meeting for leader:",
+        meetingData.dgroupLeaderId,
+        "week:",
+        meetingIdForUpdate
+      )
+
+      const res = await dgroupStore.updateDgroupMeeting(
+        meetingData.dgroupLeaderId,
+        meetingIdForUpdate,
+        payload
+      )
+
+      if (res && res.status === 'success') {
+        currentGroupHasLogged.value = true
+        return {
+          status: 'success',
+          message: isResubmission ? 'DGroup attendance updated.' : 'DGroup attendance recorded.'
+        }
+      }
+
       return {
-        status: 'success',
-        message: 'DGroup attendance recorded in dgroupEvents.'
+        status: 'error',
+        message: res?.message || 'Failed to update meeting.'
       }
+    } catch (error) {
+      console.error('DGroup Log Error:', error)
+      return { status: 'error', message: error.message }
     }
-
-    return {
-      status: 'error',
-      message: res?.message || 'Failed to update meeting.'
-    }
-
-  } catch (error) {
-    console.error('DGroup Log Error:', error)
-    return { status: 'error', message: error.message }
   }
-}
+
+  /**
+   * Get existing dgroup meeting report for a week
+   */
+  async function getDgroupMeetingReport(dgroupLeaderId, meetingWeekId) {
+    const authStore = useAuthStore()
+    if (!authStore.branchId || !dgroupLeaderId || !meetingWeekId) return null
+    try {
+      const dgroupStore = useDgroupEventsStore()
+      const doc = await getDgroupMeetingReportDoc(dgroupLeaderId, meetingWeekId)
+      if (doc) {
+        return doc
+      }
+      return null
+    } catch (e) {
+      console.error('Error fetching meeting report:', e)
+      return null
+    }
+  }
+
+  /**
+   * Helper to get a specific meeting report document
+   */
+  async function getDgroupMeetingReportDoc(dgroupLeaderId, meetingWeekId) {
+    const authStore = useAuthStore()
+    if (!authStore.branchId) return null
+    try {
+      const refDoc = doc(db, 'branches', authStore.branchId, 'dgroupEvents', dgroupLeaderId, 'meetings', meetingWeekId)
+      const snap = await getDoc(refDoc)
+      if (!snap.exists()) return null
+      return { id: snap.id, ...snap.data() }
+    } catch (e) {
+      console.error('Error getting meeting report doc:', e)
+      return null
+    }
+  }
 
   /**
    * Fetch attendance records by date
@@ -318,6 +397,7 @@ export const useAttendanceStore = defineStore('attendance', () => {
     getAttendanceByDate, 
     markAttendance,
     logDgroupMeeting,
+    getDgroupMeetingReport,
     updateAttendanceMinistry
   }
 })

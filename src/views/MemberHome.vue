@@ -10,6 +10,7 @@ import BackgroundHero from '../components/dgmComponents/Background.vue'
 import EventCard from '../components/dgmComponents/EventCard.vue' 
 import { useMembersStore } from '../stores/members'
 import { useDgroupEventsStore } from '../stores/dgroupevents'
+import { generateWeekId } from '../utils/weeklyMeetingUtils'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -58,10 +59,21 @@ const dgroupMeetings = ref([])
 const meetingsLoading = ref(false)
 let meetingsUnsub = null
 const showAttendanceModal = ref(false)
+const selectedMeetingForLogging = ref(null)
 
 const todayMeeting = computed(() => {
   const today = localYMD()
   return dgroupMeetings.value.find(m => m.meetingDate === today && !m.ended)
+})
+
+const currentWeekId = computed(() => generateWeekId(localYMD()))
+
+const currentWeekMeeting = computed(() => {
+  return dgroupMeetings.value.find(m => {
+    if (!m) return false
+    const mWeekId = m.meetingWeekId || (m.meetingDate ? generateWeekId(m.meetingDate) : null)
+    return mWeekId === currentWeekId.value && !m.ended
+  })
 })
 
 const dgroupMembersForModal = computed(() => {
@@ -155,6 +167,23 @@ function closeDgroupMeetingModal() {
   selectedDgroupMeeting.value = null
 }
 
+function openAttendanceLogModal(meeting) {
+  const mWeekId = meeting?.meetingWeekId || (meeting?.meetingDate ? generateWeekId(meeting.meetingDate) : null)
+  if (!mWeekId || mWeekId !== currentWeekId.value) return
+  selectedMeetingForLogging.value = meeting
+  showAttendanceModal.value = true
+}
+
+function canLogMeeting(meeting) {
+  const mWeekId = meeting?.meetingWeekId || (meeting?.meetingDate ? generateWeekId(meeting.meetingDate) : null)
+  return !!mWeekId && mWeekId === currentWeekId.value
+}
+
+function closeAttendanceModal() {
+  showAttendanceModal.value = false
+  selectedMeetingForLogging.value = null
+}
+
 function formatShortDate(dateStr) { if (!dateStr) return ''; return new Date(dateStr).toLocaleString('default', { month: 'short', day: 'numeric' }) }
 </script>
 
@@ -182,9 +211,9 @@ function formatShortDate(dateStr) { if (!dateStr) return ''; return new Date(dat
         <div class="action-label">Attendance</div>
         <div class="action-bg-glow"></div>
       </div>
-      <div v-if="isDgroupLeader" :class="['action-card yellow-theme', { disabled: !todayMeeting } ]" @click="todayMeeting ? showAttendanceModal = true : null">
+      <div v-if="isDgroupLeader" :class="['action-card yellow-theme', { disabled: !currentWeekMeeting } ]" @click="currentWeekMeeting ? openAttendanceLogModal(currentWeekMeeting) : null">
         <div class="icon-wrap"><ClipboardCheck :size="24" /></div>
-        <div class="action-label">{{ todayMeeting ? 'Log Meeting' : 'No Meeting' }}</div>
+        <div class="action-label">{{ currentWeekMeeting ? 'Log Meeting' : 'No Meeting This Week' }}</div>
         <div class="action-bg-glow"></div>
       </div>
       <div v-if="isDgroupLeader" class="action-card red-theme" @click="showScheduleDgroupModal = true">
@@ -216,7 +245,6 @@ function formatShortDate(dateStr) { if (!dateStr) return ''; return new Date(dat
         v-if="todayMeeting"
         class="today-banner dgroup-theme"
         :style="{ backgroundImage: `url(${getDgroupMeetingPhotoURL(todayMeeting)})` }"
-        @click="showAttendanceModal = true"
       >
         <div class="banner-overlay">
           <div class="badge-pill warning-pill">DGROUP SESSION</div>
@@ -249,26 +277,34 @@ function formatShortDate(dateStr) { if (!dateStr) return ''; return new Date(dat
           :key="m.id || m.meetingDate"
           :class="['mini-meeting-card', { editable: isDgroupLeader }]"
           :style="{ '--card-bg': `url(${getDgroupMeetingPhotoURL(m)})` }"
-          @click="openDgroupMeetingEditor(m)"
         >
-          <div class="mini-meeting-overlay"></div>
-          <div class="meeting-card-body">
+          <div class="mini-meeting-overlay" @click="openDgroupMeetingEditor(m)"></div>
+          <div class="meeting-card-body" @click="openDgroupMeetingEditor(m)">
             <div class="meeting-date-tag">{{ formatShortDate(m.meetingDate) }}</div>
             <h4 class="meeting-name">{{ m.meetingTitle || 'Dgroup Meeting' }}</h4>
             <div class="meeting-loc"><MapPin :size="12" /> {{ m.venue || 'TBD' }}</div>
             <div class="meeting-time-pill" v-if="m.meetingTime">{{ m.meetingTime }}</div>
           </div>
+          <button
+            v-if="isDgroupLeader"
+            class="log-button"
+            :disabled="!canLogMeeting(m)"
+            @click.stop="openAttendanceLogModal(m)"
+            :title="canLogMeeting(m) ? 'Log attendance for this meeting' : 'Logging is only allowed for meetings scheduled this week'"
+          >
+            <ClipboardCheck :size="16" />
+          </button>
         </div>
       </div>
       <div v-else class="empty-placeholder">No scheduled Dgroups.</div>
     </section>
 
     <DgroupAttendanceModal
-      v-if="showAttendanceModal && isDgroupLeader"
-      :group="todayMeeting"
+      v-if="showAttendanceModal && isDgroupLeader && selectedMeetingForLogging"
+      :group="selectedMeetingForLogging"
       :leaderId="memberProfile.value?.id"
-      :meeting="todayMeeting"
-      @close="showAttendanceModal = false"
+      :meeting="selectedMeetingForLogging"
+      @close="closeAttendanceModal"
     />
     
     <!-- Event Detail Modal -->
@@ -361,6 +397,10 @@ function formatShortDate(dateStr) { if (!dateStr) return ''; return new Date(dat
 .mini-meeting-card::before{content:'';position:absolute;inset:0;background-image:var(--card-bg);background-size:cover;background-position:center;background-repeat:no-repeat;transform:scale(1);transition:transform 0.45s ease}
 .mini-meeting-card.editable:hover::before{transform:scale(1.08)}
 .mini-meeting-overlay{position:absolute;inset:0;background:linear-gradient(180deg, rgba(0,0,0,0.28) 0%, rgba(0,0,0,0.72) 100%)}
+.log-button{position:absolute;bottom:12px;right:12px;background:#2E7D32;color:white;border:none;padding:8px 12px;border-radius:8px;cursor:pointer;display:flex;align-items:center;gap:5px;font-size:11px;font-weight:700;z-index:2;transition:all 0.2s;box-shadow:0 2px 8px rgba(0,0,0,0.2)}
+.log-button:hover{background:#1B5E20;transform:scale(1.05)}
+.log-button:active{transform:scale(0.95)}
+.log-button:disabled{background:#90A4AE;cursor:not-allowed;transform:none;opacity:0.85}
 .meeting-date-tag{align-self:flex-end;background:rgba(255,255,255,0.94);padding:3px 10px;border-radius:8px;font-size:10px;font-weight:800;color:#312e81;margin-bottom:auto}
 .meeting-card-body{position:relative;z-index:1;height:100%;padding:12px;display:flex;flex-direction:column}
 .meeting-name{margin:0;font-size:16px;font-weight:800;color:#ffffff;text-shadow:0 2px 10px rgba(0,0,0,0.5);display:-webkit-box;-webkit-line-clamp:2;line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
