@@ -98,16 +98,23 @@ const searchedGroups = computed(() => {
   // If no search query, return all groups
   if (!query) return sortedDgroups.value
 
+   const queryWords = query.split(' ').filter(Boolean)
+
+  const matches = (text) => {
+    if (!text) return false
+    const lowerText = text.toLowerCase()
+    return queryWords.every(word => lowerText.includes(word))
+  }
+
   return sortedDgroups.value.filter(g => {
     // Check if group details match
-    const matchLeader = g.leaderName.toLowerCase().includes(query) || 
-                        g.dgroupName.toLowerCase().includes(query) ||
-                        (g.dgroupId && g.dgroupId.toLowerCase().includes(query))
+    const matchLeader = matches(g.leaderName) || 
+                        matches(g.dgroupName) ||
+                        matches(g.dgroupId)
                         
     // Check if any member in the group matches
     const matchingMembers = g.members.filter(m => 
-      m.firstName.toLowerCase().includes(query) || 
-      m.lastName.toLowerCase().includes(query)
+      matches(`${m.firstName} ${m.lastName}`)
     )
     
     // If a member matched, auto-expand the group so the admin can see them
