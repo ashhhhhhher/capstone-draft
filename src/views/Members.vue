@@ -46,9 +46,17 @@ const showHeaderMenu = ref(false)
 // --- Filters State ---
 const currentFilters = ref({
   age: [],
+  gender: [],
   type: { included: [], excluded: [] },
   ministries: [],
   sort: { key: 'joinDate', order: 'desc' }
+})
+
+const sortOption = ref('joinDate-desc')
+
+watch(sortOption, (newVal) => {
+  const [key, order] = newVal.split('-')
+  currentFilters.value.sort = { key, order }
 })
 
 // --- Computed Properties ---
@@ -110,7 +118,12 @@ const filteredMembers = computed(() => {
     )
   }
   
-  // Sorting based on currentFilters.sort (added by FilterModal)
+  // 6. Gender Filter
+  if (f.gender && f.gender.length > 0) {
+    list = list.filter(m => f.gender.includes(m.gender));
+  }
+  
+  // Sorting based on currentFilters.sort
   const sort = f.sort || { key: 'joinDate', order: 'desc' }
   const dir = sort.order === 'asc' ? 1 : -1
   if (sort.key === 'joinDate') {
@@ -298,6 +311,16 @@ watch(showAbsenceMonitoringModal, (isOpen) => {
         <input type="text" placeholder="Search by name or email..." v-model="searchQuery" autocomplete="off">
       </div>
       
+      <div class="sort-control">
+        <label for="sort-select" class="sort-label">Sort by:</label>
+        <select id="sort-select" v-model="sortOption" class="sort-select">
+          <option value="joinDate-desc">Join Date (Newest)</option>
+          <option value="joinDate-asc">Join Date (Oldest)</option>
+          <option value="alphabetical-asc">A-Z</option>
+          <option value="alphabetical-desc">Z-A</option>
+        </select>
+      </div>
+
       <button class="filter-btn" @click="showFilterModal = true">
          <Filter :size="16" /> Filters
       </button>
@@ -465,6 +488,13 @@ watch(showAbsenceMonitoringModal, (isOpen) => {
 .search-bar { flex-grow: 1; position: relative; }
 .search-icon { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: #90A4AE; }
 .search-bar input { width: 100%; padding: 12px 12px 12px 44px; border-radius: 8px; border: 1px solid #B0BEC5; font-size: 16px; box-sizing: border-box; }
+
+/* Sort Controls CSS added */
+.sort-control { display: flex; align-items: center; gap: 8px; }
+.sort-label { font-size: 14px; font-weight: 600; color: #546E7A; }
+.sort-select { padding: 10px 14px; border-radius: 8px; border: 1px solid #CFD8DC; font-size: 14px; font-weight: 600; color: #546E7A; background-color: #fff; cursor: pointer; outline: none; transition: all 0.2s ease; }
+.sort-select:hover { background: #ECEFF1; }
+
 .filter-btn { background: #fff; border: 1px solid #CFD8DC; padding: 10px 14px; border-radius: 8px; font-weight: 600; color: #546E7A; cursor: pointer; display: flex; align-items: center; gap: 6px; }
 .filter-btn:hover { background: #ECEFF1; }
 
@@ -525,7 +555,7 @@ watch(showAbsenceMonitoringModal, (isOpen) => {
 @media (max-width: 800px) {
   .header-actions.desktop-only { display: none; }
   .mobile-actions { display: flex; }
-  .controls-wrapper { gap: 8px; }
-  .search-bar { flex-basis: 60%; }
+  .controls-wrapper { gap: 8px; flex-wrap: wrap; }
+  .search-bar { flex-basis: 100%; order: -1; }
 }
 </style>
