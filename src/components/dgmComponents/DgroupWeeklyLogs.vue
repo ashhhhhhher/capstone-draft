@@ -153,17 +153,25 @@ const totals = weekTotals
 // EXCEL (CSV) EXPORT FUNCTION
 const exportExcel = () => {
   const weekId = selectedWeekId.value || generateWeekId(localYMD())
+  const weekLabel = formatWeekIdDisplay(weekId)
+  
+  // Title and Header Info
+  const title = "DGROUP MINISTRY WEEKLY REPORT"
+  const meta = `Report Date: ${weekLabel} | Generated: ${new Date().toLocaleString()}`
   
   const headers = ["Date", "Leader", "BDL", "EDL", "BDM", "EDM", "BN", "EN", "Campus Dmembers", "Evangelized", "Guests", "Total Attendance"]
   
   const rows = filteredLogs.value.map(log => {
     const attendees = Object.values(log.attendees || {}).filter(a => a.isPresent)
     const count = (t) => attendees.filter(a => a.tag === t).length
+    
+    // Fix: Correctly retrieve the date as per PDF export logic
     const logDate = log.meetingDate || log.loggingDate
+    const formattedDate = formatDateISO(logDate)
     
     return [
-      formatDateISO(logDate),
-      `"${log.submittedBy || ''}"`, // Quotes to prevent breakage if a name contains a comma
+      `"${formattedDate}"`,
+      `"${log.submittedBy || ''}"`,
       count('BDL') || '0',
       count('EDL') || '0',
       count('BDM') || '0',
@@ -192,13 +200,20 @@ const exportExcel = () => {
     totals.value.attendance
   ]
 
-  const csvContent = [
+  // Construct CSV String
+  const csvRows = [
+    `"${title}"`,
+    `"${meta}"`,
+    "", // Spacer
     headers.join(","),
     ...rows.map(row => row.join(",")),
     grandTotalRow.join(",")
-  ].join("\n")
+  ]
 
-  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+  const csvContent = csvRows.join("\n")
+
+  // Using \uFEFF (BOM) to force Excel to open it in UTF-8 mode
+  const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' })
   const link = document.createElement("a")
   const url = URL.createObjectURL(blob)
   link.setAttribute("href", url)
