@@ -336,7 +336,7 @@ async function updatePassword() {
     <!-- Details Form -->
     <div class="form-card">
       <div class="form-row">
-        <div class="input-group full">
+        <div class="input-group">
           <label>Life Stage</label>
           <div class="input-wrapper">
             <Users :size="18" class="icon" />
@@ -348,10 +348,8 @@ async function updatePassword() {
             </select>
           </div>
         </div>
-      </div>
 
-      <div class="form-row">
-        <div class="input-group full">
+        <div class="input-group">
           <label>School / Workplace</label>
           <div class="input-wrapper">
             <GraduationCap :size="18" class="icon" />

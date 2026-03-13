@@ -447,13 +447,30 @@ const isNextDisabled = computed(() => {
   max-height: 95vh;
   padding: 40px 32px;
   position: relative;
-  overflow-y: auto;
+  overflow: hidden; /* Changed from overflow-y: auto to make modal fixed */
   color: #0F172A;
   display: flex;
   flex-direction: column;
   border-radius: 32px;
   box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.15);
   border: 1px solid #F1F5F9;
+}
+
+.step-content {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+/* Stepper */
+.stepper-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 30px;
+  flex-shrink: 0; /* Keep stepper from shrinking */
 }
 
 /* Stepper */
@@ -505,6 +522,7 @@ const isNextDisabled = computed(() => {
   text-align: center;
   margin-bottom: 32px;
   position: relative;
+  flex-shrink: 0; /* Keep header from shrinking */
 }
 
 .back-link {
@@ -528,6 +546,24 @@ h1 { font-size: 32px; font-weight: 900; margin: 0 0 10px; color: #0F172A; letter
   grid-template-columns: repeat(4, 1fr);
   gap: 16px;
   margin-bottom: 30px;
+  overflow-y: auto;
+  min-height: 0;
+  padding-right: 8px;
+}
+
+.schedule-sections {
+  overflow-y: auto;
+  min-height: 0;
+  padding-right: 8px;
+  margin-bottom: 20px;
+}
+
+.recommendation-scroller {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+  padding-right: 8px;
+  margin-bottom: 16px;
 }
 
 .interest-card {
@@ -726,6 +762,12 @@ h1 { font-size: 32px; font-weight: 900; margin: 0 0 10px; color: #0F172A; letter
 .mc-action .btn-request:hover { background: #1E293B; transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
 
 /* Actions */
+.footer-actions, .footer-actions-column {
+  flex-shrink: 0;
+  margin-top: auto;
+  padding-top: 10px;
+}
+
 .btn-next-step {
   width: 100%; background: linear-gradient(135deg, #2563EB, #3B82F6);
   color: white; border: none; padding: 20px; border-radius: 24px;
