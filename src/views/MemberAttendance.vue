@@ -3,7 +3,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useAuthStore } from '../stores/auth'
 import { useAttendanceStore } from '../stores/attendance'
 import { useEventsStore } from '../stores/events'
-import { CheckCircle, Flame } from 'lucide-vue-next'
+import { CheckCircle, Flame, ChevronLeft, ChevronRight } from 'lucide-vue-next'
 
 const authStore = useAuthStore()
 const attendanceStore = useAttendanceStore()
@@ -11,12 +11,17 @@ const eventsStore = useEventsStore()
 
 const myId = computed(() => authStore.userProfile?.id)
 const loading = ref(true)
+const selectedYear = ref(new Date().getFullYear())
 
 onMounted(async () => {
   await eventsStore.fetchEvents()
   await attendanceStore.fetchAllAttendance()
   loading.value = false
 })
+
+const changeYear = (delta) => {
+  selectedYear.value += delta
+}
 
 const myAttendanceRecords = computed(() => {
   if (!myId.value) return []
@@ -27,6 +32,7 @@ const myAttendanceRecords = computed(() => {
   })
 })
 
+// Filtered by selected year
 const enrichedRecords = computed(() => {
   return myAttendanceRecords.value.map(record => {
     const event = eventsStore.allEvents.find(e => e.id === record.eventId)
@@ -38,7 +44,10 @@ const enrichedRecords = computed(() => {
       eventType: event ? event.eventType : null
     }
   })
-  .filter(r => r.date)
+  .filter(r => {
+    if (!r.date) return false
+    return new Date(r.date).getFullYear() === selectedYear.value
+  })
   .sort((a, b) => new Date(b.date) - new Date(a.date))
 })
 
@@ -50,32 +59,25 @@ const b1gCount = computed(() => enrichedRecords.value.filter(r => r.eventType ==
 
 const monthlyStats = computed(() => {
   const map = {}
+  // Initialize all months for the selected year to ensure 0s are shown if desired, 
+  // or keep it dynamic based on your original logic.
   enrichedRecords.value.forEach(rec => {
-    if (!rec.date) return
     const d = new Date(rec.date)
-    if (isNaN(d)) return
     const month = d.toLocaleString('default', { month: 'short' })
-    if (!map[month]) map[month] = { wknd: 0, b1g: 0 }
+    if (!map[month]) map[month] = { wknd: 0, b1g: 0, sortIdx: d.getMonth() }
     if (rec.eventType === 'service') map[month].wknd += 1
     else if (rec.eventType === 'b1g_event') map[month].b1g += 1
   })
-  const arr = Object.entries(map).map(([m, v]) => ({ month: m, wknd: v.wknd, b1g: v.b1g, total: v.wknd + v.b1g }))
-  const ordered = []
-  for (const rec of enrichedRecords.value) {
-    const d = new Date(rec.date)
-    const m = d.toLocaleString('default', { month: 'short' })
-    if (!ordered.find(x => x.month === m) && arr.find(x => x.month === m)) {
-      ordered.push(arr.find(x => x.month === m))
-    }
-    if (ordered.length >= 4) break
-  }
-  return ordered
+
+  // Convert map to array and sort by month order (Jan-Dec)
+  return Object.entries(map)
+    .map(([m, v]) => ({ month: m, wknd: v.wknd, b1g: v.b1g, total: v.wknd + v.b1g, sortIdx: v.sortIdx }))
+    .sort((a, b) => a.sortIdx - b.sortIdx)
 })
 
 const monthlyMax = computed(() => {
   const arr = monthlyStats.value || []
   if (!arr.length) return 0
-  // Max of individual categories to scale height appropriately
   return Math.max(...arr.flatMap(s => [s.wknd, s.b1g])) || 1
 })
 </script>
@@ -84,6 +86,13 @@ const monthlyMax = computed(() => {
   <div class="attendance-view">
     
     <div class="stats-column">
+      <!-- Year Selector UI -->
+      <div class="year-selector">
+        <button @click="changeYear(-1)" class="year-btn"><ChevronLeft :size="20" /></button>
+        <h2 class="year-label">{{ selectedYear }} Attendance</h2>
+        <button @click="changeYear(1)" class="year-btn"><ChevronRight :size="20" /></button>
+      </div>
+
       <div class="stats-row">
         <div class="stat-card blue">
           <span class="label">Total WKND Attendance</span>
@@ -95,10 +104,10 @@ const monthlyMax = computed(() => {
             {{ streak }} <Flame :size="20" class="fire-icon" />
           </div>
         </div>
-          <div v-if="isB1GMember" class="stat-card red">
-            <span class="label">B1G Services</span>
-            <div class="value">{{ b1gCount }}</div>
-          </div>
+        <div v-if="isB1GMember" class="stat-card red">
+          <span class="label">B1G Services</span>
+          <div class="value">{{ b1gCount }}</div>
+        </div>
       </div>
 
       <section class="chart-section">
@@ -118,15 +127,15 @@ const monthlyMax = computed(() => {
             <span class="month-label">{{ stat.month }}</span>
           </div>
           <div v-if="monthlyStats.length === 0" class="no-data-chart">
-            Attend events to see your stats!
+            No records for {{ selectedYear }}.
           </div>
         </div>
       </section>
     </div>
 
     <section class="history-section">
-      <h3>History Log</h3>
-        <div class="history-list" v-if="!loading">
+      <h3>History Log ({{ selectedYear }})</h3>
+      <div class="history-list" v-if="!loading">
         <div v-for="rec in enrichedRecords" :key="rec.eventId" class="history-item">
           <div class="status-icon">
             <CheckCircle :size="20" color="#43A047" />
@@ -138,7 +147,7 @@ const monthlyMax = computed(() => {
           <div class="badge-attended">Present</div>
         </div>
         <div v-if="enrichedRecords.length === 0" class="empty-text">
-          No attendance records found.
+          No attendance records found for this year.
         </div>
       </div>
       <div v-else class="loading-text">Loading records...</div>
@@ -151,6 +160,10 @@ const monthlyMax = computed(() => {
 .attendance-view { display: grid; grid-template-columns: 1fr; gap: 24px; }
 @media (min-width: 900px) { .attendance-view { grid-template-columns: 1fr 1fr; align-items: start; } }
 .stats-column { display: flex; flex-direction: column; gap: 24px; }
+.year-selector { display: flex; align-items: center; justify-content: center; gap: 20px; background: white; padding: 12px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
+.year-btn { background: #F5F5F5; border: none; border-radius: 50%; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; cursor: pointer; color: #37474F; transition: background 0.2s; }
+.year-btn:hover { background: #EEEEEE; }
+.year-label { font-size: 18px; font-weight: 700; color: #37474F; margin: 0; }
 .stats-row { display: flex; gap: 16px; }
 .stat-card { flex: 1; padding: 24px; border-radius: 16px; color: white; display: flex; flex-direction: column; justify-content: space-between; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
 .stat-card.blue { background: linear-gradient(135deg, #42A5F5, #1565C0); }
@@ -161,15 +174,15 @@ const monthlyMax = computed(() => {
 .fire-icon { fill: white; stroke: none; }
 .chart-section { background: white; padding: 24px; border-radius: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
 .chart-section h3 { margin: 0 0 24px 0; font-size: 18px; color: #37474F; }
-.bar-chart { display: flex; justify-content: space-around; align-items: flex-end; height: 180px; padding-bottom: 10px; }
-.chart-col { display: flex; flex-direction: column; align-items: center; width: 60px; }
+.bar-chart { display: flex; justify-content: space-around; align-items: flex-end; height: 180px; padding-bottom: 10px; overflow-x: auto; gap: 10px; }
+.chart-col { display: flex; flex-direction: column; align-items: center; min-width: 50px; }
 .bar-group { display: flex; align-items: flex-end; gap: 4px; height: 130px; width: 100%; justify-content: center; }
 .bar-wrapper { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; position: relative; }
-.bar-segment { width: 14px; border-radius: 6px; transition: height 0.5s ease; min-height: 4px; }
+.bar-segment { width: 12px; border-radius: 4px; transition: height 0.5s ease; min-height: 4px; }
 .bar-segment.wknd { background: #1976D2; }
 .bar-segment.b1g { background: #D32F2F; }
-.bar-val { font-size: 11px; color: #546E7A; font-weight: 700; margin-bottom: 4px; }
-.month-label { margin-top: 10px; font-size: 13px; color: #90A4AE; }
+.bar-val { font-size: 10px; color: #546E7A; font-weight: 700; margin-bottom: 4px; }
+.month-label { margin-top: 10px; font-size: 12px; color: #90A4AE; }
 .event-tag { font-size: 11px; font-weight: 700; padding: 4px 8px; border-radius: 10px; margin-left: 8px; text-transform: uppercase; }
 .event-tag.service-tag { background: #E3F2FD; color: #1565C0; }
 .event-tag.b1g-tag { background: #FFEBEE; color: #D32F2F; }
@@ -182,5 +195,5 @@ const monthlyMax = computed(() => {
 .info .date { font-size: 13px; color: #78909C; }
 .badge-attended { background: #E8F5E9; color: #2E7D32; font-size: 12px; padding: 4px 10px; border-radius: 6px; font-weight: 600; }
 .empty-text { text-align: center; color: #B0BEC5; margin-top: 20px; }
-.no-data-chart { color: #B0BEC5; font-size: 14px; }
+.no-data-chart { color: #B0BEC5; font-size: 14px; width: 100%; text-align: center; }
 </style>
