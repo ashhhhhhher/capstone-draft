@@ -4,7 +4,6 @@ import { db, storage } from '../firebase'
 import { 
   collection, 
   setDoc, 
-  onSnapshot, 
   query, 
   orderBy,
   doc,
@@ -34,14 +33,56 @@ export const useEventsStore = defineStore('events', {
       return collection(db, "branches", authStore.branchId, "events");
     },
 
+    // 🚀 OPTIMIZATION: Replaced onSnapshot with getDocs and caching
+    async fetchEvents(force = false) {
+      if (!force && this.allEvents.length > 0) {
+        this.isLoading = false;
+        return; 
+      }
+
+      this.isLoading = true;
+      try {
+        const eventsQuery = query(
+          this.getEventCollection(), 
+          orderBy("date", "desc")
+        );
+
+        const querySnapshot = await getDocs(eventsQuery);
+        const events = [];
+        querySnapshot.forEach((doc) => {
+          events.push({ id: doc.id, ...doc.data() });
+        });
+        
+        this.allEvents = events; 
+        
+        const today = new Date();
+        const year = today.getFullYear();
+        const month = (today.getMonth() + 1).toString().padStart(2, '0');
+        const day = today.getDate().toString().padStart(2, '0');
+        const todayStr = `${year}-${month}-${day}`;
+        
+        const todayEvent = events.find(e => e.date === todayStr && !e.ended);
+
+        if (todayEvent) {
+          this.currentEvent = todayEvent;
+        } else {
+          this.currentEvent = null;
+        }
+        
+        this.cleanupOldEventImages(); 
+      } catch (error) {
+        console.error("Error fetching events: ", error);
+      } finally {
+        this.isLoading = false;
+      }
+    },
+
     async createEvent(eventData) {
       try {
         const authStore = useAuthStore()
         if (!authStore.branchId) throw new Error('Missing branchId')
 
-        // 1. Decide prefix
         let prefix = 'EVENT'
-
         if (eventData.eventType === 'service') {
           prefix = 'WKND'
         } else if (eventData.eventType === 'b1g_event') {
@@ -50,24 +91,32 @@ export const useEventsStore = defineStore('events', {
           prefix = 'CCFE'
         }
 
-       // Remove dashes from date (YYYYMMDD)
         const cleanDate = eventData.date.replace(/-/g, '')
-
-        // Add short random suffix
         const randomSuffix = Math.random().toString(36).substring(2, 6).toUpperCase()
-
         const eventId = `${prefix}_${cleanDate}_${randomSuffix}`
-
 
         const eventRef = doc(this.getEventCollection(), eventId)
 
-        await setDoc(eventRef, {
+        const newEventObj = {
           ...eventData,
-          id: eventId // optional but useful
-        })
+          id: eventId 
+        };
+
+        await setDoc(eventRef, newEventObj)
+        
+        // 🚀 OPTIMIZATION: Push to local array to avoid refetching
+        this.allEvents.unshift(newEventObj);
+        
+        // Sort to maintain descending order if we just unshifted
+        this.allEvents.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+        // Set as current event if it's today
+        const todayStr = new Date().toISOString().split('T')[0];
+        if (newEventObj.date === todayStr) {
+          this.currentEvent = newEventObj;
+        }
 
         console.log('Event created with ID:', eventId)
-
       } catch (error) {
         console.error('Error creating event:', error)
       }
@@ -77,6 +126,17 @@ export const useEventsStore = defineStore('events', {
       try {
         const eventRef = doc(this.getEventCollection(), eventId);
         await updateDoc(eventRef, eventData);
+        
+        // 🚀 OPTIMIZATION: Update local state immediately
+        const index = this.allEvents.findIndex(e => e.id === eventId);
+        if (index !== -1) {
+          this.allEvents[index] = { ...this.allEvents[index], ...eventData };
+        }
+
+        if (this.currentEvent && this.currentEvent.id === eventId) {
+          this.currentEvent = { ...this.currentEvent, ...eventData };
+        }
+
         console.log("Event updated: ", eventId);
       } catch (error) {
         console.error("Error updating event: ", error);
@@ -87,29 +147,45 @@ export const useEventsStore = defineStore('events', {
       try {
         const eventRef = doc(this.getEventCollection(), eventId);
         await deleteDoc(eventRef);
+
+        // 🚀 OPTIMIZATION: Remove from local array
+        this.allEvents = this.allEvents.filter(e => e.id !== eventId);
+        if (this.currentEvent && this.currentEvent.id === eventId) {
+           this.currentEvent = null;
+        }
+
         console.log("Event deleted: ", eventId);
       } catch (error) {
         console.error("Error deleting event: ", error);
       }
     },
 
-    // --- END EVENT & VOLUNTEER REVOCATION LOGIC ---
     async endEvent(eventId) {
       try {
         const authStore = useAuthStore();
         if (!authStore.branchId) throw new Error('Missing branchId.');
         if (!eventId) throw new Error('No eventId provided.');
 
-        // 1. Mark event as ended
         const eventRef = doc(this.getEventCollection(), eventId);
-        await updateDoc(eventRef, {
+        
+        const updates = {
           ended: true,
           endedAt: serverTimestamp(),
           endedBy: authStore.user?.uid || null,
           endedReason: 'manual'
-        });
+        };
+
+        await updateDoc(eventRef, updates);
         
-        // 2. TRIGGER VOLUNTEER REVOCATION CHECK
+        // 🚀 OPTIMIZATION: Update local state immediately
+        const index = this.allEvents.findIndex(e => e.id === eventId);
+        if (index !== -1) {
+          this.allEvents[index].ended = true;
+        }
+        if (this.currentEvent && this.currentEvent.id === eventId) {
+           this.currentEvent = null; // Clear the live event
+        }
+        
         await this.checkAndRevokeInactiveVolunteers(authStore.branchId);
 
         console.log("Event ended successfully: ", eventId);
@@ -122,15 +198,11 @@ export const useEventsStore = defineStore('events', {
 
     async checkAndRevokeInactiveVolunteers(branchId) {
       console.log("Starting Volunteer Revocation Check...");
-      
-      // A. Get last 5 'service' events (descending date)
-      // Note: We need to use the fetched allEvents state to ensure we get the correct sorted list
-      // Filter for ended events or events with dates in the past
       const today = new Date().toISOString().split('T')[0];
       
       const last5Events = this.allEvents
         .filter(e => e.eventType === 'service' && e.date <= today)
-        .sort((a, b) => new Date(b.date) - new Date(a.date)) // Newest first
+        .sort((a, b) => new Date(b.date) - new Date(a.date)) 
         .slice(0, 5);
 
       if (last5Events.length < 5) {
@@ -138,10 +210,7 @@ export const useEventsStore = defineStore('events', {
         return;
       }
 
-      // B. Get all members who are currently tagged as Volunteers
       const membersRef = collection(db, "branches", branchId, "members");
-      // Note: Firestore doesn't support deep query on object fields easily without index, 
-      // getting all active members is safer then filtering in JS for this batch operation
       const membersSnap = await getDocs(query(membersRef, where("status", "!=", "archived")));
       
       const volunteers = [];
@@ -152,22 +221,16 @@ export const useEventsStore = defineStore('events', {
         }
       });
 
-      console.log(`Checking ${volunteers.length} volunteers for inactivity...`);
-
-      // C. Check each volunteer
       for (const vol of volunteers) {
         let missedConsecutive = 0;
 
-        // Iterate through the last 5 events (Newest -> Oldest)
         for (const ev of last5Events) {
-          // Check attendance doc for this event/member
           const attendanceRef = doc(db, "branches", branchId, "events", ev.id, "attendance", vol.id);
           const attSnap = await getDoc(attendanceRef);
 
           let served = false;
           if (attSnap.exists()) {
             const data = attSnap.data();
-            // They served if ministry is defined and NOT 'N/A'
             if (data.ministry && data.ministry !== 'N/A') {
               served = true;
             }
@@ -176,39 +239,26 @@ export const useEventsStore = defineStore('events', {
           if (!served) {
             missedConsecutive++;
           } else {
-            // If they served in this event, the streak of inactivity is broken
             break; 
           }
         }
 
-        // D. Revoke if missed 5 consecutive times
         if (missedConsecutive >= 5) {
           console.warn(`Revoking volunteer tag for ${vol.firstName} ${vol.lastName} (Missed 5 consecutive)`);
-          
           const memberRef = doc(db, "branches", branchId, "members", vol.id);
-          
-          // Logic: 
-          // 1. Remove isVolunteer
-          // 2. Clear volunteerMinistry
-          // 3. If they are NOT a Dgroup Leader, set isRegular = true
-          // 4. If they ARE a Dgroup Leader, just leave isRegular = false (DL takes precedence)
-          
           const updates = {
             "finalTags.isVolunteer": false,
             "finalTags.volunteerMinistry": []
           };
-
           if (!vol.finalTags.isDgroupLeader) {
             updates["finalTags.isRegular"] = true;
           }
-
           await updateDoc(memberRef, updates);
         }
       }
       console.log("Revocation check complete.");
     },
 
-    // --- NEW: CLEANUP LOGIC ---
     async cleanupOldEventImages() {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
@@ -232,48 +282,14 @@ export const useEventsStore = defineStore('events', {
           }
           const eventRef = doc(this.getEventCollection(), event.id);
           await updateDoc(eventRef, { photoURL: '' });
+          
+          // Update local state
+          const idx = this.allEvents.findIndex(e => e.id === event.id);
+          if (idx !== -1) this.allEvents[idx].photoURL = '';
         } catch (error) {
           console.warn(`Failed to cleanup image for ${event.name}:`, error);
         }
       }
-    },
-
-    fetchEvents() {
-      this.isLoading = true;
-      const eventsQuery = query(
-        this.getEventCollection(), 
-        orderBy("date", "desc")
-      );
-
-      onSnapshot(eventsQuery, (querySnapshot) => {
-        const events = [];
-        querySnapshot.forEach((doc) => {
-          events.push({ id: doc.id, ...doc.data() });
-        });
-        
-        this.allEvents = events; 
-        
-        const today = new Date();
-        const year = today.getFullYear();
-        const month = (today.getMonth() + 1).toString().padStart(2, '0');
-        const day = today.getDate().toString().padStart(2, '0');
-        const todayStr = `${year}-${month}-${day}`;
-        
-        const todayEvent = events.find(e => e.date === todayStr && !e.ended);
-
-        if (todayEvent) {
-          this.currentEvent = todayEvent;
-        } else {
-          this.currentEvent = null;
-        }
-        
-        this.isLoading = false;
-        this.cleanupOldEventImages(); 
-
-      }, (error) => {
-        console.error("Error fetching events: ", error);
-        this.isLoading = false;
-      });
     }
   }
 })

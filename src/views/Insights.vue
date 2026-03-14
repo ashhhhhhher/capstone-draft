@@ -22,7 +22,10 @@ import HistoricalAttendance from '../components/dgmComponents/HistoricalAttendan
 const membersStore = useMembersStore()
 const { members, activeMembers, leaders, seekers } = storeToRefs(membersStore)
 const { allEvents } = storeToRefs(useEventsStore())
-const { allAttendance } = storeToRefs(useAttendanceStore())
+const attendanceStore = useAttendanceStore()
+
+// 🚀 OPTIMIZATION: Local State instead of Global Store
+const currentYearAttendance = ref([]) 
 
 // --- UI State ---
 const currentTab = ref('overview') // 'overview', 'wknd', 'b1g'
@@ -41,6 +44,16 @@ const todayStr = new Date().toISOString().split('T')[0]
 const defaultFrom = (() => { const d = new Date(); d.setDate(d.getDate() - 60); return d.toISOString().split('T')[0] })()
 const b1gFromDate = ref(defaultFrom)
 const b1gToDate = ref(todayStr)
+
+// Fetch Data on Mount
+onMounted(async () => {
+  // Fetch only this year's records to calculate insights, massively saving reads
+  const currentYearStr = new Date().getFullYear().toString()
+  const startDate = `${currentYearStr}-01-01`
+  const endDate = `${currentYearStr}-12-31`
+  
+  currentYearAttendance.value = await attendanceStore.fetchAttendanceByDateRange(startDate, endDate)
+})
 
 // --- Chart Options ---
 const doughnutChartOptions = ref({
@@ -71,7 +84,7 @@ const genderAgeChartOptions = ref({
     }, 
     y: { 
       beginAtZero: true, 
-      ticks: { stepSize: 1, precision: 0 }, // Forces whole numbers
+      ticks: { stepSize: 1, precision: 0 }, 
       grid: { color: '#F0F2F5' },
       border: { display: false }
     } 
@@ -101,7 +114,7 @@ const newMembersStats = computed(() => {
   return { count, percent: 3, trend: 'up' }; 
 })
 
-// 3. Monthly Attendance
+// 3. Monthly Attendance (Using targeted local fetch)
 const monthlyAttendanceStats = computed(() => {
   const now = new Date();
   const currentMonthEvents = allEvents.value.filter(e => {
@@ -110,7 +123,7 @@ const monthlyAttendanceStats = computed(() => {
   });
   
   const total = currentMonthEvents.reduce((sum, ev) => {
-    return sum + allAttendance.value.filter(a => a.eventId === ev.id).length;
+    return sum + currentYearAttendance.value.filter(a => a.eventId === ev.id).length;
   }, 0);
 
   return { total, percent: 8, trend: 'up' }; 
@@ -126,14 +139,17 @@ const growthRate = computed(() => {
 // 5. Attendance Stats Helper
 function getEventStats(eventType) {
   const today = new Date(); today.setHours(0, 0, 0, 0);
+  const currentYearStr = today.getFullYear().toString();
+  
   const relevantEvents = allEvents.value.filter(e => 
     (eventType === 'b1g' ? (e.eventType === 'b1g' || e.name.toLowerCase().includes('b1g')) : e.eventType === eventType) 
     && new Date(e.date + 'T00:00:00') <= today
+    && e.date.startsWith(currentYearStr) // Restrict calculation to current year only due to pagination
   );
 
   if (relevantEvents.length === 0) return { avg: 0, high: 0, low: 0 };
   
-  const counts = relevantEvents.map(event => allAttendance.value.filter(att => att.eventId === event.id).length);
+  const counts = relevantEvents.map(event => currentYearAttendance.value.filter(att => att.eventId === event.id).length);
   const avg = Math.round(counts.reduce((sum, c) => sum + c, 0) / relevantEvents.length);
   const high = Math.max(...counts);
   const low = Math.min(...counts);
@@ -148,16 +164,16 @@ const b1gStats = computed(() => getEventStats('b1g'));
 const wkndOverviewStats = computed(() => {
   const today = new Date(); today.setHours(0, 0, 0, 0);
   const currentYear = today.getFullYear();
-  const pastEvents = allEvents.value.filter(e => e.eventType === 'service' && new Date(e.date + 'T00:00:00') <= today);
+  const pastEvents = allEvents.value.filter(e => e.eventType === 'service' && new Date(e.date + 'T00:00:00') <= today && e.date.startsWith(currentYear.toString()));
   
   if (pastEvents.length === 0) return { avg: 0, servicesHeld: 0, peak: 0, peakEventName: 'N/A' };
 
-  const servicesHeld = pastEvents.filter(e => new Date(e.date).getFullYear() === currentYear).length;
+  const servicesHeld = pastEvents.length;
   
   const counts = pastEvents.map(e => ({
       name: e.name,
       date: e.date,
-      count: allAttendance.value.filter(att => att.eventId === e.id).length
+      count: currentYearAttendance.value.filter(att => att.eventId === e.id).length
   }));
 
   const total = counts.reduce((sum, c) => sum + c.count, 0);
@@ -174,16 +190,17 @@ const b1gOverviewStats = computed(() => {
   const pastEvents = allEvents.value.filter(e => 
     (e.eventType === 'b1g' || e.name.toLowerCase().includes('b1g')) 
     && new Date(e.date + 'T00:00:00') <= today
+    && e.date.startsWith(currentYear.toString())
   ).sort((a, b) => new Date(a.date) - new Date(b.date));
 
   if (pastEvents.length === 0) return { totalEvents: 0, avg: 0, peak: 0, peakEventName: 'N/A' };
 
-  const totalEvents = pastEvents.filter(e => new Date(e.date).getFullYear() === currentYear).length;
+  const totalEvents = pastEvents.length;
 
   const counts = pastEvents.map(e => ({
       name: e.name,
       date: e.date,
-      count: allAttendance.value.filter(att => att.eventId === e.id).length
+      count: currentYearAttendance.value.filter(att => att.eventId === e.id).length
   }));
 
   const totalAttendance = counts.reduce((sum, c) => sum + c.count, 0);
@@ -279,7 +296,6 @@ const b1gAgeData = computed(() => {
   const males = [];
   const females = [];
 
-  // Only include brackets that have actual data
   ['22-25', '26-30', '31-35', '36-40', '41+'].forEach(bracket => {
       if (rawData[bracket].male > 0 || rawData[bracket].female > 0) {
           labels.push(bracket);
@@ -297,7 +313,7 @@ const b1gAgeData = computed(() => {
   }
 })
 
-// 10. Volunteer Performance Table (Tabbed & Processed per year)
+// 10. Volunteer Performance Table
 const currentYearStr = new Date().getFullYear().toString();
 
 const totalServiceEventsThisYear = computed(() => {
@@ -312,10 +328,9 @@ const volunteerPerformanceStats = computed(() => {
   const totalEvts = eventsThisYear.length;
   const eventIdsThisYear = eventsThisYear.map(e => e.id);
 
-  // Build volunteer stats directly from attendance records (source of truth)
-  const volunteersByMember = {}; // memberId -> { memberObj, ministries: Map<ministry, count>, totalVolunteered }
+  const volunteersByMember = {}; 
   
-  allAttendance.value.forEach(att => {
+  currentYearAttendance.value.forEach(att => {
     if (eventIdsThisYear.includes(att.eventId) && att.ministry && att.ministry !== 'N/A') {
       const memberId = att.memberId;
       const ministry = att.ministry;
@@ -335,9 +350,8 @@ const volunteerPerformanceStats = computed(() => {
     }
   });
 
-  // Transform into stats structure
   Object.entries(volunteersByMember).forEach(([memberId, data]) => {
-    if (!data.memberObj) return; // Skip if member not found
+    if (!data.memberObj) return; 
     
     const rateAll = totalEvts > 0 ? Math.round((data.totalVolunteered / totalEvts) * 100) : 0;
     const ministryArray = Array.from(data.ministries.keys());
@@ -351,7 +365,6 @@ const volunteerPerformanceStats = computed(() => {
       ministryStr: ministryArray.join(', ') || 'Various'
     });
 
-    // Add to specific ministry tabs based on actual attendance records
     data.ministries.forEach((count, ministry) => {
       if (stats[ministry]) {
         const rate = totalEvts > 0 ? Math.round((count / totalEvts) * 100) : 0;
@@ -367,7 +380,6 @@ const volunteerPerformanceStats = computed(() => {
     });
   });
 
-  // Sort descending by rate
   Object.keys(stats).forEach(key => {
      stats[key].sort((a, b) => b.rate - a.rate);
   });
@@ -932,7 +944,6 @@ const openVolunteerModal = () => {
 
 /* MODAL EXTRAS */
 .modal-header-row { display: flex; justify-content: space-between; align-items: center; }
-/* Replaced locally managed export-csv-btn styling, handled by ExportButton component now */
 
 @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
 

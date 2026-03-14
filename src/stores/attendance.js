@@ -9,7 +9,6 @@ import {
   getDoc,
   getDocs,
   collectionGroup,
-  onSnapshot,
   serverTimestamp,
   query,
   where,
@@ -20,46 +19,123 @@ import {
 import { useAuthStore } from './auth'
 import { useMembersStore } from './members'
 import { useDgroupEventsStore } from './dgroupevents'
+import { useEventsStore } from './events' // Needed for the smart fallback
 
 export const useAttendanceStore = defineStore('attendance', () => {
 
-  // --- State ---
   const currentEventAttendees = ref([])
-  const allAttendance = ref([])
+  const allAttendance = ref([]) 
   const dgroupMeetings = ref([]) 
   const isLoading = ref(false)
-  
-  // New States
-  const speakersList = ref([]) // Master list for the dropdown
-  const currentGroupHasLogged = ref(false) // UI Locking state
-  
-  let allAttendanceUnsub = null
-  let dgroupMeetingsUnsub = null
-  let speakersUnsub = null
+  const speakersList = ref([]) 
+  const currentGroupHasLogged = ref(false) 
 
-  // --- Helpers ---
   const getEventAttendanceCollection = (eventId) => {
     const authStore = useAuthStore()
     if (!authStore.branchId || !eventId) return null
     return collection(db, 'branches', authStore.branchId, 'events', eventId, 'attendance')
   }
 
-  // --- Actions ---
+  async function fetchAttendanceByDateRange(startDate, endDate) {
+    const authStore = useAuthStore()
+    if (!authStore.branchId) return []
+    
+    isLoading.value = true;
+    try {
+      const q = query(
+        collectionGroup(db, 'attendance'),
+        where('dateOnly', '>=', startDate),
+        where('dateOnly', '<=', endDate)
+      );
+      
+      const snapshot = await getDocs(q);
+      const records = [];
+      
+      snapshot.forEach((docSnap) => {
+        const pathParts = docSnap.ref.path.split('/');
+        if (pathParts.length >= 6 && pathParts[0] === 'branches' && pathParts[1] === authStore.branchId) {
+          const eventId = pathParts[3];
+          records.push({ eventId, memberId: docSnap.id, ...docSnap.data() });
+        }
+      });
+      return records;
+    } catch (error) {
+      console.error('Error fetching attendance by date range:', error);
+      return [];
+    } finally {
+      isLoading.value = false;
+    }
+  }
 
-  /**
-   * SPEAKER MANAGEMENT
-   */
-  function fetchSpeakers() {
+  // 🚀 OPTIMIZATION + SMART FALLBACK
+  async function fetchMemberLastAttendance(memberId, memberCreatedAt) {
+    const authStore = useAuthStore()
+    if (!authStore.branchId || !memberId) return null;
+    
+    // 1. Try the ultra-fast indexed query for NEW records
+    try {
+      const q = query(
+        collectionGroup(db, 'attendance'),
+        where('memberId', '==', memberId), 
+        orderBy('timestamp', 'desc'),
+        limit(1)
+      );
+      const snapshot = await getDocs(q);
+      if (!snapshot.empty) {
+         return snapshot.docs[0].data();
+      }
+    } catch(e) {
+      console.warn('Optimized query missing index or failed. Falling back to manual search...');
+    }
+
+    // 2. FALLBACK for OLD records (Missing 'memberId' field)
+    // We use the cached events list, check from newest to oldest, and STOP as soon as we find one!
+    try {
+      const eventsStore = useEventsStore();
+      if (eventsStore.allEvents.length === 0) {
+        await eventsStore.fetchEvents();
+      }
+
+      // Sort events newest first
+      const sortedEvents = [...eventsStore.allEvents].sort((a, b) => new Date(b.date) - new Date(a.date));
+      
+      // 🚀 OPTIMIZATION: Parse member creation date to stop loop early
+      const createdDateStr = memberCreatedAt ? new Date(memberCreatedAt).toISOString().split('T')[0] : null;
+
+      for (const event of sortedEvents) {
+        // Stop checking if this event happened before they registered!
+        if (createdDateStr && event.date < createdDateStr) {
+           break; 
+        }
+
+        const attRef = doc(db, 'branches', authStore.branchId, 'events', event.id, 'attendance', memberId);
+        const attSnap = await getDoc(attRef);
+        
+        if (attSnap.exists()) {
+          // We found their most recent old record! Return immediately to save reads.
+          return attSnap.data();
+        }
+      }
+    } catch(e) {
+       console.error("Fallback search failed:", e);
+    }
+
+    return null; // Truly never attended
+  }
+
+  async function fetchSpeakers(force = false) {
     const authStore = useAuthStore()
     if (!authStore.branchId) return
-    if (speakersUnsub) speakersUnsub()
+    if (!force && speakersList.value.length > 0) return;
 
-    const speakersCol = collection(db, 'branches', authStore.branchId, 'speakers')
-    const q = query(speakersCol, orderBy('name', 'asc'))
-
-    speakersUnsub = onSnapshot(q, (snapshot) => {
+    try {
+      const speakersCol = collection(db, 'branches', authStore.branchId, 'speakers')
+      const q = query(speakersCol, orderBy('name', 'asc'))
+      const snapshot = await getDocs(q)
       speakersList.value = snapshot.docs.map(d => ({ id: d.id, ...d.data() }))
-    })
+    } catch(e) {
+      console.error("Error fetching speakers:", e)
+    }
   }
 
   async function addNewSpeaker(name) {
@@ -68,6 +144,8 @@ export const useAttendanceStore = defineStore('attendance', () => {
     try {
       const speakerRef = doc(collection(db, 'branches', authStore.branchId, 'speakers'))
       await setDoc(speakerRef, { name: name.trim() })
+      speakersList.value.push({ id: speakerRef.id, name: name.trim() });
+      speakersList.value.sort((a,b) => a.name.localeCompare(b.name));
     } catch (error) {
       console.error("Error saving new speaker:", error)
     }
@@ -77,16 +155,12 @@ export const useAttendanceStore = defineStore('attendance', () => {
     const authStore = useAuthStore()
     try {
       await deleteDoc(doc(db, 'branches', authStore.branchId, 'speakers', id))
+      speakersList.value = speakersList.value.filter(s => s.id !== id);
     } catch (error) {
       console.error("Error deleting speaker:", error)
     }
   }
 
-
-  /**
-   * Log Weekly DGroup Meeting
-   * Now supports week-based meeting IDs. Preserves attendance data on re-submission.
-   */
   async function logDgroupMeeting(meetingData) {
     const authStore = useAuthStore()
     if (!authStore.branchId) {
@@ -102,7 +176,6 @@ export const useAttendanceStore = defineStore('attendance', () => {
       const rawAttendees = meetingData.attendees || {}
       const attendanceMap = {}
 
-      // Always load existing report when possible so re-submission never wipes data
       let existingReport = null
       let existingAttendees = {}
       const meetingWeekId = meetingData.meetingWeekId
@@ -119,7 +192,6 @@ export const useAttendanceStore = defineStore('attendance', () => {
 
       const isResubmission = !!existingReport || !!meetingData.isResubmitted
 
-      // Merge raw and existing member IDs so existing checkmarks are never dropped
       const memberIds = new Set([
         ...Object.keys(existingAttendees || {}),
         ...Object.keys(rawAttendees || {})
@@ -137,7 +209,6 @@ export const useAttendanceStore = defineStore('attendance', () => {
             `${m.firstName || ''} ${m.lastName || ''}`.trim()
         }
 
-        // Preserve attendance: if member was present in previous submission, keep them present
         const isPresent = !!(existingData?.isPresent || a.isPresent)
         const tag = existingData?.tag || a.tag || 'BDM'
 
@@ -158,8 +229,6 @@ export const useAttendanceStore = defineStore('attendance', () => {
       const incomingEvangelized = Number(meetingData.evangelized)
       const incomingCampus = Number(meetingData.campusDmember)
 
-      // Always honor user-entered values on this submission (including 0).
-      // Fallback to existing only when incoming is not a valid number.
       const mergedGuests = Number.isFinite(incomingGuests) ? incomingGuests : existingGuests
       const mergedEvangelized = Number.isFinite(incomingEvangelized) ? incomingEvangelized : existingEvangelized
       const mergedCampus = Number.isFinite(incomingCampus) ? incomingCampus : existingCampus
@@ -179,13 +248,6 @@ export const useAttendanceStore = defineStore('attendance', () => {
       }
 
       const dgroupStore = useDgroupEventsStore()
-
-      console.log(
-        "Updating meeting for leader:",
-        meetingData.dgroupLeaderId,
-        "week:",
-        meetingIdForUpdate
-      )
 
       const res = await dgroupStore.updateDgroupMeeting(
         meetingData.dgroupLeaderId,
@@ -211,14 +273,10 @@ export const useAttendanceStore = defineStore('attendance', () => {
     }
   }
 
-  /**
-   * Get existing dgroup meeting report for a week
-   */
   async function getDgroupMeetingReport(dgroupLeaderId, meetingWeekId) {
     const authStore = useAuthStore()
     if (!authStore.branchId || !dgroupLeaderId || !meetingWeekId) return null
     try {
-      const dgroupStore = useDgroupEventsStore()
       const doc = await getDgroupMeetingReportDoc(dgroupLeaderId, meetingWeekId)
       if (doc) {
         return doc
@@ -230,9 +288,6 @@ export const useAttendanceStore = defineStore('attendance', () => {
     }
   }
 
-  /**
-   * Helper to get a specific meeting report document
-   */
   async function getDgroupMeetingReportDoc(dgroupLeaderId, meetingWeekId) {
     const authStore = useAuthStore()
     if (!authStore.branchId) return null
@@ -247,89 +302,56 @@ export const useAttendanceStore = defineStore('attendance', () => {
     }
   }
 
-  /**
-   * Fetch attendance records by date
-   */
-  async function getAttendanceByDate(dateString) {
-    const authStore = useAuthStore()
-    if (!authStore.branchId) return []
-
-    try {
-      const q = query(
-        collectionGroup(db, 'attendance'),
-        where('dateOnly', '==', dateString)
-      )
-
-      const snapshot = await getDocs(q)
-      const records = []
-      
-      snapshot.forEach(docSnap => {
-        if (docSnap.ref.path.includes(`branches/${authStore.branchId}`)) {
-          records.push({
-            memberId: docSnap.id, 
-            ...docSnap.data()
-          })
-        }
-      })
-      return records
-    } catch (error) {
-      console.error("Error fetching attendance by date:", error)
-      return []
-    }
-  }
-
-  function fetchAttendanceForEvent(eventId) {
+  async function fetchAttendanceForEvent(eventId) {
     if (!eventId) {
       currentEventAttendees.value = []
       return
     }
+    
     isLoading.value = true
-    const attendanceCol = getEventAttendanceCollection(eventId)
-    if (!attendanceCol) return
-
-    onSnapshot(attendanceCol, (snapshot) => {
+    try {
+      const attendanceCol = getEventAttendanceCollection(eventId)
+      if (!attendanceCol) return
+      
+      const snapshot = await getDocs(attendanceCol);
       const attendees = []
       snapshot.forEach((docSnap) => {
         attendees.push({ memberId: docSnap.id, ...docSnap.data() })
       })
       currentEventAttendees.value = attendees
-      isLoading.value = false
-    }, (error) => {
+    } catch (error) {
       console.error('Attendance fetch error:', error)
+    } finally {
       isLoading.value = false
-    })
+    }
   }
 
-  function fetchAllAttendance() {
+  async function fetchAllAttendance(force = false) {
     const authStore = useAuthStore()
-    if (!authStore.branchId) {
-      allAttendance.value = []
-      return Promise.resolve(allAttendance.value)
-    }
-    if (allAttendanceUnsub) return Promise.resolve(allAttendance.value)
-    isLoading.value = true
+    if (!authStore.branchId) return [];
+    if (!force && allAttendance.value.length > 0) return allAttendance.value;
 
-    return new Promise((resolve, reject) => {
-      allAttendanceUnsub = onSnapshot(collectionGroup(db, 'attendance'), (snapshot) => {
-        const records = []
-        snapshot.forEach((docSnap) => {
-          const pathParts = docSnap.ref.path.split('/')
-          if (pathParts.length >= 6 && pathParts[0] === 'branches') {
-            const branchId = pathParts[1]
-            const eventId = pathParts[3]
-            if (branchId !== authStore.branchId) return
-            records.push({ eventId, memberId: docSnap.id, ...docSnap.data() })
-          }
-        })
-        allAttendance.value = records
-        isLoading.value = false
-        resolve(allAttendance.value)
-      }, (error) => {
-        console.error('All attendance fetch error:', error)
-        isLoading.value = false
-        reject(error)
+    isLoading.value = true
+    try {
+      const snapshot = await getDocs(collectionGroup(db, 'attendance'));
+      const records = []
+      snapshot.forEach((docSnap) => {
+        const pathParts = docSnap.ref.path.split('/')
+        if (pathParts.length >= 6 && pathParts[0] === 'branches') {
+          const branchId = pathParts[1]
+          const eventId = pathParts[3]
+          if (branchId !== authStore.branchId) return
+          records.push({ eventId, memberId: docSnap.id, ...docSnap.data() })
+        }
       })
-    })
+      allAttendance.value = records
+      return allAttendance.value;
+    } catch (error) {
+      console.error('All attendance fetch error:', error)
+      throw error;
+    } finally {
+      isLoading.value = false
+    }
   }
 
   async function markAttendance(memberId, eventId, ministry = 'N/A', memberTag = 'DM', name = null) {
@@ -349,14 +371,30 @@ export const useAttendanceStore = defineStore('attendance', () => {
         if (local) resolvedName = local.displayName || `${local.firstName} ${local.lastName}`
       }
 
-      await setDoc(attendanceRef, {
-        timestamp: serverTimestamp(),
+      const timestamp = serverTimestamp();
+      
+      const attData = {
+        memberId: memberId, // For future fast queries
+        timestamp: timestamp,
         dateOnly: today,
         memberTag: memberTag,
         name: resolvedName || 'Unknown',
         checkedInBy: authStore.user?.uid || null,
         ministry: ministry 
+      }
+
+      await setDoc(attendanceRef, attData)
+      
+      currentEventAttendees.value.push({
+         memberId: memberId,
+         ...attData,
+         timestamp: new Date() 
       })
+
+      if (allAttendance.value.length > 0) {
+        allAttendance.value.push({ eventId, memberId, ...attData, timestamp: new Date() })
+      }
+
       return { status: 'success', message: 'Attendance recorded.' }
     } catch (error) {
       console.error('Attendance write error:', error)
@@ -364,21 +402,29 @@ export const useAttendanceStore = defineStore('attendance', () => {
     }
   }
 
-  function fetchDgroupMeetings() {
+  async function fetchDgroupMeetings(force = false) {
     const authStore = useAuthStore()
     if (!authStore.branchId) return
-    if (dgroupMeetingsUnsub) dgroupMeetingsUnsub()
+    if (!force && dgroupMeetings.value.length > 0) return;
 
-    const q = query(collection(db, 'branches', authStore.branchId, 'dgroupAttendance'), orderBy('meetingDate', 'desc'))
-    dgroupMeetingsUnsub = onSnapshot(q, (snapshot) => {
+    try {
+      const q = query(collection(db, 'branches', authStore.branchId, 'dgroupAttendance'), orderBy('meetingDate', 'desc'))
+      const snapshot = await getDocs(q);
       dgroupMeetings.value = snapshot.docs.map(d => ({ id: d.id, ...d.data() }))
-    })
+    } catch(e) {
+      console.error("Error fetching DGroup Meetings: ", e);
+    }
   }
 
   async function updateAttendanceMinistry(memberId, eventId, newMinistry) {
     const authStore = useAuthStore()
     const attendanceRef = doc(db, 'branches', authStore.branchId, 'events', eventId, 'attendance', memberId)
     await updateDoc(attendanceRef, { ministry: newMinistry })
+    
+    const idx = currentEventAttendees.value.findIndex(a => a.memberId === memberId);
+    if(idx > -1) {
+      currentEventAttendees.value[idx].ministry = newMinistry;
+    }
   }
 
   return {
@@ -390,11 +436,12 @@ export const useAttendanceStore = defineStore('attendance', () => {
     currentGroupHasLogged,
     fetchAttendanceForEvent,
     fetchAllAttendance,
+    fetchAttendanceByDateRange, 
+    fetchMemberLastAttendance, 
     fetchDgroupMeetings,
     fetchSpeakers,
     addNewSpeaker,
     deleteSpeaker,
-    getAttendanceByDate, 
     markAttendance,
     logDgroupMeeting,
     getDgroupMeetingReport,

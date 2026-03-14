@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useAuthStore } from '../stores/auth'
 import { useAttendanceStore } from '../stores/attendance'
 import { useEventsStore } from '../stores/events'
@@ -13,10 +13,29 @@ const myId = computed(() => authStore.userProfile?.id)
 const loading = ref(true)
 const selectedYear = ref(new Date().getFullYear())
 
+// 🚀 OPTIMIZATION: Store only the current year's attendance locally
+const fetchedYearAttendance = ref([])
+
+async function loadYearlyAttendance() {
+  loading.value = true;
+  const start = `${selectedYear.value}-01-01`;
+  const end = `${selectedYear.value}-12-31`;
+  
+  // We fetch only this year's attendance (for everyone, but it's 1 year instead of all history)
+  const fullYearData = await attendanceStore.fetchAttendanceByDateRange(start, end);
+  
+  // Then filter down to just my records
+  fetchedYearAttendance.value = fullYearData.filter(rec => rec.memberId === myId.value);
+  loading.value = false;
+}
+
 onMounted(async () => {
   await eventsStore.fetchEvents()
-  await attendanceStore.fetchAllAttendance()
-  loading.value = false
+  loadYearlyAttendance()
+})
+
+watch(selectedYear, () => {
+  loadYearlyAttendance()
 })
 
 const changeYear = (delta) => {
@@ -25,14 +44,12 @@ const changeYear = (delta) => {
 
 const myAttendanceRecords = computed(() => {
   if (!myId.value) return []
-  return attendanceStore.allAttendance.filter(rec => {
-    if (rec.memberId !== myId.value) return false
+  return fetchedYearAttendance.value.filter(rec => {
     const ev = eventsStore.allEvents.find(e => e.id === rec.eventId)
     return !!ev
   })
 })
 
-// Filtered by selected year
 const enrichedRecords = computed(() => {
   return myAttendanceRecords.value.map(record => {
     const event = eventsStore.allEvents.find(e => e.id === record.eventId)
@@ -43,12 +60,7 @@ const enrichedRecords = computed(() => {
       date: dateVal,
       eventType: event ? event.eventType : null
     }
-  })
-  .filter(r => {
-    if (!r.date) return false
-    return new Date(r.date).getFullYear() === selectedYear.value
-  })
-  .sort((a, b) => new Date(b.date) - new Date(a.date))
+  }).sort((a, b) => new Date(b.date) - new Date(a.date))
 })
 
 const totalCount = computed(() => enrichedRecords.value.length)
@@ -59,8 +71,6 @@ const b1gCount = computed(() => enrichedRecords.value.filter(r => r.eventType ==
 
 const monthlyStats = computed(() => {
   const map = {}
-  // Initialize all months for the selected year to ensure 0s are shown if desired, 
-  // or keep it dynamic based on your original logic.
   enrichedRecords.value.forEach(rec => {
     const d = new Date(rec.date)
     const month = d.toLocaleString('default', { month: 'short' })
@@ -69,7 +79,6 @@ const monthlyStats = computed(() => {
     else if (rec.eventType === 'b1g_event') map[month].b1g += 1
   })
 
-  // Convert map to array and sort by month order (Jan-Dec)
   return Object.entries(map)
     .map(([m, v]) => ({ month: m, wknd: v.wknd, b1g: v.b1g, total: v.wknd + v.b1g, sortIdx: v.sortIdx }))
     .sort((a, b) => a.sortIdx - b.sortIdx)
@@ -90,7 +99,7 @@ const monthlyMax = computed(() => {
       <div class="year-selector">
         <button @click="changeYear(-1)" class="year-btn"><ChevronLeft :size="20" /></button>
         <h2 class="year-label">{{ selectedYear }} Attendance</h2>
-        <button @click="changeYear(1)" class="year-btn"><ChevronRight :size="20" /></button>
+        <button @click="changeYear(1)" class="year-btn" :disabled="selectedYear === new Date().getFullYear()"><ChevronRight :size="20" /></button>
       </div>
 
       <div class="stats-row">
@@ -112,7 +121,7 @@ const monthlyMax = computed(() => {
 
       <section class="chart-section">
         <h3>Monthly Overview</h3>
-        <div class="bar-chart">
+        <div class="bar-chart" v-if="!loading">
           <div v-for="(stat, index) in monthlyStats" :key="index" class="chart-col">
             <div class="bar-group">
               <div class="bar-wrapper">
@@ -130,6 +139,7 @@ const monthlyMax = computed(() => {
             No records for {{ selectedYear }}.
           </div>
         </div>
+        <div v-else class="no-data-chart mt-4">Loading chart...</div>
       </section>
     </div>
 
@@ -162,7 +172,8 @@ const monthlyMax = computed(() => {
 .stats-column { display: flex; flex-direction: column; gap: 24px; }
 .year-selector { display: flex; align-items: center; justify-content: center; gap: 20px; background: white; padding: 12px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
 .year-btn { background: #F5F5F5; border: none; border-radius: 50%; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; cursor: pointer; color: #37474F; transition: background 0.2s; }
-.year-btn:hover { background: #EEEEEE; }
+.year-btn:hover:not(:disabled) { background: #EEEEEE; }
+.year-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .year-label { font-size: 18px; font-weight: 700; color: #37474F; margin: 0; }
 .stats-row { display: flex; gap: 16px; }
 .stat-card { flex: 1; padding: 24px; border-radius: 16px; color: white; display: flex; flex-direction: column; justify-content: space-between; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
@@ -196,4 +207,6 @@ const monthlyMax = computed(() => {
 .badge-attended { background: #E8F5E9; color: #2E7D32; font-size: 12px; padding: 4px 10px; border-radius: 6px; font-weight: 600; }
 .empty-text { text-align: center; color: #B0BEC5; margin-top: 20px; }
 .no-data-chart { color: #B0BEC5; font-size: 14px; width: 100%; text-align: center; }
+.loading-text { text-align: center; color: #78909C; padding: 40px; }
+.mt-4 { margin-top: 16px; }
 </style>

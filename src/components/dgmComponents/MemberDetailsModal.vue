@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useMembersStore } from '../../stores/members'
 import { useAttendanceStore } from '../../stores/attendance'
@@ -14,11 +14,45 @@ const emit = defineEmits(['close', 'saveChanges', 'archiveMember', 'restoreMembe
 const membersStore = useMembersStore()
 const { leaders } = storeToRefs(membersStore) 
 const attendanceStore = useAttendanceStore()
-const { allAttendance } = storeToRefs(attendanceStore);
 
 const isEditMode = ref(false)
 const showArchiveConfirmation = ref(false)
 const editableMember = ref(JSON.parse(JSON.stringify(props.member)))
+
+const memberAttendanceStatus = ref('Loading history...')
+
+onMounted(async () => {
+  const memberId = props.member.id;
+  
+  // 1. Is present live right now?
+  const isPresentToday = attendanceStore.currentEventAttendees.some(att => att.memberId === memberId);
+  if (isPresentToday) {
+    memberAttendanceStatus.value = 'Present Today';
+    return;
+  }
+  
+  // 2. Fetch the last record (Passing createdAt prevents searching events from before they joined!)
+  const lastRecord = await attendanceStore.fetchMemberLastAttendance(memberId, props.member.createdAt);
+  
+  if (lastRecord) {
+    let dateObj;
+    
+    // Safely parse the date regardless of how old the record is formatted
+    if (lastRecord.timestamp && typeof lastRecord.timestamp.toDate === 'function') {
+      dateObj = lastRecord.timestamp.toDate();
+    } else if (lastRecord.dateOnly) {
+      dateObj = new Date(lastRecord.dateOnly);
+    } else {
+      dateObj = new Date(); // ultimate fallback
+    }
+
+    const formattedDate = dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    memberAttendanceStatus.value = `Last seen: ${formattedDate}`;
+  } else {
+    memberAttendanceStatus.value = 'Never Attended';
+  }
+})
+
 
 // Ensure array exists for ministries
 if (!Array.isArray(editableMember.value.finalTags.volunteerMinistry)) {
@@ -26,30 +60,11 @@ if (!Array.isArray(editableMember.value.finalTags.volunteerMinistry)) {
 }
 
 // --- Auto-Uncheck Logic ---
-// If Dgroup Leader is checked, Regular cannot be true.
 watch(() => editableMember.value.finalTags.isDgroupLeader, (newVal) => {
   if (newVal) {
     editableMember.value.finalTags.isRegular = false;
   }
 })
-
-// --- Attendance Status Logic ---
-const memberAttendanceStatus = computed(() => {
-  const memberId = props.member.id;
-  const isPresentToday = attendanceStore.currentEventAttendees.some(att => att.memberId === memberId);
-  if (isPresentToday) return 'Present Today';
-  
-  const lastAttendance = allAttendance.value
-    .filter(att => att.memberId === memberId)
-    .sort((a, b) => b.timestamp.toMillis() - a.timestamp.toMillis())[0]; 
-
-  if (lastAttendance) {
-    const date = lastAttendance.timestamp.toDate();
-    const formattedDate = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-    return `Last seen: ${formattedDate}`;
-  }
-  return 'Never Attended';
-});
 
 // --- Date Joined Logic ---
 const memberSince = computed(() => {
@@ -111,17 +126,13 @@ async function save() {
   const finalTags = editableMember.value.finalTags;
   const dgroupLeaderSelection = editableMember.value.dgroupLeader;
 
-  // --- Derived State ---
   const isFirstTimer = dgroupLeaderSelection === 'N/A (First Timer)';
 
-  // --- 1. Validate Invalid Combinations ---
   if (finalTags.isDgroupLeader && finalTags.isRegular) {
     alert("Invalid Combination: A member cannot be both a Dgroup Leader and a Regular Member. Please uncheck Regular.");
     return;
   }
-  // Volunteer Validation
   if (!finalTags.isDgroupLeader && finalTags.isVolunteer && finalTags.isRegular) {
-     // Optional: You can force uncheck Regular here automatically if you want, but for now we alert
      alert("Invalid: A Volunteer cannot be tagged as 'Regular' in the profile. Their status changes dynamically.");
      return;
   }
@@ -131,14 +142,12 @@ async function save() {
     return;
   }
   
-  // --- 2. Empty Category Check ---
   const hasManualCategory = finalTags.isSeeker || finalTags.isRegular || finalTags.isDgroupLeader || finalTags.isVolunteer;
   if (!hasManualCategory && !isFirstTimer) {
     alert("Please select at least one Category (Seeker, Regular, DL, or Volunteer) or set Church Info to 'N/A (First Timer)'.");
     return;
   }
 
-  // --- 3. Volunteer Ministry Validation ---
   if (finalTags.isVolunteer) {
     if (!finalTags.volunteerMinistry || finalTags.volunteerMinistry.length === 0) {
       alert("Please select a ministry for the volunteer.");
@@ -154,7 +163,6 @@ async function save() {
     }
   }
 
-  // --- 4. Church Information Validation ---
   if (finalTags.isDgroupLeader) {
       if (!dgroupLeaderSelection) {
           alert("Dgroup Leaders must have a Leader or be set to 'N/A (D-Lead)'.");
@@ -165,7 +173,6 @@ async function save() {
       return;
   }
 
-  // --- 5. Apply Data ---
   if (isFirstTimer) {
       finalTags.isFirstTimer = true;
       editableMember.value.dgroupLeader = ''; 
@@ -173,7 +180,6 @@ async function save() {
       finalTags.isFirstTimer = false;
   }
   
-  // Update Age & Category
   editableMember.value.age = editableAge.value
   if (editableAge.value >= 12 && editableAge.value <= 21) {
     editableMember.value.finalTags.ageCategory = 'Elevate'
@@ -183,7 +189,6 @@ async function save() {
     editableMember.value.finalTags.ageCategory = 'N/A'
   }
   
-  // Leader Logic
   if (finalTags.isDgroupLeader) {
     if (!editableMember.value.dgroupId) editableMember.value.dgroupId = generateDgroupID();
     if (!editableMember.value.dgroupName) editableMember.value.dgroupName = `${editableMember.value.firstName}'s Dgroup`;
@@ -191,7 +196,6 @@ async function save() {
     editableMember.value.dgroupCapacity = null
   }
   
-  // Format Strings
   editableMember.value.lastName = toTitleCase(editableMember.value.lastName.trim());
   editableMember.value.firstName = toTitleCase(editableMember.value.firstName.trim());
   editableMember.value.middleInitial = editableMember.value.middleInitial ? editableMember.value.middleInitial.toUpperCase().trim() : '';
@@ -200,24 +204,17 @@ async function save() {
   editableMember.value.fbAccount = editableMember.value.fbAccount ? editableMember.value.fbAccount.trim() : '';
   editableMember.value.contactNumber = editableMember.value.contactNumber ? editableMember.value.contactNumber.trim() : '';
   
-  // --- Persist Dgroup assignment using centralized function so dgroupId is consistent ---
   try {
     const selection = editableMember.value.dgroupLeader;
-    // Treat these special values as no leader
     const isSpecialNA = !selection || selection === 'N/A (D-Lead)' || selection === 'N/A (First Timer)';
     if (isSpecialNA) {
       await membersStore.assignDgroupLeader(editableMember.value.id, null);
-      // clear the leader pointer (use dgroupLeaderId as the canonical leader reference)
       editableMember.value.dgroupLeaderId = null;
     } else {
-      // Try to resolve leader id by name
       const leaderObj = leaders.value.find(l => `${l.firstName} ${l.lastName}` === selection);
       if (leaderObj && leaderObj.id) {
         await membersStore.assignDgroupLeader(editableMember.value.id, leaderObj.id);
-        // Ensure local copy has the leader's id pointer so parent update doesn't overwrite it
         editableMember.value.dgroupLeaderId = leaderObj.id || leaderObj.dgroupLeaderId || editableMember.value.dgroupLeaderId || null;
-      } else {
-        // No leader id resolved — keep editableMember values and let parent update persist name
       }
     }
   } catch (e) {
@@ -353,9 +350,7 @@ function copyToClipboard(text) {
                 </div>
             </div>
 
-            <!-- Regular Member Checkbox (ALWAYS VISIBLE for fixing state) -->
-            <!-- Disabled if DLeader/Volunteer to guide user, or enabled if you want manual control. -->
-            <!-- We removed v-if so it can always be seen and unchecked. -->
+            <!-- Regular Member Checkbox -->
             <div class="checkbox-item">
                 <input type="checkbox" id="regular" v-model="editableMember.finalTags.isRegular">
                 <label for="regular">Regular Member</label>

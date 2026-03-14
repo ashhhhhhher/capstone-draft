@@ -7,20 +7,19 @@ import {
   setDoc, 
   updateDoc, 
   deleteDoc, 
-  onSnapshot,
   query,
   getDocs,
   getDoc
 } from "firebase/firestore";
 import { useAuthStore } from './auth';
 import { useNotificationsStore } from './notifications';
+
 export const useMembersStore = defineStore('members', () => {
   const members = ref([])
   const pendingMembers = ref([])
-  const isLoading = ref(true)
+  const isLoading = ref(false)
 
   // --- Computed Properties ---
-
   const activeMembers = computed(() => {
     return members.value.filter(m => m.status === 'active')
   })
@@ -35,11 +34,9 @@ export const useMembersStore = defineStore('members', () => {
       .map(m => `${m.firstName} ${m.lastName}`)
   })
   
-  // Enhanced Leaders computed property (From Updated Version)
   const leaders = computed(() => {
     return activeMembers.value.filter(m => m.finalTags.isDgroupLeader).map(l => ({
       ...l,
-      // Ensure arrays exist for matching/analytics
       dgroupDetails: {
         interests: l.dgroupDetails?.interests || [],
         meetingTime: l.dgroupDetails?.meetingTime || 'Flexible'
@@ -49,22 +46,16 @@ export const useMembersStore = defineStore('members', () => {
   
   const seekers = computed(() => {
     return activeMembers.value.filter(m => m.finalTags.isSeeker)
-
   })
 
-  // New: Members requesting to join a specific leader
   const joinRequests = computed(() => {
     return activeMembers.value.filter(m => m.joinRequest && m.joinRequest.status === 'pending')
   })
 
-  // --- PATH HELPERS (RESTORED TO PREVIOUS LOGIC) ---
-  // This was the cause of the empty list. We switched back to 'branches' 
-  // instead of 'artifacts' to match your existing data.
-
+  // --- PATH HELPERS ---
   const getMemberCollection = () => {
     const authStore = useAuthStore();
     if (!authStore.branchId) {
-        // Return a dummy collection or handle error if branchId isn't ready
         return collection(db, "members_loading_wait"); 
     }
     return collection(db, "branches", authStore.branchId, "members");
@@ -80,46 +71,45 @@ export const useMembersStore = defineStore('members', () => {
 
   // --- ACTIONS ---
 
-  function fetchMembers() {
-    this.isLoading = true;
-    
-    // Ensure we have a valid collection before querying
-    const colRef = getMemberCollection();
-    // Safety check: if auth isn't ready, retry or wait (handled by auth listener usually)
-    
-    const membersQuery = query(colRef);
+  // 🚀 OPTIMIZATION: Replaced onSnapshot with getDocs + added caching
+  async function fetchMembers(force = false) {
+    // Cache check: If we already have members and aren't forcing a refresh, skip the fetch!
+    if (!force && members.value.length > 0) {
+      return; 
+    }
 
-    onSnapshot(membersQuery, (querySnapshot) => {
+    isLoading.value = true;
+    try {
+      const colRef = getMemberCollection();
+      const membersQuery = query(colRef);
+      const querySnapshot = await getDocs(membersQuery);
+      
       const allMembers = [];
       querySnapshot.forEach((doc) => {
         const data = doc.data();
-
-        // Ensure ID is set from doc.id if missing inside the data
         if (!data.id) data.id = doc.id;
-
-        // Default values for stability
         if (!data.status) data.status = 'active';
         if (!data.monitoringState) data.monitoringState = { msgSentDate: null, leaderNotifiedDate: null };
         
-        if (data.status === 'pending') {
-          console.warn(`Skipping member ${data.id} with status 'pending' found in members collection`);
-          return;
-        }
-
+        if (data.status === 'pending') return; // Skip pending
+        
         allMembers.push(data);
       });
       members.value = allMembers;
-      this.isLoading = false;
-    }, (error) => {
+    } catch (error) {
       console.error("Error fetching members: ", error);
-      this.isLoading = false;
-    });
+    } finally {
+      isLoading.value = false;
+    }
   }
 
-  // --- FETCH PENDING REGISTRATIONS ---
-  function fetchPendingRegistrations() {
-    const pendingQuery = query(getPendingCollection());
-    onSnapshot(pendingQuery, (querySnapshot) => {
+  // 🚀 OPTIMIZATION: One-time fetch with caching instead of real-time listener
+  async function fetchPendingRegistrations(force = false) {
+    if (!force && pendingMembers.value.length > 0) return;
+
+    try {
+      const pendingQuery = query(getPendingCollection());
+      const querySnapshot = await getDocs(pendingQuery);
       const list = [];
       querySnapshot.forEach((doc) => {
         const data = doc.data();
@@ -127,10 +117,9 @@ export const useMembersStore = defineStore('members', () => {
         list.push(data);
       });
       pendingMembers.value = list;
-    }, (error) => {
-      // It's okay if this fails permissions on public view, just log it
+    } catch (error) {
       console.log('Fetching pending registrations (may require admin):', error.code);
-    })
+    }
   }
   
   async function registerNewMember(memberData) {
@@ -140,13 +129,15 @@ export const useMembersStore = defineStore('members', () => {
     memberData.monitoringState = { msgSentDate: null, leaderNotifiedDate: null }; 
 
     try {
-      // Use provided ID or generate one
       const docId = memberData.id || `mem-${Date.now()}`;
       memberData.id = docId;
       
       const memberRef = doc(getMemberCollection(), docId);
       await setDoc(memberRef, memberData);
       
+      // 🚀 OPTIMIZATION: Manually add to local state to avoid refetching
+      members.value.push(memberData);
+
       if (authStore.sendCreationEmail) {
         await authStore.sendCreationEmail(memberData.email);
       }
@@ -155,41 +146,36 @@ export const useMembersStore = defineStore('members', () => {
     }
   }
 
-  // --- APPROVE PENDING REGISTRATION ---
-async function approvePending(memberId) {
-  try {
-    const pendingRef = doc(getPendingCollection(), memberId);
-    const snap = await getDoc(pendingRef);
-    if (!snap.exists()) throw new Error('Pending registration not found');
+  async function approvePending(memberId) {
+    try {
+      const pendingRef = doc(getPendingCollection(), memberId);
+      const snap = await getDoc(pendingRef);
+      if (!snap.exists()) throw new Error('Pending registration not found');
 
-    const data = snap.data();
+      const data = snap.data();
+      const memberRef = doc(getMemberCollection(), memberId);
 
-    const memberRef = doc(getMemberCollection(), memberId);
+      if (!data.createdAt) data.createdAt = new Date().toISOString();
+      data.status = 'active';
+      if (!data.monitoringState)
+        data.monitoringState = { msgSentDate: null, leaderNotifiedDate: null };
 
-    if (!data.createdAt) data.createdAt = new Date().toISOString();
-    data.status = 'active';
-    if (!data.monitoringState)
-      data.monitoringState = { msgSentDate: null, leaderNotifiedDate: null };
+      await setDoc(memberRef, data);
+      await deleteDoc(pendingRef);
 
-    await setDoc(memberRef, data);
-    await deleteDoc(pendingRef);
+      // 🚀 OPTIMIZATION: Manually update local state
+      pendingMembers.value = pendingMembers.value.filter(p => p.id !== memberId);
+      members.value.push(data);
 
-    // ✅ MOVE THIS INSIDE TRY
-    const notificationsStore = useNotificationsStore();
+      const notificationsStore = useNotificationsStore();
+      await notificationsStore.notifyMemberApproved(data.branchId, memberId, data.displayName);
 
-    await notificationsStore.notifyMemberApproved(
-      data.branchId,
-      memberId,        // correct (member doc id)
-      data.displayName
-    );
-
-  } catch (error) {
-    console.error('Error approving pending member:', error);
-    throw error;
+    } catch (error) {
+      console.error('Error approving pending member:', error);
+      throw error;
+    }
   }
-}
 
-  // --- REJECT PENDING REGISTRATION ---
   async function rejectPending(memberId) {
     try {
       const pendingRef = doc(getPendingCollection(), memberId);
@@ -201,7 +187,9 @@ async function approvePending(memberId) {
 
       await deleteDoc(pendingRef);
 
-      // Best-effort cleanup of Auth user if it's the current user
+      // 🚀 OPTIMIZATION: Manually remove from local state
+      pendingMembers.value = pendingMembers.value.filter(p => p.id !== memberId);
+
       const authStore = useAuthStore();
       if (authStore.user && authStore.user.uid === authUid) {
         try {
@@ -221,6 +209,12 @@ async function approvePending(memberId) {
     try {
       const memberRef = doc(getMemberCollection(), updatedMember.id);
       await updateDoc(memberRef, updatedMember);
+      
+      // 🚀 OPTIMIZATION: Manually update local state array
+      const index = members.value.findIndex(m => m.id === updatedMember.id);
+      if (index !== -1) {
+        members.value[index] = { ...members.value[index], ...updatedMember };
+      }
     } catch (error) {
       console.error("Error updating member: ", error);
     }
@@ -228,11 +222,19 @@ async function approvePending(memberId) {
 
   async function archiveMember(memberId) {
     try {
+      const archivedAt = new Date().toISOString();
       const memberRef = doc(getMemberCollection(), memberId);
       await updateDoc(memberRef, { 
         status: 'archived',
-        archivedAt: new Date().toISOString()
+        archivedAt: archivedAt
       });
+
+      // 🚀 OPTIMIZATION: Manually update local state
+      const index = members.value.findIndex(m => m.id === memberId);
+      if (index !== -1) {
+        members.value[index].status = 'archived';
+        members.value[index].archivedAt = archivedAt;
+      }
     } catch (error) {
       console.error("Error archiving member: ", error);
     }
@@ -245,6 +247,13 @@ async function approvePending(memberId) {
         status: 'active',
         archivedAt: null 
       });
+
+      // 🚀 OPTIMIZATION: Manually update local state
+      const index = members.value.findIndex(m => m.id === memberId);
+      if (index !== -1) {
+        members.value[index].status = 'active';
+        members.value[index].archivedAt = null;
+      }
     } catch (error) {
       console.error("Error restoring member: ", error);
     }
@@ -276,6 +285,8 @@ async function approvePending(memberId) {
       try {
         const memberRef = doc(getMemberCollection(), m.id);
         await deleteDoc(memberRef);
+        // 🚀 OPTIMIZATION: Remove from local array
+        members.value = members.value.filter(localM => localM.id !== m.id);
       } catch (error) {
         console.error(`Failed to delete member ${m.id}:`, error);
       }
@@ -286,14 +297,23 @@ async function approvePending(memberId) {
     try {
       const memberRef = doc(getMemberCollection(), memberId);
       const updateData = {};
+      const now = new Date().toISOString();
       
       if (actionType === 'message') {
-        updateData['monitoringState.msgSentDate'] = new Date().toISOString();
+        updateData['monitoringState.msgSentDate'] = now;
       } else if (actionType === 'notifyLeader') {
-        updateData['monitoringState.leaderNotifiedDate'] = new Date().toISOString();
+        updateData['monitoringState.leaderNotifiedDate'] = now;
       }
 
       await updateDoc(memberRef, updateData);
+
+      // 🚀 OPTIMIZATION: Manually update local state
+      const index = members.value.findIndex(m => m.id === memberId);
+      if (index !== -1) {
+        if (!members.value[index].monitoringState) members.value[index].monitoringState = {};
+        if (actionType === 'message') members.value[index].monitoringState.msgSentDate = now;
+        if (actionType === 'notifyLeader') members.value[index].monitoringState.leaderNotifiedDate = now;
+      }
     } catch (error) {
       console.error("Error logging action:", error);
     }
@@ -308,213 +328,202 @@ async function approvePending(memberId) {
         'finalTags.isSeeker': false,
         'finalTags.isRegular': false
       });
+
+      // 🚀 OPTIMIZATION: Local update
+      const index = members.value.findIndex(m => m.id === memberId);
+      if (index !== -1) {
+        members.value[index].dgroupLeader = '';
+        members.value[index].dgroupId = null;
+        if(members.value[index].finalTags) {
+          members.value[index].finalTags.isSeeker = false;
+          members.value[index].finalTags.isRegular = false;
+        }
+      }
     } catch (error) {
       console.error("Error removing member from Dgroup:", error);
       throw error;
     }
   }
 
-// --- Assign Dgroup Leader (DOES NOT modify dgroupId) ---
-async function assignDgroupLeader(memberId, leaderId) {
-  const notifStore = useNotificationsStore();
-  const authStore = useAuthStore();
-  try {
-    const memberRef = doc(getMemberCollection(), memberId);
+  async function assignDgroupLeader(memberId, leaderId) {
+    const notifStore = useNotificationsStore();
+    const authStore = useAuthStore();
+    try {
+      const memberRef = doc(getMemberCollection(), memberId);
 
-    // Remove leader
-    if (!leaderId) {
-      await updateDoc(memberRef, {
-        dgroupLeader: ''
-      });
-      return;
-    }
-
-    // Find leader locally first
-    let leader = members.value.find(m => m.id === leaderId);
-
-    if (!leader) {
-      const leaderRef = doc(getMemberCollection(), leaderId);
-      const snap = await getDoc(leaderRef);
-      if (snap.exists()) leader = snap.data();
-    }
-
-    if (!leader) throw new Error('Leader not found');
-
-    const leaderName =
-      `${leader.firstName || ''} ${leader.lastName || ''}`.trim() ||
-      leader.displayName ||
-      leader.name ||
-      leaderId;
-
-    const updatePayload = {
-      dgroupLeader: leaderName,
-      dgroupLeaderId: leaderId
-    };
-
-    // Promotion logic (keep yours intact)
-    let member = members.value.find(m => m.id === memberId);
-    if (!member) {
-      try {
-        const memberSnap = await getDoc(doc(getMemberCollection(), memberId));
-        if (memberSnap.exists()) member = memberSnap.data();
-      } catch (e) {
-        console.warn('Could not fetch member:', e);
+      if (!leaderId) {
+        await updateDoc(memberRef, { dgroupLeader: '' });
+        const idx = members.value.findIndex(m => m.id === memberId);
+        if(idx !== -1) members.value[idx].dgroupLeader = '';
+        return;
       }
-    }
 
-    const promoteToRegular = !!(
-      member &&
-      (member.finalTags?.isSeeker || member.finalTags?.isFirstTimer)
-    );
+      let leader = members.value.find(m => m.id === leaderId);
+      if (!leader) {
+        const leaderRef = doc(getMemberCollection(), leaderId);
+        const snap = await getDoc(leaderRef);
+        if (snap.exists()) leader = snap.data();
+      }
 
-    if (member && member.joinRequest?.leaderId === leaderId) {
-      updatePayload.joinRequest = null;
-      updatePayload['finalTags.isSeeker'] = false;
-      updatePayload['finalTags.isRegular'] = true;
-    } else if (promoteToRegular) {
-      updatePayload['finalTags.isSeeker'] = false;
-      updatePayload['finalTags.isFirstTimer'] = false;
-      updatePayload['finalTags.isRegular'] = true;
-    }
-
-    await updateDoc(memberRef, updatePayload);
-
-    await notifStore.notifyMemberAssigned(
-      authStore.branchId,
-      memberId,
-      leader.dgroupName || "your DGroup"
-    );
-
-    // 🔔 Notify Leader
-    await notifStore.notifyLeaderMemberAssigned(
-      authStore.branchId,
-      leaderId,
-      member.displayName,
-      leader.dgroupName || "your DGroup"
-    );
-
-  } catch (error) {
-    console.error('Error assigning dgroup leader:', error);
-    throw error;
-  }
-}
-
-
-  // --- NEW FEATURE: Join Request Logic (Now using correct Paths) ---
-// 1. Request to Join (Seeker Side)
-async function requestJoinDgroup(memberId, dgroupData, preferences) {
-  const notifStore = useNotificationsStore();
-  const authStore = useAuthStore();
-
-  try {
-    const memberRef = doc(getMemberCollection(), memberId);
-
-    await updateDoc(memberRef, {
-      seekerPreferences: preferences,
-      joinRequest: {
-        dgroupLeaderId: dgroupData.leaderId || dgroupData.dgroupLeaderId || null,
-        leaderId: dgroupData.leaderId,
-        leaderName: dgroupData.leaderName,
-        dgroupName: dgroupData.dgroupName,
-        status: 'pending',
-        requestedAt: new Date().toISOString()
-      },
-      'finalTags.isSeeker': true
-    });
-
-    // 🔔 Get requester info
-    const requester = members.value.find(m => m.id === memberId);
-    const requesterName = requester?.displayName || "A member";
-
-    // 🔔 Notify Admins (Matching Pending)
-    await notifStore.notifyAdminsMatchingPending(
-      authStore.branchId,
-      memberId,
-      requesterName
-    );
-
-    // 🔔 Notify Leader
-    if (dgroupData.leaderId) {
-      await notifStore.notifyLeaderOfJoinRequest(
-        authStore.branchId,
-        dgroupData.leaderId,
-        requesterName,
-        dgroupData.dgroupName
-      );
-    }
-
-  } catch (error) {
-    console.error("Error requesting join:", error);
-    throw error;
-  }
-}
-
-async function respondToJoinRequest(memberId, action, dgroupData = null) {
-  const notifStore = useNotificationsStore();
-  const authStore = useAuthStore();
-
-  try {
-    const memberRef = doc(getMemberCollection(), memberId);
-
-    if (action === 'approve') {
-
-      const member = members.value.find(m => m.id === memberId);
-      if (!member || !member.joinRequest) throw new Error("Request not found");
+      if (!leader) throw new Error('Leader not found');
 
       const leaderName =
-        dgroupData?.leaderName || member.joinRequest.leaderName;
+        `${leader.firstName || ''} ${leader.lastName || ''}`.trim() ||
+        leader.displayName ||
+        leader.name ||
+        leaderId;
 
-      const dgroupLeaderId =
-        dgroupData?.leaderId ||
-        dgroupData?.dgroupLeaderId ||
-        member.joinRequest.dgroupLeaderId ||
-        member.joinRequest.leaderId;
-
-      await updateDoc(memberRef, {
+      const updatePayload = {
         dgroupLeader: leaderName,
-        dgroupLeaderId: dgroupLeaderId,
-        joinRequest: null,
-        'finalTags.isSeeker': false,
-        'finalTags.isRegular': true,
-        'finalTags.isFirstTimer': false
-      });
+        dgroupLeaderId: leaderId
+      };
 
-      // Notify Member
-      await notifStore.notifyMemberJoinApproved(
-        authStore.branchId,
-        memberId,
-        leaderName
+      let member = members.value.find(m => m.id === memberId);
+      
+      const promoteToRegular = !!(
+        member &&
+        (member.finalTags?.isSeeker || member.finalTags?.isFirstTimer)
       );
 
-      // Notify Leader ONLY if admin override
-      if (authStore.userRole === 'admin') {
-        const memberName = member.displayName || "A member";
-
-        await notifStore.notifyLeaderMemberAssigned(
-          authStore.branchId,
-          dgroupLeaderId,
-          memberName,
-          leaderName
-        );
+      if (member && member.joinRequest?.leaderId === leaderId) {
+        updatePayload.joinRequest = null;
+        updatePayload['finalTags.isSeeker'] = false;
+        updatePayload['finalTags.isRegular'] = true;
+      } else if (promoteToRegular) {
+        updatePayload['finalTags.isSeeker'] = false;
+        updatePayload['finalTags.isFirstTimer'] = false;
+        updatePayload['finalTags.isRegular'] = true;
       }
 
-    } else if (action === 'reject') {
+      await updateDoc(memberRef, updatePayload);
+
+      // 🚀 OPTIMIZATION: Update local state immediately
+      const mIdx = members.value.findIndex(m => m.id === memberId);
+      if(mIdx !== -1) {
+        members.value[mIdx] = { 
+           ...members.value[mIdx], 
+           dgroupLeader: leaderName, 
+           dgroupLeaderId: leaderId,
+           joinRequest: updatePayload.joinRequest !== undefined ? updatePayload.joinRequest : members.value[mIdx].joinRequest
+        };
+        if (members.value[mIdx].finalTags) {
+          if (updatePayload['finalTags.isSeeker'] !== undefined) members.value[mIdx].finalTags.isSeeker = updatePayload['finalTags.isSeeker'];
+          if (updatePayload['finalTags.isRegular'] !== undefined) members.value[mIdx].finalTags.isRegular = updatePayload['finalTags.isRegular'];
+          if (updatePayload['finalTags.isFirstTimer'] !== undefined) members.value[mIdx].finalTags.isFirstTimer = updatePayload['finalTags.isFirstTimer'];
+        }
+      }
+
+      await notifStore.notifyMemberAssigned(authStore.branchId, memberId, leader.dgroupName || "your DGroup");
+      await notifStore.notifyLeaderMemberAssigned(authStore.branchId, leaderId, member.displayName, leader.dgroupName || "your DGroup");
+
+    } catch (error) {
+      console.error('Error assigning dgroup leader:', error);
+      throw error;
+    }
+  }
+
+  async function requestJoinDgroup(memberId, dgroupData, preferences) {
+    const notifStore = useNotificationsStore();
+    const authStore = useAuthStore();
+
+    try {
+      const memberRef = doc(getMemberCollection(), memberId);
+      
+      const joinRequestData = {
+          dgroupLeaderId: dgroupData.leaderId || dgroupData.dgroupLeaderId || null,
+          leaderId: dgroupData.leaderId,
+          leaderName: dgroupData.leaderName,
+          dgroupName: dgroupData.dgroupName,
+          status: 'pending',
+          requestedAt: new Date().toISOString()
+        };
 
       await updateDoc(memberRef, {
-        joinRequest: null
+        seekerPreferences: preferences,
+        joinRequest: joinRequestData,
+        'finalTags.isSeeker': true
       });
 
-      await notifStore.notifyMemberJoinRejected(
-        authStore.branchId,
-        memberId
-      );
-    }
+      // 🚀 OPTIMIZATION: Local update
+      const idx = members.value.findIndex(m => m.id === memberId);
+      if (idx !== -1) {
+        members.value[idx].seekerPreferences = preferences;
+        members.value[idx].joinRequest = joinRequestData;
+        if(members.value[idx].finalTags) members.value[idx].finalTags.isSeeker = true;
+      }
 
-  } catch (error) {
-    console.error("Error responding to request:", error);
-    throw error;
+      const requester = members.value.find(m => m.id === memberId);
+      const requesterName = requester?.displayName || "A member";
+
+      await notifStore.notifyAdminsMatchingPending(authStore.branchId, memberId, requesterName);
+
+      if (dgroupData.leaderId) {
+        await notifStore.notifyLeaderOfJoinRequest(authStore.branchId, dgroupData.leaderId, requesterName, dgroupData.dgroupName);
+      }
+    } catch (error) {
+      console.error("Error requesting join:", error);
+      throw error;
+    }
   }
-}
+
+  async function respondToJoinRequest(memberId, action, dgroupData = null) {
+    const notifStore = useNotificationsStore();
+    const authStore = useAuthStore();
+
+    try {
+      const memberRef = doc(getMemberCollection(), memberId);
+      const member = members.value.find(m => m.id === memberId);
+      
+      if (action === 'approve') {
+        if (!member || !member.joinRequest) throw new Error("Request not found");
+
+        const leaderName = dgroupData?.leaderName || member.joinRequest.leaderName;
+        const dgroupLeaderId = dgroupData?.leaderId || dgroupData?.dgroupLeaderId || member.joinRequest.dgroupLeaderId || member.joinRequest.leaderId;
+
+        await updateDoc(memberRef, {
+          dgroupLeader: leaderName,
+          dgroupLeaderId: dgroupLeaderId,
+          joinRequest: null,
+          'finalTags.isSeeker': false,
+          'finalTags.isRegular': true,
+          'finalTags.isFirstTimer': false
+        });
+
+        // 🚀 OPTIMIZATION: Local update
+        const idx = members.value.findIndex(m => m.id === memberId);
+        if (idx !== -1) {
+           members.value[idx].dgroupLeader = leaderName;
+           members.value[idx].dgroupLeaderId = dgroupLeaderId;
+           members.value[idx].joinRequest = null;
+           if (members.value[idx].finalTags) {
+             members.value[idx].finalTags.isSeeker = false;
+             members.value[idx].finalTags.isRegular = true;
+             members.value[idx].finalTags.isFirstTimer = false;
+           }
+        }
+
+        await notifStore.notifyMemberJoinApproved(authStore.branchId, memberId, leaderName);
+
+        if (authStore.userRole === 'admin') {
+          const memberName = member.displayName || "A member";
+          await notifStore.notifyLeaderMemberAssigned(authStore.branchId, dgroupLeaderId, memberName, leaderName);
+        }
+
+      } else if (action === 'reject') {
+        await updateDoc(memberRef, { joinRequest: null });
+        
+        // 🚀 OPTIMIZATION: Local update
+        const idx = members.value.findIndex(m => m.id === memberId);
+        if (idx !== -1) members.value[idx].joinRequest = null;
+
+        await notifStore.notifyMemberJoinRejected(authStore.branchId, memberId);
+      }
+
+    } catch (error) {
+      console.error("Error responding to request:", error);
+      throw error;
+    }
+  }
   
   return { 
     members, activeMembers, archivedMembers, isLoading,

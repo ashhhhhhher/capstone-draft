@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useAttendanceStore } from '../../stores/attendance'
 import { useEventsStore } from '../../stores/events'
@@ -11,7 +11,6 @@ import Modal from './Modal.vue'
 import AttendanceOverviewModal from './AttendanceOverviewModal.vue'
 import ExportButton from './ExportButton.vue'
 
-// --- Chart.js Registrations ---
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -40,7 +39,7 @@ ChartJS.register(
 const props = defineProps({
   eventType: {
     type: String,
-    default: 'service' // 'service' for WKND, 'b1g' for B1G
+    default: 'service' 
   }
 })
 
@@ -49,41 +48,71 @@ const eventsStore = useEventsStore()
 const membersStore = useMembersStore()
 
 const { allEvents } = storeToRefs(eventsStore)
-const { allAttendance, isLoading } = storeToRefs(attendanceStore)
 const { members } = storeToRefs(membersStore)
+
+// 🚀 OPTIMIZATION: Use a local ref to store ONLY the currently viewed range
+const fetchedRangeAttendance = ref([])
 
 // --- UI Controls State ---
 const todayStr = new Date().toISOString().split('T')[0]
-const activeFilter = ref('monthly') // 'yearly', 'monthly', 'custom'
-const chartType = ref('bar') // 'bar' or 'line'
+const activeFilter = ref('monthly') 
+const chartType = ref('bar') 
 const showAttendanceOverview = ref(false)
 
-// Input Models
 const selectedYear = ref(new Date().getFullYear())
-const selectedMonth = ref(new Date().toISOString().substring(0, 7)) // YYYY-MM
+const selectedMonth = ref(new Date().toISOString().substring(0, 7)) 
 
-// FIXED: Wrapped the arrow function in parentheses to properly format the IIFE
 const fromDate = ref((() => { const d = new Date(); d.setDate(d.getDate() - 30); return d.toISOString().split('T')[0] })())
-
 const toDate = ref(todayStr)
 
-// --- Colors ---
+// --- Watch Filters to Load Data ---
+async function loadDataForRange() {
+  let start = '';
+  let end = '';
+
+  if (activeFilter.value === 'yearly') {
+    start = `${selectedYear.value}-01-01`;
+    end = `${selectedYear.value}-12-31`;
+  } else if (activeFilter.value === 'monthly') {
+    // Basic calculation for end of month
+    start = `${selectedMonth.value}-01`;
+    const tempDate = new Date(`${selectedMonth.value}-01`);
+    tempDate.setMonth(tempDate.getMonth() + 1);
+    tempDate.setDate(0); 
+    end = tempDate.toISOString().split('T')[0];
+  } else if (activeFilter.value === 'custom') {
+    start = fromDate.value;
+    end = toDate.value;
+  }
+
+  if (start && end) {
+    fetchedRangeAttendance.value = await attendanceStore.fetchAttendanceByDateRange(start, end);
+  }
+}
+
+onMounted(() => {
+  loadDataForRange();
+})
+
+watch([activeFilter, selectedYear, selectedMonth, fromDate, toDate], () => {
+  loadDataForRange();
+})
+
 const chartThemeColor = computed(() => props.eventType === 'b1g' ? '#8AE1FC' : '#068FFF')
 const chartThemeBgColor = computed(() => props.eventType === 'b1g' ? 'rgba(138, 225, 252, 0.2)' : 'rgba(6, 143, 255, 0.2)')
 
-// --- Chart Options ---
 const historicalChartOptions = computed(() => ({
   responsive: true,
   maintainAspectRatio: false,
   layout: {
     padding: {
-      top: chartType.value === 'bar' ? 25 : 0 // Add top padding for bar chart so labels aren't cut off
+      top: chartType.value === 'bar' ? 25 : 0 
     }
   },
   plugins: { 
     legend: { display: false }, 
     datalabels: { 
-      display: chartType.value === 'bar', // Only show labels directly on the graph if it's a bar chart
+      display: chartType.value === 'bar',
       anchor: 'end',
       align: 'end',
       offset: 4,
@@ -100,7 +129,7 @@ const historicalChartOptions = computed(() => ({
     },
     y: { 
       beginAtZero: true, 
-      suggestedMax: 300, // Scales up automatically if grouped sums exceed 300
+      suggestedMax: 300, 
       ticks: { stepSize: 50, precision: 0 },
       grid: { color: '#F0F2F5' },
       border: { display: false }
@@ -108,7 +137,6 @@ const historicalChartOptions = computed(() => ({
   }
 }))
 
-// --- Data Computations ---
 
 const allEventsOfType = computed(() => {
   return (allEvents.value || [])
@@ -126,13 +154,11 @@ const availableYears = computed(() => {
   return Array.from(years).sort().reverse();
 });
 
-// 1. Chart Specific (Depends on Date Filters)
 const processedChartData = computed(() => {
   let labels = [];
   let data = [];
 
   if (activeFilter.value === 'yearly') {
-     // Yearly: Show total attendance per month (Jan-Dec)
      labels = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
      data = new Array(12).fill(0);
      
@@ -140,36 +166,33 @@ const processedChartData = computed(() => {
         if (e.date.startsWith(selectedYear.value.toString())) {
            const d = new Date(e.date);
            const monthIdx = d.getMonth();
-           const count = (allAttendance.value || []).filter(a => a.eventId === e.id).length;
+           const count = fetchedRangeAttendance.value.filter(a => a.eventId === e.id).length;
            data[monthIdx] += count;
         }
      });
 
   } else if (activeFilter.value === 'monthly') {
-     // Monthly: Show total attendance per week (Week 1 to Week 5)
      labels = ['Week 1', 'Week 2', 'Week 3', 'Week 4', 'Week 5'];
      data = new Array(5).fill(0);
      
      allEventsOfType.value.forEach(e => {
         if (e.date.startsWith(selectedMonth.value)) {
            const day = parseInt(e.date.split('-')[2]);
-           // Rough week calculation: 1-7 (Week 1), 8-14 (Week 2), etc.
            let weekIdx = Math.floor((day - 1) / 7);
-           if (weekIdx > 4) weekIdx = 4; // Cap at Week 5
+           if (weekIdx > 4) weekIdx = 4; 
            
-           const count = (allAttendance.value || []).filter(a => a.eventId === e.id).length;
+           const count = fetchedRangeAttendance.value.filter(a => a.eventId === e.id).length;
            data[weekIdx] += count;
         }
      });
 
   } else if (activeFilter.value === 'custom') {
-     // Custom: Show attendance per event (by Date)
      const customEvents = allEventsOfType.value.filter(e => e.date >= fromDate.value && e.date <= toDate.value);
      
      customEvents.forEach(e => {
         const d = new Date(e.date);
         labels.push(d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }));
-        data.push((allAttendance.value || []).filter(a => a.eventId === e.id).length);
+        data.push(fetchedRangeAttendance.value.filter(a => a.eventId === e.id).length);
      });
   }
 
@@ -180,7 +203,7 @@ const historicalAttendanceData = computed(() => {
   const { labels, data } = processedChartData.value;
   
   if (labels.length === 0 || data.every(v => v === 0) && activeFilter.value === 'custom') {
-     return { labels: [], datasets: [] }; // No data scenario
+     return { labels: [], datasets: [] }; 
   }
 
   return { 
@@ -191,8 +214,8 @@ const historicalAttendanceData = computed(() => {
       borderColor: chartThemeColor.value,
       borderWidth: 2,
       borderRadius: chartType.value === 'bar' ? 4 : 0,
-      fill: chartType.value === 'line', // Activates the Filler plugin
-      tension: 0.4, // Smooth curves for line chart
+      fill: chartType.value === 'line', 
+      tension: 0.4, 
       pointBackgroundColor: '#fff',
       pointBorderColor: chartThemeColor.value,
       pointBorderWidth: 2,
@@ -202,7 +225,6 @@ const historicalAttendanceData = computed(() => {
   }
 })
 
-// 3. Export Filtered Events
 const filteredEventsForExport = computed(() => {
   if (activeFilter.value === 'yearly') {
     return allEventsOfType.value.filter(e => e.date.startsWith(selectedYear.value.toString()));
@@ -214,7 +236,6 @@ const filteredEventsForExport = computed(() => {
   return allEventsOfType.value;
 });
 
-// 2. Table Specific (Independent of Date Filters, strictly shows latest 10)
 const latestEventsForTable = computed(() => {
   const today = new Date();
   today.setHours(23, 59, 59, 999);
@@ -227,7 +248,8 @@ const latestEventsForTable = computed(() => {
 
 const tableRecords = computed(() => {
   return latestEventsForTable.value.map(event => {
-    const eventAttendance = (allAttendance.value || []).filter(a => a.eventId === event.id)
+    // Use the locally fetched range instead of ALL history
+    const eventAttendance = fetchedRangeAttendance.value.filter(a => a.eventId === event.id)
     
     let elevF = 0, elevM = 0, b1gF = 0, b1gM = 0, dl = 0, vols = 0;
     
@@ -263,10 +285,6 @@ const formatDate = (dateString) => {
   const d = new Date(dateString);
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
-
-onMounted(() => {
-  attendanceStore.fetchAllAttendance().catch(() => {})
-})
 </script>
 
 <template>
@@ -321,7 +339,6 @@ onMounted(() => {
         
         <div class="actions">
           <div class="export-wrap">
-             <!-- Export passes the specifically filtered events + the yearly summary data if yearly is selected -->
              <ExportButton 
                 exportType="events" 
                 :eventsList="filteredEventsForExport" 
@@ -344,6 +361,7 @@ onMounted(() => {
            <span class="badge">{{ eventType === 'service' ? 'WKND' : 'B1G' }}</span>
            <span class="title-text">LATEST ATTENDANCE RECORDS</span>
        </div>
+       <!-- Note: The Overview modal might need similar pagination if it shows all time. For now, we will pass the fetched range to it. -->
        <button class="view-full-btn" @click="showAttendanceOverview = true">
           <Eye :size="16" /> View Full History
        </button>
@@ -381,9 +399,9 @@ onMounted(() => {
       <p v-if="tableRecords.length === 0" class="no-data-text pt-4">No records to display.</p>
     </div>
 
-    <!-- Full History Modal - Now passes ALL history -->
+    <!-- Full History Modal - Passes Range Data to avoid fetching all history -->
     <Modal v-if="showAttendanceOverview" @close="showAttendanceOverview = false" size="xl">
-      <AttendanceOverviewModal :events="allEventsOfType" :attendance="allAttendance" :members="members" @close="showAttendanceOverview = false" />
+      <AttendanceOverviewModal :events="allEventsOfType" :attendance="fetchedRangeAttendance" :members="members" @close="showAttendanceOverview = false" />
     </Modal>
   </div>
 </template>
