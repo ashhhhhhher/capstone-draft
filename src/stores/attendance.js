@@ -19,7 +19,7 @@ import {
 import { useAuthStore } from './auth'
 import { useMembersStore } from './members'
 import { useDgroupEventsStore } from './dgroupevents'
-import { useEventsStore } from './events' // Needed for the smart fallback
+import { useEventsStore } from './events'
 
 export const useAttendanceStore = defineStore('attendance', () => {
 
@@ -36,6 +36,7 @@ export const useAttendanceStore = defineStore('attendance', () => {
     return collection(db, 'branches', authStore.branchId, 'events', eventId, 'attendance')
   }
 
+  // 🚀 Fetch all attendance for a date range (Used by Admins for Insights)
   async function fetchAttendanceByDateRange(startDate, endDate) {
     const authStore = useAuthStore()
     if (!authStore.branchId) return []
@@ -67,7 +68,40 @@ export const useAttendanceStore = defineStore('attendance', () => {
     }
   }
 
-  // 🚀 OPTIMIZATION + SMART FALLBACK
+  // 🚀 OPTIMIZATION: Fetch ONLY the logged-in member's records for a specific year
+  async function fetchMyAttendanceByDateRange(memberId, startDate, endDate) {
+    const authStore = useAuthStore()
+    if (!authStore.branchId || !memberId) return []
+    
+    isLoading.value = true;
+    try {
+      const q = query(
+        collectionGroup(db, 'attendance'),
+        where('memberId', '==', memberId),
+        where('dateOnly', '>=', startDate),
+        where('dateOnly', '<=', endDate)
+      );
+      
+      const snapshot = await getDocs(q);
+      const records = [];
+      
+      snapshot.forEach((docSnap) => {
+        const pathParts = docSnap.ref.path.split('/');
+        if (pathParts.length >= 6 && pathParts[0] === 'branches' && pathParts[1] === authStore.branchId) {
+          const eventId = pathParts[3];
+          records.push({ eventId, memberId: docSnap.id, ...docSnap.data() });
+        }
+      });
+      return records;
+    } catch (error) {
+      console.error('Error fetching my attendance:', error);
+      return [];
+    } finally {
+      isLoading.value = false;
+    }
+  }
+
+  // 🚀 Fetch "Last Seen" for a member (1-Read with smart fallback)
   async function fetchMemberLastAttendance(memberId, memberCreatedAt) {
     const authStore = useAuthStore()
     if (!authStore.branchId || !memberId) return null;
@@ -89,7 +123,6 @@ export const useAttendanceStore = defineStore('attendance', () => {
     }
 
     // 2. FALLBACK for OLD records (Missing 'memberId' field)
-    // We use the cached events list, check from newest to oldest, and STOP as soon as we find one!
     try {
       const eventsStore = useEventsStore();
       if (eventsStore.allEvents.length === 0) {
@@ -99,11 +132,10 @@ export const useAttendanceStore = defineStore('attendance', () => {
       // Sort events newest first
       const sortedEvents = [...eventsStore.allEvents].sort((a, b) => new Date(b.date) - new Date(a.date));
       
-      // 🚀 OPTIMIZATION: Parse member creation date to stop loop early
+      // Stop loop early if the event happened before they registered
       const createdDateStr = memberCreatedAt ? new Date(memberCreatedAt).toISOString().split('T')[0] : null;
 
       for (const event of sortedEvents) {
-        // Stop checking if this event happened before they registered!
         if (createdDateStr && event.date < createdDateStr) {
            break; 
         }
@@ -112,7 +144,6 @@ export const useAttendanceStore = defineStore('attendance', () => {
         const attSnap = await getDoc(attRef);
         
         if (attSnap.exists()) {
-          // We found their most recent old record! Return immediately to save reads.
           return attSnap.data();
         }
       }
@@ -120,7 +151,7 @@ export const useAttendanceStore = defineStore('attendance', () => {
        console.error("Fallback search failed:", e);
     }
 
-    return null; // Truly never attended
+    return null; 
   }
 
   async function fetchSpeakers(force = false) {
@@ -374,7 +405,7 @@ export const useAttendanceStore = defineStore('attendance', () => {
       const timestamp = serverTimestamp();
       
       const attData = {
-        memberId: memberId, // For future fast queries
+        memberId: memberId, 
         timestamp: timestamp,
         dateOnly: today,
         memberTag: memberTag,
@@ -437,6 +468,7 @@ export const useAttendanceStore = defineStore('attendance', () => {
     fetchAttendanceForEvent,
     fetchAllAttendance,
     fetchAttendanceByDateRange, 
+    fetchMyAttendanceByDateRange,
     fetchMemberLastAttendance, 
     fetchDgroupMeetings,
     fetchSpeakers,

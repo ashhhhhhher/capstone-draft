@@ -3,6 +3,8 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useAuthStore } from '../stores/auth'
 import { useAttendanceStore } from '../stores/attendance'
 import { useEventsStore } from '../stores/events'
+import { db } from '../firebase'
+import { doc, getDoc } from 'firebase/firestore'
 import { CheckCircle, Flame, ChevronLeft, ChevronRight } from 'lucide-vue-next'
 
 const authStore = useAuthStore()
@@ -16,20 +18,76 @@ const selectedYear = ref(new Date().getFullYear())
 // Store only the current year's attendance locally
 const fetchedYearAttendance = ref([])
 
+// Calculate the earliest year this member can view based on their registration date
+const minYear = computed(() => {
+  if (authStore.userProfile?.createdAt) {
+    return new Date(authStore.userProfile.createdAt).getFullYear()
+  }
+  return new Date().getFullYear() // Default to current year if missing
+})
+
+// 🚀 OPTIMIZATION & SMART FALLBACK: Fetch MY records safely
 async function loadYearlyAttendance() {
+  if (!myId.value) return;
+
+  const profile = authStore.userProfile;
+  const joinedDateStr = profile?.createdAt ? new Date(profile.createdAt).toISOString().split('T')[0] : null;
+
+  // 1. Instantly exit if trying to load a year before they joined (0 reads)
+  if (selectedYear.value < minYear.value) {
+    fetchedYearAttendance.value = [];
+    loading.value = false;
+    return;
+  }
+  
   loading.value = true;
-  const start = `${selectedYear.value}-01-01`;
-  const end = `${selectedYear.value}-12-31`;
+  const startStr = `${selectedYear.value}-01-01`;
+  const endStr = `${selectedYear.value}-12-31`;
   
-  const fullYearData = await attendanceStore.fetchAttendanceByDateRange(start, end);
+  // 2. Try the ultra-fast indexed query for NEW records
+  let myYearData = await attendanceStore.fetchMyAttendanceByDateRange(myId.value, startStr, endStr);
   
-  fetchedYearAttendance.value = fullYearData.filter(rec => rec.memberId === myId.value);
+  // 3. FALLBACK for OLD records (Missing 'memberId' field)
+  if (myYearData.length === 0 && eventsStore.allEvents.length > 0) {
+      
+      // OPTIMIZATION: Filter events to ONLY the selected year, AND on or after their exact join date!
+      const eventsThisYear = eventsStore.allEvents.filter(e => {
+          const isThisYear = e.date.startsWith(selectedYear.value.toString());
+          const isAfterJoined = joinedDateStr ? e.date >= joinedDateStr : true;
+          return isThisYear && isAfterJoined;
+      });
+      
+      if (eventsThisYear.length > 0) {
+        const fallbackRecords = [];
+        for (const event of eventsThisYear) {
+            try {
+               const attRef = doc(db, 'branches', authStore.branchId, 'events', event.id, 'attendance', myId.value);
+               const attSnap = await getDoc(attRef);
+               if (attSnap.exists()) {
+                   fallbackRecords.push({ eventId: event.id, memberId: myId.value, ...attSnap.data() });
+               }
+            } catch(e) {
+               // Silenced to prevent console spam from Firebase permission errors on records they didn't attend
+            }
+        }
+        myYearData = fallbackRecords;
+      }
+  }
+  
+  fetchedYearAttendance.value = myYearData;
   loading.value = false;
 }
 
 onMounted(async () => {
   await eventsStore.fetchEvents()
-  loadYearlyAttendance()
+  if (myId.value) {
+    loadYearlyAttendance()
+  }
+})
+
+// Watchers ensure we fetch if the user ID loads slightly after mount, or if they change the year
+watch(myId, (newId) => {
+  if (newId) loadYearlyAttendance()
 })
 
 watch(selectedYear, () => {
@@ -41,7 +99,7 @@ const changeYear = (delta) => {
 }
 
 const myAttendanceRecords = computed(() => {
-  if (!myId.value) return []
+  // Since the fetched data is ALREADY filtered to just this member, we only need to match the event!
   return fetchedYearAttendance.value.filter(rec => {
     const ev = eventsStore.allEvents.find(e => e.id === rec.eventId)
     return !!ev
@@ -111,9 +169,9 @@ const yAxisLabels = computed(() => {
     <div class="stats-column">
       <!-- Year Selector UI -->
       <div class="year-selector">
-        <button @click="changeYear(-1)" class="year-btn"><ChevronLeft :size="20" /></button>
+        <button @click="changeYear(-1)" class="year-btn" :disabled="selectedYear <= minYear"><ChevronLeft :size="20" /></button>
         <h2 class="year-label">{{ selectedYear }} Attendance</h2>
-        <button @click="changeYear(1)" class="year-btn" :disabled="selectedYear === new Date().getFullYear()"><ChevronRight :size="20" /></button>
+        <button @click="changeYear(1)" class="year-btn" :disabled="selectedYear >= new Date().getFullYear()"><ChevronRight :size="20" /></button>
       </div>
 
       <div class="stats-row">
