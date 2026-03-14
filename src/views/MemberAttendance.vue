@@ -13,7 +13,7 @@ const myId = computed(() => authStore.userProfile?.id)
 const loading = ref(true)
 const selectedYear = ref(new Date().getFullYear())
 
-// 🚀 OPTIMIZATION: Store only the current year's attendance locally
+// Store only the current year's attendance locally
 const fetchedYearAttendance = ref([])
 
 async function loadYearlyAttendance() {
@@ -21,10 +21,8 @@ async function loadYearlyAttendance() {
   const start = `${selectedYear.value}-01-01`;
   const end = `${selectedYear.value}-12-31`;
   
-  // We fetch only this year's attendance (for everyone, but it's 1 year instead of all history)
   const fullYearData = await attendanceStore.fetchAttendanceByDateRange(start, end);
   
-  // Then filter down to just my records
   fetchedYearAttendance.value = fullYearData.filter(rec => rec.memberId === myId.value);
   loading.value = false;
 }
@@ -71,12 +69,20 @@ const b1gCount = computed(() => enrichedRecords.value.filter(r => r.eventType ==
 
 const monthlyStats = computed(() => {
   const map = {}
+  
+  // Ensure all 12 months exist so the X-axis is always full and structured
+  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+  monthNames.forEach((m, idx) => {
+    map[m] = { wknd: 0, b1g: 0, sortIdx: idx }
+  })
+
   enrichedRecords.value.forEach(rec => {
     const d = new Date(rec.date)
     const month = d.toLocaleString('default', { month: 'short' })
-    if (!map[month]) map[month] = { wknd: 0, b1g: 0, sortIdx: d.getMonth() }
-    if (rec.eventType === 'service') map[month].wknd += 1
-    else if (rec.eventType === 'b1g_event') map[month].b1g += 1
+    if (map[month]) {
+      if (rec.eventType === 'service') map[month].wknd += 1
+      else if (rec.eventType === 'b1g_event') map[month].b1g += 1
+    }
   })
 
   return Object.entries(map)
@@ -86,8 +92,16 @@ const monthlyStats = computed(() => {
 
 const monthlyMax = computed(() => {
   const arr = monthlyStats.value || []
-  if (!arr.length) return 0
-  return Math.max(...arr.flatMap(s => [s.wknd, s.b1g])) || 1
+  if (!arr.length) return 1
+  const maxVal = Math.max(...arr.flatMap(s => [s.wknd, s.b1g]))
+  return maxVal > 0 ? maxVal : 1 // Prevent division by zero
+})
+
+// Generate 3 labels for the Y-Axis (Top, Middle, Bottom)
+const yAxisLabels = computed(() => {
+  const max = monthlyMax.value;
+  if (max <= 2) return [max, 0];
+  return [max, Math.round(max / 2), 0];
 })
 </script>
 
@@ -120,24 +134,59 @@ const monthlyMax = computed(() => {
       </div>
 
       <section class="chart-section">
-        <h3>Monthly Overview</h3>
-        <div class="bar-chart" v-if="!loading">
-          <div v-for="(stat, index) in monthlyStats" :key="index" class="chart-col">
-            <div class="bar-group">
-              <div class="bar-wrapper">
-                <span class="bar-val">{{ stat.wknd }}</span>
-                <div class="bar-segment wknd" :style="{ height: `${(stat.wknd / monthlyMax) * 100}%` }"></div>
-              </div>
-              <div class="bar-wrapper">
-                <span class="bar-val">{{ stat.b1g }}</span>
-                <div class="bar-segment b1g" :style="{ height: `${(stat.b1g / monthlyMax) * 100}%` }"></div>
+        <div class="chart-header">
+          <h3>Monthly Overview</h3>
+          
+          <!-- Dynamic Legend -->
+          <div class="chart-legend">
+            <div class="legend-item">
+              <span class="legend-box wknd-color"></span> WKND
+            </div>
+            <div v-if="isB1GMember" class="legend-item">
+              <span class="legend-box b1g-color"></span> B1G
+            </div>
+          </div>
+        </div>
+
+        <div class="custom-chart-container" v-if="!loading">
+          
+          <!-- Y-Axis -->
+          <div class="y-axis">
+            <span v-for="val in yAxisLabels" :key="val">{{ val }}</span>
+          </div>
+          
+          <!-- Structured Chart Area -->
+          <div class="chart-content-area">
+            <!-- Background Grid Lines -->
+            <div class="grid-lines">
+              <div class="grid-line"></div>
+              <div class="grid-line" v-if="yAxisLabels.length > 2"></div>
+              <div class="grid-line"></div>
+            </div>
+            
+            <!-- The Bars -->
+            <div class="bar-chart">
+              <div v-for="(stat, index) in monthlyStats" :key="index" class="chart-col">
+                <div class="bar-group">
+                  
+                  <!-- WKND Bar (Only show if > 0 to avoid messy 0s) -->
+                  <div class="bar-wrapper" v-if="stat.wknd > 0">
+                    <span class="bar-val">{{ stat.wknd }}</span>
+                    <div class="bar-segment wknd" :style="{ height: `${(stat.wknd / monthlyMax) * 100}%` }"></div>
+                  </div>
+                  
+                  <!-- B1G Bar (Only show for B1G members AND if > 0) -->
+                  <div class="bar-wrapper" v-if="isB1GMember && stat.b1g > 0">
+                    <span class="bar-val">{{ stat.b1g }}</span>
+                    <div class="bar-segment b1g" :style="{ height: `${(stat.b1g / monthlyMax) * 100}%` }"></div>
+                  </div>
+
+                </div>
+                <span class="month-label">{{ stat.month }}</span>
               </div>
             </div>
-            <span class="month-label">{{ stat.month }}</span>
           </div>
-          <div v-if="monthlyStats.length === 0" class="no-data-chart">
-            No records for {{ selectedYear }}.
-          </div>
+
         </div>
         <div v-else class="no-data-chart mt-4">Loading chart...</div>
       </section>
@@ -184,16 +233,129 @@ const monthlyMax = computed(() => {
 .stat-card .value { font-size: 36px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
 .fire-icon { fill: white; stroke: none; }
 .chart-section { background: white; padding: 24px; border-radius: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
-.chart-section h3 { margin: 0 0 24px 0; font-size: 18px; color: #37474F; }
-.bar-chart { display: flex; justify-content: space-around; align-items: flex-end; height: 180px; padding-bottom: 10px; overflow-x: auto; gap: 10px; }
-.chart-col { display: flex; flex-direction: column; align-items: center; min-width: 50px; }
-.bar-group { display: flex; align-items: flex-end; gap: 4px; height: 130px; width: 100%; justify-content: center; }
-.bar-wrapper { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; position: relative; }
-.bar-segment { width: 12px; border-radius: 4px; transition: height 0.5s ease; min-height: 4px; }
+
+/* --- NEW STRUCTURED CHART STYLES --- */
+.chart-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px; flex-wrap: wrap; gap: 12px; }
+.chart-header h3 { margin: 0; font-size: 18px; color: #37474F; }
+
+.chart-legend { display: flex; gap: 16px; align-items: center; }
+.legend-item { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; color: #546E7A; }
+.legend-box { width: 12px; height: 12px; border-radius: 3px; }
+.wknd-color { background: #1976D2; }
+.b1g-color { background: #D32F2F; }
+
+.custom-chart-container {
+  display: flex;
+  height: 240px;
+  gap: 12px;
+  padding-top: 10px;
+}
+
+.y-axis {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding-bottom: 30px; /* Offset for month labels */
+  color: #90A4AE;
+  font-size: 11px;
+  font-weight: 700;
+  text-align: right;
+  min-width: 20px;
+}
+
+.chart-content-area {
+  position: relative;
+  flex-grow: 1;
+  border-left: 2px solid #ECEFF1;
+  border-bottom: 2px solid #ECEFF1;
+  display: flex;
+  align-items: flex-end;
+  padding-bottom: 0;
+}
+
+.grid-lines {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 30px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  z-index: 0;
+}
+
+.grid-line {
+  width: 100%;
+  height: 1px;
+  background: #F0F2F5;
+}
+.grid-line:last-child {
+  background: transparent; /* bottom line is covered by border-bottom */
+}
+
+.bar-chart {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+}
+
+.chart-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  height: 100%;
+  justify-content: flex-end;
+  flex: 1;
+}
+
+.bar-group {
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  height: calc(100% - 30px); /* Leave room for month label below axis */
+  width: 100%;
+  justify-content: center;
+}
+
+.bar-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  height: 100%;
+  width: 14px;
+}
+
+.bar-segment {
+  width: 100%;
+  border-radius: 4px 4px 0 0;
+  transition: height 0.5s ease;
+  min-height: 2px;
+}
+
 .bar-segment.wknd { background: #1976D2; }
 .bar-segment.b1g { background: #D32F2F; }
-.bar-val { font-size: 10px; color: #546E7A; font-weight: 700; margin-bottom: 4px; }
-.month-label { margin-top: 10px; font-size: 12px; color: #90A4AE; }
+
+.bar-val {
+  font-size: 10px;
+  color: #546E7A;
+  font-weight: 800;
+  margin-bottom: 4px;
+}
+
+.month-label {
+  height: 30px;
+  display: flex;
+  align-items: center;
+  font-size: 10px;
+  color: #90A4AE;
+  font-weight: 700;
+  margin-top: 4px;
+  text-transform: uppercase;
+}
+
+/* --- OTHER STYLES --- */
 .event-tag { font-size: 11px; font-weight: 700; padding: 4px 8px; border-radius: 10px; margin-left: 8px; text-transform: uppercase; }
 .event-tag.service-tag { background: #E3F2FD; color: #1565C0; }
 .event-tag.b1g-tag { background: #FFEBEE; color: #D32F2F; }
@@ -209,4 +371,9 @@ const monthlyMax = computed(() => {
 .no-data-chart { color: #B0BEC5; font-size: 14px; width: 100%; text-align: center; }
 .loading-text { text-align: center; color: #78909C; padding: 40px; }
 .mt-4 { margin-top: 16px; }
+
+@media (max-width: 600px) {
+  .month-label { font-size: 9px; }
+  .bar-wrapper { width: 10px; }
+}
 </style>

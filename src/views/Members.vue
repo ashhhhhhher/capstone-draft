@@ -1,7 +1,7 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Search, Archive, Filter } from 'lucide-vue-next'
+import { Search, Archive, Filter, X } from 'lucide-vue-next'
 import { storeToRefs } from 'pinia'
 import { useMembersStore } from '../stores/members'
 import { useAttendanceStore } from '../stores/attendance'
@@ -69,14 +69,19 @@ const filteredMembers = computed(() => {
   // copy to avoid mutating store arrays
   let list = (showArchived.value ? archivedMembers.value : activeMembers.value).slice()
 
-  // 1. Text Search
+  // 1. Text Search (Now Handles Full Names with Spaces)
   if (searchQuery.value.trim() !== '') {
-    const query = searchQuery.value.toLowerCase()
-    list = list.filter(member => 
-      member.firstName.toLowerCase().includes(query) ||
-      member.lastName.toLowerCase().includes(query) ||
-      member.email.toLowerCase().includes(query)
-    )
+    const searchTerms = searchQuery.value.toLowerCase().split(' ').filter(Boolean)
+    
+    list = list.filter(member => {
+      const fullName = `${member.firstName} ${member.lastName}`.toLowerCase()
+      const email = (member.email || '').toLowerCase()
+      
+      // Member must match ALL typed words (e.g. "Jake" AND "Pan")
+      return searchTerms.every(term => 
+        fullName.includes(term) || email.includes(term)
+      )
+    })
   }
 
   const f = currentFilters.value;
@@ -157,6 +162,13 @@ function openAbsenceMonitoring() { showAbsenceMonitoringModal.value = true; }
 function openPendingList() { showPendingModal.value = true; }
 function openPendingDetails(p) { selectedPending.value = p; }
 function toggleHeaderMenu() { showHeaderMenu.value = !showHeaderMenu.value }
+
+function formatArchiveDate(dateString) {
+  if (!dateString) return 'Unknown';
+  const d = new Date(dateString);
+  if (isNaN(d.getTime())) return 'Unknown';
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
 
 async function quickRestoreMember(member) {
   if (!member?.id) return
@@ -308,7 +320,20 @@ watch(showAbsenceMonitoringModal, (isOpen) => {
     <div class="controls-wrapper">
       <div class="search-bar">
         <Search :size="20" class="search-icon" />
-        <input type="text" placeholder="Search by name or email..." v-model="searchQuery" autocomplete="off">
+        <input 
+          type="text" 
+          placeholder="Search by name or email..." 
+          v-model="searchQuery" 
+          autocomplete="off"
+        >
+        <button 
+          v-if="searchQuery.length > 0" 
+          @click="searchQuery = ''" 
+          class="clear-search-btn"
+          aria-label="Clear search"
+        >
+          <X :size="16" />
+        </button>
       </div>
       
       <div class="sort-control">
@@ -336,8 +361,19 @@ watch(showAbsenceMonitoringModal, (isOpen) => {
     <div class="member-list-view">
       <div v-if="showArchived" class="simple-list">
         <div v-for="member in filteredMembers" :key="member.id" class="member-action-row archived-row">
-          <MemberCard :member="member" :isPresent="presentMemberIds.has(member.id)" @click="openMemberDetails(member)" />
+          
+          <MemberCard 
+            :member="member" 
+            :hideStatus="true" 
+            class="member-card-item is-archived"
+            @click="openMemberDetails(member)" 
+          />
+          
           <div class="row-actions">
+            <div class="archive-date-info">
+              <span class="archive-label">Archived on</span>
+              <span class="archive-date">{{ formatArchiveDate(member.archivedAt) }}</span>
+            </div>
             <button class="row-btn restore" @click.stop="quickRestoreMember(member)">Restore</button>
           </div>
         </div>
@@ -439,7 +475,6 @@ watch(showAbsenceMonitoringModal, (isOpen) => {
 </template>
 
 <style scoped>
-/* Keeping previous styles + adding filter btn style */
 .members-container { padding: 20px; }
 .members-header { margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; }
 .members-header h1 { font-size: 28px; font-weight: 700; margin: 0; }
@@ -477,7 +512,6 @@ watch(showAbsenceMonitoringModal, (isOpen) => {
 .details-top { display:flex; align-items:center; justify-content:space-between; gap:8px; }
 .details-title h4 { margin:0; font-size:16px; }
 
-
 /* Header separation */
 .pending-header { padding-bottom: 10px; border-bottom: 1px solid #bcbbbb; display:flex; align-items:center; justify-content:space-between; gap:10px; }
 .pending-header h3 { margin: 0; font-size: 18px; color: #263238; }
@@ -485,9 +519,30 @@ watch(showAbsenceMonitoringModal, (isOpen) => {
 .approve-all-btn:disabled { background:#CFD8DC; cursor:not-allowed; }
 
 .controls-wrapper { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; gap: 16px; }
-.search-bar { flex-grow: 1; position: relative; }
+
+.search-bar { 
+  flex-grow: 1; 
+  position: relative; 
+  display: flex;
+  align-items: center;
+}
 .search-icon { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: #90A4AE; }
-.search-bar input { width: 100%; padding: 12px 12px 12px 44px; border-radius: 8px; border: 1px solid #B0BEC5; font-size: 16px; box-sizing: border-box; }
+.search-bar input { width: 100%; padding: 12px 40px 12px 44px; border-radius: 8px; border: 1px solid #B0BEC5; font-size: 16px; box-sizing: border-box; }
+
+.clear-search-btn {
+  position: absolute;
+  right: 12px;
+  background: transparent;
+  border: none;
+  color: #90A4AE;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  border-radius: 50%;
+}
+.clear-search-btn:hover { background: #ECEFF1; color: #455A64; }
 
 /* Sort Controls CSS added */
 .sort-control { display: flex; align-items: center; gap: 8px; }
@@ -513,11 +568,45 @@ watch(showAbsenceMonitoringModal, (isOpen) => {
 .simple-list { display: flex; flex-direction: column; gap: 12px; }
 .empty-col { text-align: center; color: #B0BEC5; font-style: italic; padding: 20px; background: #FAFAFA; border-radius: 12px; }
 
+/* ROW ACTIONS & ARCHIVE DATE CSS */
 .member-action-row { position:relative; width:100%; }
-.member-action-row :deep(.member-card) { width:100%; padding-right:100px; }
-.row-actions { position:absolute; right:12px; top:50%; transform:translateY(-50%); display:flex; align-items:center; }
+.member-action-row.archived-row :deep(.member-card) { padding-right:190px; }
+
+.row-actions { 
+  position:absolute; 
+  right:16px; 
+  top:50%; 
+  transform:translateY(-50%); 
+  display:flex; 
+  align-items:center; 
+  gap: 16px; 
+}
+
+.archive-date-info {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  text-align: right;
+}
+
+.archive-label {
+  font-size: 10px;
+  color: #90A4AE;
+  text-transform: uppercase;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  margin-bottom: 2px;
+}
+
+.archive-date {
+  font-size: 12px;
+  color: #546E7A;
+  font-weight: 600;
+}
+
 .row-btn { border:none; border-radius:10px; padding:8px 12px; font-weight:700; cursor:pointer; font-size:12px; }
-.row-btn.restore { background:#E8F5E9; color:#2E7D32; border:1px solid #C8E6C9; }
+.row-btn.restore { background:#E8F5E9; color:#2E7D32; border:1px solid #C8E6C9; transition: all 0.2s; }
+.row-btn.restore:hover { background: #C8E6C9; }
 
 .pending-item { position:relative; }
 .pending-item :deep(.member-card) { width:100%; padding-right:170px; }
@@ -536,6 +625,10 @@ watch(showAbsenceMonitoringModal, (isOpen) => {
 }
 .member-card-item.is-absent {
   border-left-color: #F44336; /* Red */
+}
+.member-card-item.is-archived {
+  border-left-color: #90A4AE;
+  opacity: 0.85; /* Visual cue that it's archived */
 }
 
 .absence-modal-wrapper { display:flex; flex-direction:column; gap:12px; height:100%; }
@@ -557,5 +650,10 @@ watch(showAbsenceMonitoringModal, (isOpen) => {
   .mobile-actions { display: flex; }
   .controls-wrapper { gap: 8px; flex-wrap: wrap; }
   .search-bar { flex-basis: 100%; order: -1; }
+}
+
+@media (max-width: 500px) {
+  .archive-date-info { display: none; } /* Hide the date on very small screens so restore button fits */
+  .member-action-row.archived-row :deep(.member-card) { padding-right: 90px; }
 }
 </style>
