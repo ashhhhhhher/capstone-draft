@@ -16,8 +16,35 @@ import {
   serverTimestamp
 } from 'firebase/firestore'
 import { useAuthStore } from './auth'
+import { getWeekEndDate, parseWeekId } from '../utils/weeklyMeetingUtils'
 
 const DEFAULT_DGROUP_BG = '/DGBG.jpg'
+
+function getMeetingWeekEndCutoff(meeting) {
+  if (!meeting) return null
+
+  let baseDate = meeting.meetingDate || null
+  if (!baseDate && meeting.meetingWeekId) {
+    const parsed = parseWeekId(meeting.meetingWeekId)
+    baseDate = parsed?.endDate || parsed?.startDate || null
+  }
+
+  if (!baseDate) return null
+
+  const saturday = getWeekEndDate(baseDate)
+  saturday.setHours(23, 59, 59, 999)
+  return saturday
+}
+
+function isMeetingAutoEnded(meeting, now = new Date()) {
+  if (!meeting) return false
+  if (meeting.ended) return true
+
+  const cutoff = getMeetingWeekEndCutoff(meeting)
+  if (!cutoff) return false
+
+  return now.getTime() > cutoff.getTime()
+}
 
 export const useDgroupEventsStore = defineStore('dgroupevents', () => {
   // minimal state
@@ -72,6 +99,7 @@ export const useDgroupEventsStore = defineStore('dgroupevents', () => {
         guests: typeof payload.guests === 'number' ? payload.guests : 0,
         evangelized: typeof payload.evangelized === 'number' ? payload.evangelized : 0,
         campusDmember: typeof payload.campusDmember === 'number' ? payload.campusDmember : 0,
+        ended: !!payload.ended,
         locked: !!payload.locked,
         submittedAt: serverTimestamp()
       }
@@ -96,8 +124,14 @@ export const useDgroupEventsStore = defineStore('dgroupevents', () => {
       const colRef = collection(db, 'branches', authStore.branchId, 'dgroupEvents', dgroupLeaderId, 'meetings')
       const q = query(colRef, where('meetingDate', '>=', today), orderBy('meetingDate', 'asc'))
       const snap = await getDocs(q)
+      const now = new Date()
       const results = []
-      snap.forEach(d => results.push({ id: d.id, ...d.data() }))
+      snap.forEach(d => {
+        const item = { id: d.id, ...d.data() }
+        if (!isMeetingAutoEnded(item, now)) {
+          results.push(item)
+        }
+      })
       return results
     } catch (error) {
       console.error('getUpcomingDgroupEvents error:', error)
@@ -116,7 +150,11 @@ export const useDgroupEventsStore = defineStore('dgroupevents', () => {
       const refDoc = doc(db, 'branches', authStore.branchId, 'dgroupEvents', dgroupLeaderId, 'meetings', today)
       const snap = await getDoc(refDoc)
       if (!snap.exists()) return null
-      return { id: snap.id, ...snap.data() }
+      const item = { id: snap.id, ...snap.data() }
+      if (isMeetingAutoEnded(item)) {
+        return null
+      }
+      return item
     } catch (error) {
       console.error('getTodayDgroupEvent error:', error)
       return null
@@ -224,12 +262,41 @@ export const useDgroupEventsStore = defineStore('dgroupevents', () => {
 async function listenToDgroupMeetings(dgroupLeaderId, callback) {
   const authStore = useAuthStore()
   if (!authStore.branchId || !dgroupLeaderId) return () => {}
+  const pendingAutoEndWrites = new Set()
+
   try {
     const colRef = collection(db, 'branches', authStore.branchId, 'dgroupEvents', dgroupLeaderId, 'meetings')
     const q = query(colRef, orderBy('meetingDate', 'asc'))
     const unsub = onSnapshot(q, snap => {
+      const now = new Date()
       const results = []
-      snap.forEach(d => results.push({ id: d.id, ...d.data() }))
+
+      snap.forEach(d => {
+        const item = { id: d.id, ...d.data() }
+        const shouldAutoEndNow = isMeetingAutoEnded(item, now)
+
+        if (shouldAutoEndNow && !item.ended && !pendingAutoEndWrites.has(d.id)) {
+          pendingAutoEndWrites.add(d.id)
+          updateDoc(d.ref, {
+            ended: true,
+            endedReason: 'auto_saturday_2359',
+            endedAt: serverTimestamp()
+          })
+            .catch((err) => {
+              console.error('Auto-end dgroup meeting failed:', err)
+            })
+            .finally(() => {
+              pendingAutoEndWrites.delete(d.id)
+            })
+        }
+
+        if (shouldAutoEndNow) {
+          item.ended = true
+        }
+
+        results.push(item)
+      })
+
       try { callback(results) } catch (e) { console.error('dgroupevents callback error', e) }
     }, err => {
       console.error('listenToDgroupMeetings onSnapshot error:', err)

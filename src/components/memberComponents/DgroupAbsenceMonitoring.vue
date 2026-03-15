@@ -3,7 +3,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useAuthStore } from '../../stores/auth'
 import { useChatStore } from '../../stores/chat'
 import { db } from '../../firebase'
-import { collection, query, where, getDocs, limit, addDoc, serverTimestamp } from 'firebase/firestore'
+import { collection, getDocs, addDoc, serverTimestamp, collectionGroup } from 'firebase/firestore'
 import { useMembersStore } from '../../stores/members'
 import { useAttendanceStore } from '../../stores/attendance'
 import { useEventsStore } from '../../stores/events'
@@ -19,14 +19,17 @@ const notificationsStore = useNotificationsStore()
 const isLoading = ref(true)
 const messagedMembers = ref(new Set())
 const reportedMembers = ref(new Set())
+const dgroupMeetingReports = ref([])
+const branchAttendanceLogs = ref([])
 
 onMounted(async () => {
-  membersStore.fetchMembers && membersStore.fetchMembers()
-  eventsStore.fetchEvents && eventsStore.fetchEvents()
-
-  if (attendanceStore.fetchAllAttendance) {
-    await attendanceStore.fetchAllAttendance()
-  }
+  await Promise.all([
+    membersStore.fetchMembers ? membersStore.fetchMembers() : Promise.resolve(),
+    eventsStore.fetchEvents ? eventsStore.fetchEvents() : Promise.resolve(),
+    attendanceStore.fetchAllAttendance ? attendanceStore.fetchAllAttendance() : Promise.resolve(),
+    fetchDgroupMeetingReports(),
+    fetchBranchAttendanceLogs()
+  ])
 
   setTimeout(() => {
     isLoading.value = false
@@ -62,6 +65,78 @@ const allEvents = computed(() => eventsStore.allEvents || [])
 const allAttendance = computed(() => attendanceStore.allAttendance || [])
 
 /* ------------------------------------------
+   DATE HELPERS
+-------------------------------------------*/
+
+function parseYMD(dateStr) {
+  if (!dateStr) return null
+  const [y, m, d] = String(dateStr).split('-').map(Number)
+  if (!y || !m || !d) return null
+  return new Date(y, m - 1, d)
+}
+
+function weeksSinceDate(dateObj) {
+  if (!dateObj) return Number.POSITIVE_INFINITY
+  const diffMs = Date.now() - dateObj.getTime()
+  if (diffMs <= 0) return 0
+  return Math.floor(diffMs / (7 * 24 * 60 * 60 * 1000))
+}
+
+/* ------------------------------------------
+   DGROUP MEETING REPORTS
+-------------------------------------------*/
+
+async function fetchDgroupMeetingReports() {
+  if (!authStore.branchId) return
+
+  try {
+    const snapshot = await getDocs(collectionGroup(db, 'meetings'))
+    const rows = []
+
+    snapshot.forEach(docSnap => {
+      const path = docSnap.ref.path
+      if (!path.includes(`branches/${authStore.branchId}/dgroupEvents/`)) return
+
+      const data = docSnap.data() || {}
+      const hasAttendance = data.attendees && typeof data.attendees === 'object'
+      if (!hasAttendance) return
+
+      rows.push({ id: docSnap.id, ...data })
+    })
+
+    dgroupMeetingReports.value = rows
+  } catch (err) {
+    console.error('Failed to fetch dgroup meeting reports', err)
+    dgroupMeetingReports.value = []
+  }
+}
+
+async function fetchBranchAttendanceLogs() {
+  if (!authStore.branchId) return
+
+  try {
+    const snapshot = await getDocs(
+      collection(db, 'branches', authStore.branchId, 'attendance')
+    )
+
+    const rows = []
+    snapshot.forEach(docSnap => {
+      const data = docSnap.data() || {}
+      rows.push({
+        id: docSnap.id,
+        memberId: data.memberId || docSnap.id,
+        ...data
+      })
+    })
+
+    branchAttendanceLogs.value = rows
+  } catch (err) {
+    console.error('Failed to fetch branch attendance logs', err)
+    branchAttendanceLogs.value = []
+  }
+}
+
+/* ------------------------------------------
    SAFE DATETIME
 -------------------------------------------*/
 
@@ -77,76 +152,100 @@ function getEventDateTime(ev) {
   return new Date(0)
 }
 
+function getMeetingDateTime(meeting) {
+  if (meeting.submittedAt?.toDate) {
+    return meeting.submittedAt.toDate()
+  }
+
+  const ymd = meeting.meetingDate || meeting.loggingDate
+  const parsed = parseYMD(ymd)
+  if (parsed) return parsed
+
+  return new Date(0)
+}
+
+function getAttendanceDateTime(att) {
+  if (att?.timestamp?.toDate) {
+    return att.timestamp.toDate()
+  }
+
+  const byDateOnly = parseYMD(att?.dateOnly)
+  if (byDateOnly) return byDateOnly
+
+  return new Date(0)
+}
+
 /* ------------------------------------------
    PAST EVENTS (NEWEST FIRST)
 -------------------------------------------*/
 
-function pastEventsOfType(type) {
-  return (allEvents.value || [])
-    .filter(e => e.eventType === type)
-    .filter(e => e.ended === true)
-    .sort((a, b) => getEventDateTime(b) - getEventDateTime(a))
-}
+const eventById = computed(() => {
+  const map = new Map()
+  for (const ev of allEvents.value || []) {
+    if (ev?.id) map.set(ev.id, ev)
+  }
+  return map
+})
 
-/* ------------------------------------------
-   MEMBER ATTENDANCE CHECK
-   (attendance doc exists under event)
--------------------------------------------*/
+function findLatestMainEventAttendance(member) {
+  const memberId = member?.id
+  if (!memberId) return null
 
-function memberAttendedEvent(memberId, eventId) {
-  return (allAttendance.value || []).some(a => {
-    // When using collectionGroup,
-    // you MUST store parent eventId inside attendance doc
-    return a.memberId === memberId && a.eventId === eventId
-  })
-}
+  const combined = [
+    ...(allAttendance.value || []),
+    ...(branchAttendanceLogs.value || [])
+  ]
 
-/* ------------------------------------------
-   CONSECUTIVE ABSENCE
--------------------------------------------*/
+  let latest = null
 
-function computeConsecutiveAbsencesForMember(member) {
-  const type =
-    member.finalTags?.ageCategory === 'B1G'
-      ? 'b1g_event'
-      : 'service'
+  for (const att of combined) {
+    const attMemberId = att?.memberId || att?.id
+    if (attMemberId !== memberId) continue
 
-  const past = pastEventsOfType(type)
+    const linkedEvent = att?.eventId ? eventById.value.get(att.eventId) : null
 
-  let count = 0
+    // Prefer explicit WKND/B1G event links when available.
+    // If no event link exists (branch attendance docs), still count as attended.
+    const isTrackedEvent =
+      !linkedEvent ||
+      linkedEvent.eventType === 'service' ||
+      linkedEvent.eventType === 'b1g_event'
 
-  for (const ev of past) {
-    const attended = memberAttendedEvent(member.id, ev.id)
+    if (!isTrackedEvent) continue
 
-    if (attended) {
-      break
-    } else {
-      count++
+    const seenAt = linkedEvent ? getEventDateTime(linkedEvent) : getAttendanceDateTime(att)
+    if (!latest || seenAt > latest.seenAt) {
+      latest = {
+        seenAt,
+        name: linkedEvent?.name || 'WKND / B1G Event'
+      }
     }
   }
 
-  return count
+  return latest
 }
 
 /* ------------------------------------------
-   LAST SEEN EVENT
+   LAST SEEN (ANY ATTENDED: DGROUP / WKND / B1G)
 -------------------------------------------*/
 
-function findLastSeenEvent(member) {
-  const type =
-    member.finalTags?.ageCategory === 'B1G'
-      ? 'b1g_event'
-      : 'service'
+function findLastSeenRecord(member) {
+  let latest = findLatestMainEventAttendance(member)
 
-  const past = pastEventsOfType(type)
+  for (const meeting of dgroupMeetingReports.value || []) {
+    const att = meeting.attendees?.[member.id]
+    if (!att?.isPresent) continue
 
-  for (const ev of past) {
-    const attended = memberAttendedEvent(member.id, ev.id)
-
-    if (attended) return ev
+    const seenAt = getMeetingDateTime(meeting)
+    if (!latest || seenAt > latest.seenAt) {
+      latest = {
+        seenAt,
+        name: meeting.meetingTitle || 'Dgroup Meeting'
+      }
+    }
   }
 
-  return null
+  return latest
 }
 
 /* ------------------------------------------
@@ -155,8 +254,8 @@ function findLastSeenEvent(member) {
 
 const monitored = computed(() => {
   const rows = (downlineMembers.value || []).map(m => {
-    const consecutive = computeConsecutiveAbsencesForMember(m)
-    const lastSeenEvent = findLastSeenEvent(m)
+    const lastSeen = findLastSeenRecord(m)
+    const weeksSinceLastSeen = weeksSinceDate(lastSeen?.seenAt || null)
 
     return {
       id: m.id,
@@ -164,17 +263,17 @@ const monitored = computed(() => {
       lastName: m.lastName,
       dgroupLeader: m.dgroupLeader || '',
       email: m.email || '',
-      consecutive,
-      lastSeenName: lastSeenEvent?.name || '',
-      lastSeenDate: lastSeenEvent
-        ? getEventDateTime(lastSeenEvent).toLocaleString()
+      weeksSinceLastSeen,
+      lastSeenName: lastSeen?.name || '',
+      lastSeenDate: lastSeen?.seenAt
+        ? lastSeen.seenAt.toLocaleString()
         : null
     }
   })
 
   return rows
-    .filter(r => r.consecutive > 1)
-    .sort((a, b) => b.consecutive - a.consecutive)
+    .filter(r => r.weeksSinceLastSeen >= 4)
+    .sort((a, b) => b.weeksSinceLastSeen - a.weeksSinceLastSeen)
 })
 
 /* ------------------------------------------
@@ -182,9 +281,9 @@ const monitored = computed(() => {
 -------------------------------------------*/
 
 function severityClass(count) {
-  if (count >= 5) return 'sev-red'
-  if (count === 4) return 'sev-orange'
-  if (count === 3) return 'sev-yellow'
+  if (count >= 6) return 'sev-red'
+  if (count === 5) return 'sev-orange'
+  if (count === 4) return 'sev-yellow'
   return ''
 }
 
@@ -212,7 +311,7 @@ function messageMember(member) {
 
 async function reportToAdmin(member) {
   const memberName = `${member.firstName} ${member.lastName}`
-  const reportDetails = `Member: ${memberName}\nDGroup Leader: ${member.dgroupLeader || '—'}\nConsecutive absences: ${member.consecutive}\nLast seen: ${member.lastSeenName || 'Never'} ${member.lastSeenDate ? `— ${member.lastSeenDate}` : ''}\nMember ID: ${member.id}`
+  const reportDetails = `Member: ${memberName}\nDGroup Leader: ${member.dgroupLeader || '—'}\nWeeks since last seen: ${Number.isFinite(member.weeksSinceLastSeen) ? member.weeksSinceLastSeen : '6+'}\nLast seen: ${member.lastSeenName || 'Never'} ${member.lastSeenDate ? `— ${member.lastSeenDate}` : ''}\nMember ID: ${member.id}`
 
   try {
     // Prevent duplicate reports
@@ -228,7 +327,8 @@ async function reportToAdmin(member) {
       memberId: member.id,
       memberName,
       dgroupLeader: member.dgroupLeader || '',
-      consecutiveAbsences: member.consecutive,
+      consecutiveAbsences: Number.isFinite(member.weeksSinceLastSeen) ? member.weeksSinceLastSeen : 999,
+      weeksSinceLastSeen: Number.isFinite(member.weeksSinceLastSeen) ? member.weeksSinceLastSeen : null,
       lastSeenName: member.lastSeenName || '',
       lastSeenDate: member.lastSeenDate || null,
       reportDetails,
@@ -263,10 +363,10 @@ async function reportToAdmin(member) {
       </div>
 
       <div class="absence-sub-inline">
-        Monitoring consecutive absences (WKND / B1G)
-        <span class="legend-pill yellow">3</span>
-        <span class="legend-pill orange">4</span>
-        <span class="legend-pill red">5+</span>
+        Monitoring weeks since last attendance (Dgroup / WKND / B1G)
+        <span class="legend-pill yellow">4w</span>
+        <span class="legend-pill orange">5w</span>
+        <span class="legend-pill red">6w+</span>
       </div>
     </div>
 
@@ -284,7 +384,7 @@ async function reportToAdmin(member) {
           v-for="m in monitored"
           :key="m.id"
           class="list-item absence-item"
-          :class="severityClass(m.consecutive)"
+          :class="severityClass(m.weeksSinceLastSeen)"
         >
           <div class="info-col">
             <span class="name">
@@ -298,12 +398,15 @@ async function reportToAdmin(member) {
               </strong>
               <span v-if="m.lastSeenName"> — </span>
               {{ m.lastSeenDate || 'Never' }}
+              <span>
+                ({{ Number.isFinite(m.weeksSinceLastSeen) ? `${m.weeksSinceLastSeen} week(s) ago` : 'Never attended yet' }})
+              </span>
             </span>
           </div>
 
           <div class="actions">
             <button
-              v-if="m.consecutive >= 3"
+              v-if="m.weeksSinceLastSeen >= 4"
               class="message-btn"
               :class="{ 'done': messagedMembers.has(m.id) }"
               :disabled="messagedMembers.has(m.id)"
@@ -312,7 +415,7 @@ async function reportToAdmin(member) {
               {{ messagedMembers.has(m.id) ? '✓ Messaged' : 'Message' }}
             </button>
             <button
-              v-if="m.consecutive >= 5"
+              v-if="m.weeksSinceLastSeen >= 6"
               class="report-btn"
               :class="{ 'done': reportedMembers.has(m.id) }"
               :disabled="reportedMembers.has(m.id)"
