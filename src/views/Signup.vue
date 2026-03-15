@@ -307,7 +307,7 @@ function clearTcError() {
               <p>
                 For questions regarding these Terms and Conditions, please contact:
               </p>
-              <p><strong>Qonnect Project Team</strong><br>Email: qonnect@gmail.com</p>
+              <p><strong>Qonnect Project Team</strong><br>Email: qonnect67@gmail.com</p>
             </div>
           </div>
         </Modal>

@@ -274,28 +274,41 @@ const yAxisLabels = computed(() => {
 </template>
 
 <style scoped>
-.attendance-view { display: grid; grid-template-columns: 1fr; gap: 24px; }
-@media (min-width: 900px) { .attendance-view { grid-template-columns: 1fr 1fr; align-items: start; } }
-.stats-column { display: flex; flex-direction: column; gap: 24px; }
+/* Fixes to ensure uniform left/right margins regardless of screen size */
+.attendance-view { 
+  display: grid; 
+  grid-template-columns: 1fr; 
+  gap: 24px; 
+  padding: 16px; 
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 900px;
+  margin: 0 auto;
+  overflow-x: hidden; 
+}
+@media (min-width: 900px) { 
+  .attendance-view { grid-template-columns: 1fr 1fr; align-items: start; } 
+}
+
+.stats-column { display: flex; flex-direction: column; gap: 24px; width: 100%; box-sizing: border-box; }
 .year-selector { display: flex; align-items: center; justify-content: center; gap: 20px; background: white; padding: 12px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
 .year-btn { background: #F5F5F5; border: none; border-radius: 50%; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; cursor: pointer; color: #37474F; transition: background 0.2s; }
 .year-btn:hover:not(:disabled) { background: #EEEEEE; }
 .year-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .year-label { font-size: 18px; font-weight: 700; color: #37474F; margin: 0; }
-.stats-row { display: flex; gap: 16px; }
-.stat-card { flex: 1; padding: 24px; border-radius: 16px; color: white; display: flex; flex-direction: column; justify-content: space-between; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
+
+.stats-row { display: flex; gap: 16px; flex-wrap: wrap; }
+.stat-card { flex: 1; min-width: 120px; box-sizing: border-box; padding: 24px; border-radius: 16px; color: white; display: flex; flex-direction: column; justify-content: space-between; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
 .stat-card.blue { background: linear-gradient(135deg, #42A5F5, #1565C0); }
 .stat-card.red { background: linear-gradient(135deg, #f54242, #c01515); }
 .stat-card.fire { background: linear-gradient(135deg, #FFCA28, #F57C00); }
 .stat-card .label { font-size: 13px; font-weight: 600; opacity: 0.9; text-transform: uppercase; }
 .stat-card .value { font-size: 36px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
 .fire-icon { fill: white; stroke: none; }
-.chart-section { background: white; padding: 24px; border-radius: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
 
-/* --- NEW STRUCTURED CHART STYLES --- */
+.chart-section { background: white; padding: 24px; border-radius: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); width: 100%; box-sizing: border-box; }
 .chart-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px; flex-wrap: wrap; gap: 12px; }
 .chart-header h3 { margin: 0; font-size: 18px; color: #37474F; }
-
 .chart-legend { display: flex; gap: 16px; align-items: center; }
 .legend-item { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; color: #546E7A; }
 .legend-box { width: 12px; height: 12px; border-radius: 3px; }
@@ -307,13 +320,15 @@ const yAxisLabels = computed(() => {
   height: 240px;
   gap: 12px;
   padding-top: 10px;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .y-axis {
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  padding-bottom: 30px; /* Offset for month labels */
+  padding-bottom: 30px; 
   color: #90A4AE;
   font-size: 11px;
   font-weight: 700;
@@ -346,7 +361,7 @@ const yAxisLabels = computed(() => {
   background: #F0F2F5;
 }
 .grid-line:last-child {
-  background: transparent; /* bottom line is covered by border-bottom */
+  background: transparent; 
 }
 
 .bar-chart {
@@ -371,7 +386,7 @@ const yAxisLabels = computed(() => {
   display: flex;
   align-items: flex-end;
   gap: 4px;
-  height: calc(100% - 30px); /* Leave room for month label below axis */
+  height: calc(100% - 30px); 
   width: 100%;
   justify-content: center;
 }
@@ -413,12 +428,12 @@ const yAxisLabels = computed(() => {
   text-transform: uppercase;
 }
 
-/* --- OTHER STYLES --- */
 .event-tag { font-size: 11px; font-weight: 700; padding: 4px 8px; border-radius: 10px; margin-left: 8px; text-transform: uppercase; }
 .event-tag.service-tag { background: #E3F2FD; color: #1565C0; }
 .event-tag.b1g-tag { background: #FFEBEE; color: #D32F2F; }
 .event-tag.ccf-tag { background: #FFF8E1; color: #F57C00; }
-.history-section { background: white; padding: 24px; border-radius: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); height: 100%; max-height: 500px; overflow-y: auto; }
+
+.history-section { background: white; padding: 24px; border-radius: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); height: 100%; max-height: 500px; overflow-y: auto; width: 100%; box-sizing: border-box; }
 .history-section h3 { font-size: 18px; color: #37474F; margin-bottom: 16px; position: sticky; top: 0; background: white; padding-bottom: 10px; z-index: 1; }
 .history-item { background: #FAFAFA; padding: 16px; border-radius: 12px; display: flex; align-items: center; gap: 16px; margin-bottom: 12px; border: 1px solid #F5F5F5; }
 .info { flex: 1; }

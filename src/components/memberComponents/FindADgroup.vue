@@ -1,5 +1,5 @@
 <script setup>
-import { ref, reactive, computed } from 'vue'
+import { ref, reactive, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useAuthStore } from '../../stores/auth'
 import { useMembersStore } from '../../stores/members'
 import { calculateDgroupMatches } from '../../utils/DgroupMatcher'
@@ -18,6 +18,25 @@ const emit = defineEmits(['close'])
 
 const authStore = useAuthStore()
 const membersStore = useMembersStore()
+
+// Hides global chatbox when this modal opens
+watch(() => props.isOpen, (newVal) => {
+  if (newVal) {
+    document.body.classList.add('find-dgroup-open');
+  } else {
+    document.body.classList.remove('find-dgroup-open');
+  }
+});
+
+onMounted(() => {
+  if (props.isOpen) {
+    document.body.classList.add('find-dgroup-open');
+  }
+});
+
+onUnmounted(() => {
+  document.body.classList.remove('find-dgroup-open');
+});
 
 const seekerStep = ref(1) 
 // 1: Interests, 2: Schedule, 3: Recommendations
@@ -370,7 +389,7 @@ const isNextDisabled = computed(() => {
                 <div class="mc-info-box">
                     <div class="mc-icon"><Cake :size="16" /></div>
                     <div class="mc-info-text">
-                        <span class="lbl">AGE RANGE</span>
+                        <span class="lbl">DMEMBERS AGE RANGE</span>
                         <span class="val">{{ group.ageRange }}</span>
                         <span class="sub" v-if="group.matchBreakdown.roundedAverageAge">Typical age: {{ group.matchBreakdown.roundedAverageAge }}</span>
                     </div>
@@ -447,7 +466,7 @@ const isNextDisabled = computed(() => {
   max-height: 95vh;
   padding: 40px 32px;
   position: relative;
-  overflow: hidden; /* Changed from overflow-y: auto to make modal fixed */
+  overflow: hidden; 
   color: #0F172A;
   display: flex;
   flex-direction: column;
@@ -470,16 +489,7 @@ const isNextDisabled = computed(() => {
   align-items: center;
   gap: 12px;
   margin-bottom: 30px;
-  flex-shrink: 0; /* Keep stepper from shrinking */
-}
-
-/* Stepper */
-.stepper-container {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 30px;
+  flex-shrink: 0;
 }
 
 .stepper-label {
@@ -522,7 +532,7 @@ const isNextDisabled = computed(() => {
   text-align: center;
   margin-bottom: 32px;
   position: relative;
-  flex-shrink: 0; /* Keep header from shrinking */
+  flex-shrink: 0; 
 }
 
 .back-link {
@@ -611,37 +621,37 @@ h1 { font-size: 32px; font-weight: 900; margin: 0 0 10px; color: #0F172A; letter
 .card-label.sm { font-size: 11px; }
 
 /* ========================================================
-   NEW MATCH CARD V2 (Mockup Match - Compact Version)
+   NEW MATCH CARD V2
    ======================================================== */
 .match-card-v2 {
   background: white;
-  border: 2px solid #E0E7FF; /* Colored border instead of gray */
+  border: 2px solid #E0E7FF; 
   border-radius: 20px;
-  padding: 20px 24px; /* Reduced from 24px 32px */
+  padding: 20px 24px; 
   box-shadow: 0 4px 6px -1px rgba(99, 102, 241, 0.05), 0 10px 15px -3px rgba(99, 102, 241, 0.05);
-  margin-bottom: 16px; /* Reduced from 24px */
+  margin-bottom: 16px; 
   transition: all 0.3s;
 }
 .match-card-v2.best-match-border {
-  border: 2px solid #6366F1; /* Stronger colored border for the top match */
-  background: #FAFAFF; /* Subtle tint for best match */
+  border: 2px solid #6366F1; 
+  background: #FAFAFF; 
 }
 .mc-header {
   display: flex;
   align-items: center;
-  gap: 16px; /* Reduced from 20px */
-  margin-bottom: 16px; /* Reduced from 24px */
+  gap: 16px; 
+  margin-bottom: 16px; 
 }
 .mc-avatar {
-  width: 56px; /* Reduced from 64px */
-  height: 56px; /* Reduced from 64px */
+  width: 56px; 
+  height: 56px; 
   border-radius: 14px;
   background: #6366F1;
   color: white;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 20px; /* Reduced from 24px */
+  font-size: 20px; 
   font-weight: 800;
   overflow: hidden;
   flex-shrink: 0;
@@ -660,7 +670,7 @@ h1 { font-size: 32px; font-weight: 900; margin: 0 0 10px; color: #0F172A; letter
   gap: 4px;
   background: #EEF2FF;
   color: #6366F1;
-  font-size: 10px; /* Reduced */
+  font-size: 10px; 
   font-weight: 800;
   padding: 4px 10px;
   border-radius: 12px;
@@ -669,14 +679,14 @@ h1 { font-size: 32px; font-weight: 900; margin: 0 0 10px; color: #0F172A; letter
   margin-bottom: 6px;
 }
 .mc-title-col h3 {
-  margin: 0 0 2px 0; /* Reduced */
-  font-size: 18px; /* Reduced from 22px */
+  margin: 0 0 2px 0; 
+  font-size: 18px; 
   font-weight: 900;
   color: #111827;
 }
 .mc-title-col p {
   margin: 0;
-  font-size: 13px; /* Reduced from 15px */
+  font-size: 13px; 
   color: #6B7280;
 }
 .mc-title-col p span {
@@ -685,8 +695,8 @@ h1 { font-size: 32px; font-weight: 900; margin: 0 0 10px; color: #0F172A; letter
 }
 .mc-ring-col {
   position: relative;
-  width: 60px; /* Reduced from 72px */
-  height: 60px; /* Reduced from 72px */
+  width: 60px; 
+  height: 60px; 
   flex-shrink: 0;
 }
 .circular-chart { display: block; max-width: 100%; max-height: 100%; }
@@ -696,51 +706,51 @@ h1 { font-size: 32px; font-weight: 900; margin: 0 0 10px; color: #0F172A; letter
   position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
   display: flex; flex-direction: column; align-items: center; justify-content: center;
 }
-.mc-ring-col .num { font-size: 15px; /* Reduced from 18px */ font-weight: 900; color: #4F46E5; line-height: 1.1; }
-.mc-ring-col .lbl { font-size: 7px; /* Reduced */ font-weight: 800; color: #818CF8; letter-spacing: 0.05em; }
+.mc-ring-col .num { font-size: 15px; font-weight: 900; color: #4F46E5; line-height: 1.1; }
+.mc-ring-col .lbl { font-size: 7px; font-weight: 800; color: #818CF8; letter-spacing: 0.05em; }
 
 .mc-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 12px; /* Reduced from 16px */
-  margin-bottom: 12px; /* Reduced from 16px */
+  gap: 12px; 
+  margin-bottom: 12px; 
 }
 .mc-info-box {
-  background: #FFFFFF; /* Changed to match mockup slightly better */
+  background: #FFFFFF; 
   border: 1px solid #F1F5F9;
-  border-radius: 12px; /* Reduced */
-  padding: 12px; /* Reduced from 16px */
+  border-radius: 12px; 
+  padding: 12px; 
   display: flex;
-  gap: 10px; /* Reduced from 12px */
+  gap: 10px; 
   align-items: flex-start;
 }
-.mc-info-box.full { grid-column: span 2; margin-bottom: 16px; /* Reduced from 24px */ }
+.mc-info-box.full { grid-column: span 2; margin-bottom: 16px; }
 .mc-icon {
   background: #F8FAFC;
-  padding: 6px; /* Reduced from 8px */
+  padding: 6px; 
   border-radius: 8px;
   color: #6366F1;
   display: flex; align-items: center; justify-content: center;
   flex-shrink: 0;
 }
 .mc-info-text { display: flex; flex-direction: column; gap: 2px; }
-.mc-info-text .lbl { font-size: 10px; /* Reduced from 11px */ font-weight: 800; color: #94A3B8; text-transform: uppercase; letter-spacing: 0.05em; }
-.mc-info-text .val { font-size: 14px; /* Reduced from 16px */ font-weight: 700; color: #1E293B; }
-.mc-info-text .sub { font-size: 11px; /* Reduced from 13px */ font-weight: 500; color: #64748B; margin-top: 2px; }
+.mc-info-text .lbl { font-size: 10px; font-weight: 800; color: #94A3B8; text-transform: uppercase; letter-spacing: 0.05em; }
+.mc-info-text .val { font-size: 14px; font-weight: 700; color: #1E293B; }
+.mc-info-text .sub { font-size: 11px; font-weight: 500; color: #64748B; margin-top: 2px; }
 
-.mc-interests { margin-bottom: 16px; /* Reduced from 28px */ }
-.mc-interests .lbl { display: block; font-size: 10px; /* Reduced */ font-weight: 800; color: #94A3B8; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 8px; }
+.mc-interests { margin-bottom: 16px;  }
+.mc-interests .lbl { display: block; font-size: 10px; font-weight: 800; color: #94A3B8; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 8px; }
 .mc-pill-row { display: flex; flex-wrap: wrap; gap: 8px; }
-.mc-interest-pill { background: #F8FAFC; border: 1px solid #E2E8F0; color: #475569; font-size: 12px; /* Reduced */ font-weight: 600; padding: 6px 12px; /* Reduced */ border-radius: 16px; }
+.mc-interest-pill { background: #F8FAFC; border: 1px solid #E2E8F0; color: #475569; font-size: 12px; font-weight: 600; padding: 6px 12px; border-radius: 16px; }
 
-.mc-divider { border: 0; height: 1px; background: #F1F5F9; margin: 0 0 16px 0; /* Reduced */ }
+.mc-divider { border: 0; height: 1px; background: #F1F5F9; margin: 0 0 16px 0; }
 
-.mc-footer { display: flex; align-items: center; justify-content: flex-start; flex-wrap: wrap; gap: 16px; /* Reduced */ margin-bottom: 16px; /* Reduced */ }
-.mc-members { display: flex; align-items: center; gap: 6px; font-size: 13px; /* Reduced */ font-weight: 700; color: #64748B; }
+.mc-footer { display: flex; align-items: center; justify-content: flex-start; flex-wrap: wrap; gap: 16px; margin-bottom: 16px; }
+.mc-members { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 700; color: #64748B; }
 .mc-matched-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.mc-matched-lbl { font-size: 10px; /* Reduced */ font-weight: 800; color: #94A3B8; text-transform: uppercase; letter-spacing: 0.05em; margin-right: 4px; }
+.mc-matched-lbl { font-size: 10px; font-weight: 800; color: #94A3B8; text-transform: uppercase; letter-spacing: 0.05em; margin-right: 4px; }
 
-.match-tag { display: inline-flex; align-items: center; gap: 4px; font-size: 9px; /* Reduced */ font-weight: 800; padding: 4px 8px; /* Reduced */ border-radius: 12px; text-transform: uppercase; letter-spacing: 0.05em; }
+.match-tag { display: inline-flex; align-items: center; gap: 4px; font-size: 9px; font-weight: 800; padding: 4px 8px; border-radius: 12px; text-transform: uppercase; letter-spacing: 0.05em; }
 .match-tag .dot { width: 6px; height: 6px; border-radius: 50%; }
 .tag-age { background: #FEF3C7; color: #92400E; } .tag-age .dot { background: #F59E0B; }
 .tag-lifestage { background: #F3E8FF; color: #6B21A8; } .tag-lifestage .dot { background: #A855F7; }
@@ -751,10 +761,10 @@ h1 { font-size: 32px; font-weight: 900; margin: 0 0 10px; color: #0F172A; letter
   background: #0F172A;
   color: white;
   border: none;
-  padding: 12px 24px; /* Reduced */
+  padding: 12px 24px;
   border-radius: 12px;
   font-weight: 700;
-  font-size: 14px; /* Reduced */
+  font-size: 14px;
   cursor: pointer;
   transition: all 0.2s;
   width: auto;
@@ -778,10 +788,50 @@ h1 { font-size: 32px; font-weight: 900; margin: 0 0 10px; color: #0F172A; letter
 .btn-next-step:disabled { background: #E2E8F0; color: #94A3B8; cursor: not-allowed; box-shadow: none; }
 
 .btn-secondary-light {
-  width: 100%; background: #F8FAFC; border: 5px solid #509fee; color: #64748B; padding: 18px; border-radius: 20px; font-weight: 700; cursor: pointer; transition: all 0.2s;
+  width: 100%; background: #F8FAFC; border: 2px solid #E2E8F0; color: #64748B; padding: 18px; border-radius: 20px; font-weight: 700; cursor: pointer; transition: all 0.2s;
 }
-.btn-secondary-light:hover { background: #89bbed; color: #0F172A; }
+.btn-secondary-light:hover { background: #E2E8F0; color: #0F172A; }
 
 .fade-in { animation: fadeIn 0.5s cubic-bezier(0.16, 1, 0.3, 1); }
 @keyframes fadeIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+
+/* RESPONSIVE DESIGN - FIXING OVERLAP ON MOBILE */
+@media (max-width: 768px) {
+  .seeker-modal-light.wide-layout {
+    padding: 24px 16px; /* Tighter padding for phones */
+    border-radius: 20px; /* Slight relaxation on the curve */
+    height: 95vh;
+  }
+  
+  .interest-grid-four {
+    grid-template-columns: repeat(2, 1fr); /* 2 columns on phone */
+  }
+
+  .mc-grid {
+    grid-template-columns: 1fr; /* CRUCIAL FIX: Stacks the boxes so text never overlaps */
+    gap: 8px;
+  }
+
+  .mc-info-box.full {
+    grid-column: 1; /* Reset the span to fit perfectly in 1 column */
+    margin-bottom: 8px;
+  }
+  
+  /* Allow the text to wrap just in case it is super long */
+  .mc-info-text .val {
+    white-space: normal;
+    word-wrap: break-word;
+  }
+  
+  .mc-action .btn-request {
+    width: 100%; /* Full width button on mobile */
+  }
+}
+</style>
+
+<!-- Hide chat system when this modal is open -->
+<style>
+body.find-dgroup-open .chat-system {
+  display: none !important;
+}
 </style>

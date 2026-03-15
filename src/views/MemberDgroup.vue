@@ -51,7 +51,7 @@ const editGroupForm = reactive({
   interests: [],
   meetingTime: 'Flexible',
   meetingDays: 'Flexible',
-  civilStatus: 'N/A' // Added Civil Status Field
+  civilStatus: 'N/A'
 })
 
 const dgroupIdInput = ref('')
@@ -113,6 +113,38 @@ const myUplineGroup = computed(() => {
   return membersStore.activeMembers.filter(m => m.dgroupLeader === myLeaderName.value)
 })
 
+// Helper for calculating age
+function calculateAge(birthday) {
+  if (!birthday) return ''
+  const birthDate = new Date(birthday)
+  const today = new Date()
+  let age = today.getFullYear() - birthDate.getFullYear()
+  const m = today.getMonth() - birthDate.getMonth()
+  if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+    age--
+  }
+  return age
+}
+
+function calculateGroupAgeRange(membersList) {
+  if (!membersList || membersList.length === 0) return 'N/A'
+  let minAge = Infinity, maxAge = -Infinity
+  membersList.forEach(m => {
+    let age = m.age ? Number(m.age) : null
+    if (!age && m.birthday) {
+      age = Number(calculateAge(m.birthday))
+    }
+    if (age && !isNaN(age)) {
+      minAge = Math.min(minAge, age)
+      maxAge = Math.max(maxAge, age)
+    }
+  })
+  if (minAge === Infinity) return 'N/A'
+  return minAge === maxAge ? `${minAge}` : `${minAge} - ${maxAge}`
+}
+
+const myUplineAgeRange = computed(() => calculateGroupAgeRange(myUplineGroup.value))
+
 const myMemberGroupDetails = computed(() => {
   if (!myLeaderObject.value) return null
   const leader = myLeaderObject.value
@@ -138,7 +170,8 @@ const primaryDownlineGroup = computed(() => {
     capacity: myProfile.value?.dgroupCapacity || 12,
     interests: myProfile.value?.dgroupDetails?.interests || [],
     meetingTime: myProfile.value?.dgroupDetails?.meetingTime || 'Flexible',
-    meetingDays: myProfile.value?.dgroupDetails?.meetingDays || 'Flexible'
+    meetingDays: myProfile.value?.dgroupDetails?.meetingDays || 'Flexible',
+    ageRange: calculateGroupAgeRange(members)
   }
 })
 
@@ -166,7 +199,7 @@ function openEditGroupModal() {
   editGroupForm.interests = myProfile.value.dgroupDetails?.interests || []
   editGroupForm.meetingTime = myProfile.value.dgroupDetails?.meetingTime || 'Flexible'
   editGroupForm.meetingDays = myProfile.value.dgroupDetails?.meetingDays || 'Flexible'
-  editGroupForm.civilStatus = myProfile.value.civilStatus || 'N/A' // Load Civil Status
+  editGroupForm.civilStatus = myProfile.value.civilStatus || 'N/A'
   showEditGroupModal.value = true
 }
 
@@ -181,7 +214,7 @@ async function saveGroupDetails() {
     await authStore.updateExtendedProfile({
       dgroupName: editGroupForm.dgroupName,
       dgroupCapacity: editGroupForm.capacity,
-      civilStatus: editGroupForm.civilStatus, // Save Civil Status
+      civilStatus: editGroupForm.civilStatus,
       dgroupDetails: {
         interests: editGroupForm.interests,
         meetingTime: editGroupForm.meetingTime,
@@ -254,18 +287,6 @@ function formatBirthday(dateString) {
   }
 }
 
-function calculateAge(birthday) {
-  if (!birthday) return ''
-  const birthDate = new Date(birthday)
-  const today = new Date()
-  let age = today.getFullYear() - birthDate.getFullYear()
-  const m = today.getMonth() - birthDate.getMonth()
-  if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
-    age--
-  }
-  return age
-}
-
 function isPersonLeader(person) {
     return person?.finalTags?.isDgroupLeader === true
 }
@@ -307,7 +328,7 @@ function isPersonLeader(person) {
       <div class="tabs-container">
         <div class="tabs-segment">
             <button :class="{ active: activeTab === 'upline' }" @click="activeTab = 'upline'">UPLINE</button>
-            <button v-if="isLeader" :class="{ active: activeTab === 'downline' }" @click="activeTab = 'downline'">
+            <button :class="{ active: activeTab === 'downline' }" @click="activeTab = 'downline'">
                 DOWNLINE
                 <span v-if="myPendingRequests.length" class="badge-dot"></span>
             </button>
@@ -317,6 +338,11 @@ function isPersonLeader(person) {
       <!-- TAB: UPLINE -->
       <div v-if="activeTab === 'upline'" class="tab-content fade-in">
         
+        <!-- Definition -->
+        <div class="tab-description">
+          <p><strong>Upline:</strong> Your main Dgroup where you learn and get support from.</p>
+        </div>
+
         <!-- EMPTY STATE -->
         <div v-if="!myLeaderName" class="empty-state-card">
           <div class="empty-icon-ring"><UserMinus :size="40" color="#94A3B8" /></div>
@@ -327,13 +353,12 @@ function isPersonLeader(person) {
         <!-- UPLINE CONTENT -->
         <div v-else-if="myMemberGroupDetails">
           
-          <!-- Group Card (Read Only) -->
+          <!-- Modern Group Card (Read Only) -->
           <div class="drill-header-enhanced">
             <div class="header-top-row">
               <div class="group-title-label">My Dgroup</div>
             </div>
             <div class="group-hero">
-                <div class="hero-icon"><Users :size="32" color="white" /></div>
                 <div class="hero-content">
                     <h2>{{ myMemberGroupDetails.name }}</h2>
                     <div class="hero-badges">
@@ -344,6 +369,9 @@ function isPersonLeader(person) {
                     <div class="hero-details">
                        <div class="detail-tag time">
                           <Clock :size="10" /> {{ myMemberGroupDetails.meetingTime }} • {{ myMemberGroupDetails.meetingDays }}
+                       </div>
+                       <div class="detail-tag age-tag">
+                          <User :size="10" /> Ages: {{ myUplineAgeRange }}
                        </div>
                        <div class="detail-tag interest" v-for="tag in myMemberGroupDetails.interests" :key="tag">
                          #{{ INTEREST_OPTIONS.find(o => o.id === tag)?.label || tag }}
@@ -394,82 +422,102 @@ function isPersonLeader(person) {
       <!-- TAB: DOWNLINE -->
       <div v-if="activeTab === 'downline'" class="tab-content fade-in">
         
-        <!-- Waitlist Section -->
-        <div v-if="myPendingRequests.length > 0" class="requests-card-clean">
-           <div class="req-header-group">
-              <div class="req-header-title">Waitlist & Requests</div>
-              <div class="req-header-badge">{{ myPendingRequests.length }}</div>
-           </div>
-           
-           <div class="requests-list-clean">
-              <div v-for="(req, index) in myPendingRequests" :key="req.id" class="req-item-clean">
-                 <div class="req-main-info">
-                    <span class="req-name-clean">{{ req.firstName }} {{ req.lastName }}</span>
-                    <span class="req-sub-info">
-                      Requested: {{ new Date(req.joinRequest.requestedAt).toLocaleDateString() }}
-                      <span class="bullet">•</span>
-                      {{ getMinistry(req) }}
-                      <span v-if="req.birthday" class="bullet">•</span>
-                      <span v-if="req.birthday">{{ calculateAge(req.birthday) }} yrs old</span>
-                    </span>
-                 </div>
-                 <div class="req-actions-clean">
-                    <button class="btn-req-action approve" @click="handleLeaderResponse(req, 'approve')">
-                        <CheckCircle :size="18" stroke-width="2.5" />
-                    </button>
-                    <button class="btn-req-action reject" @click="handleLeaderResponse(req, 'reject')">
-                        <X :size="18" stroke-width="2.5" />
-                    </button>
-                 </div>
-              </div>
-           </div>
+        <!-- Definition -->
+        <div class="tab-description">
+          <p><strong>Downline:</strong> Dgroups you are a leader of, where you mentor others.</p>
         </div>
 
-        <div v-if="primaryDownlineGroup" class="drill-down-view">
-          <div class="drill-header-enhanced">
-            <div class="header-top-row">
-              <div class="group-title-label">Your Group</div>
-            </div>
-            <div class="group-hero">
-                <div class="hero-icon"><Users :size="32" color="white" /></div>
-                <div class="hero-content">
-                    <h2>{{ primaryDownlineGroup.name }}</h2>
-                    <div class="hero-badges">
-                         <div class="info-badge id-badge" @click="copyId(primaryDownlineGroup.dgroupId)">
-                             ID: {{ primaryDownlineGroup.dgroupId }} <Copy :size="12" />
-                         </div>
-                    </div>
-                    <div class="hero-details">
-                       <div class="detail-tag time">
-                          <Clock :size="10" /> {{ primaryDownlineGroup.meetingTime }} • {{ primaryDownlineGroup.meetingDays }}
-                       </div>
-                       <div class="detail-tag interest" v-for="tag in primaryDownlineGroup.interests" :key="tag">
-                         #{{ INTEREST_OPTIONS.find(o => o.id === tag)?.label || tag }}
-                       </div>
-                    </div>
-                    <p class="capacity-sub"><Users :size="12" /> {{ primaryDownlineGroup.members.length }} / {{ primaryDownlineGroup.capacity }} Members</p>
+        <!-- IF NOT A LEADER -->
+        <div v-if="!isLeader" class="empty-state-card encouragement-card">
+           <div class="empty-icon-ring blue-ring"><Users :size="40" color="#3B82F6" /></div>
+           <h3>Ready to lead?</h3>
+           <p class="encourage-text">Has God been prompting you to disciple others?</p>
+           <p>Talk to your Dgroup Leader — they'll guide you, encourage you, and help you take the next step.</p>
+        </div>
+
+        <!-- IF A LEADER -->
+        <template v-else>
+          <!-- Waitlist Section -->
+          <div v-if="myPendingRequests.length > 0" class="requests-card-clean">
+             <div class="req-header-group">
+                <div class="req-header-title">Waitlist & Requests</div>
+                <div class="req-header-badge">{{ myPendingRequests.length }}</div>
+             </div>
+             
+             <div class="requests-list-clean">
+                <div v-for="(req, index) in myPendingRequests" :key="req.id" class="req-item-clean">
+                   <div class="req-main-info">
+                      <span class="req-name-clean">{{ req.firstName }} {{ req.lastName }}</span>
+                      <span class="req-sub-info">
+                        Requested: {{ new Date(req.joinRequest.requestedAt).toLocaleDateString() }}
+                        <span class="bullet">•</span>
+                        {{ getMinistry(req) }}
+                        <span v-if="req.birthday" class="bullet">•</span>
+                        <span v-if="req.birthday">{{ calculateAge(req.birthday) }} yrs old</span>
+                      </span>
+                   </div>
+                   <div class="req-actions-clean">
+                      <button class="btn-req-action approve" @click="handleLeaderResponse(req, 'approve')">
+                          <CheckCircle :size="18" stroke-width="2.5" />
+                      </button>
+                      <button class="btn-req-action reject" @click="handleLeaderResponse(req, 'reject')">
+                          <X :size="18" stroke-width="2.5" />
+                      </button>
+                   </div>
                 </div>
-                <button class="edit-icon-btn" @click="openEditGroupModal"><Pencil :size="16" /></button>
-            </div>
+             </div>
           </div>
 
-          <div class="common-list-card">
-            <div class="list-header label-only">Members List</div>
-            <div v-for="m in primaryDownlineGroup.members" :key="m.id" class="list-item" @click="viewPerson(m)">
-              <div class="avatar-md">{{ m.firstName.charAt(0) }}</div>
-              <div class="info-col">
-                <span class="name">{{ m.firstName }} {{ m.lastName }}</span>
-                <span class="status">{{ m.status || 'Active' }}</span>
+          <div v-if="primaryDownlineGroup" class="drill-down-view">
+            
+            <!-- Modern Group Card -->
+            <div class="drill-header-enhanced">
+              <div class="header-top-row">
+                <div class="group-title-label">Your Group</div>
               </div>
-              <button class="btn-icon-danger" @click.stop="removeMember(m)"><UserMinus :size="18" /></button>
+              <div class="group-hero">
+                  <div class="hero-content">
+                      <h2>{{ primaryDownlineGroup.name }}</h2>
+                      <div class="hero-badges">
+                           <div class="info-badge id-badge" @click="copyId(primaryDownlineGroup.dgroupId)">
+                               ID: {{ primaryDownlineGroup.dgroupId }} <Copy :size="12" />
+                           </div>
+                      </div>
+                      <div class="hero-details">
+                         <div class="detail-tag time">
+                            <Clock :size="10" /> {{ primaryDownlineGroup.meetingTime }} • {{ primaryDownlineGroup.meetingDays }}
+                         </div>
+                         <div class="detail-tag age-tag">
+                            <User :size="10" /> Ages: {{ primaryDownlineGroup.ageRange }}
+                         </div>
+                         <div class="detail-tag interest" v-for="tag in primaryDownlineGroup.interests" :key="tag">
+                           #{{ INTEREST_OPTIONS.find(o => o.id === tag)?.label || tag }}
+                         </div>
+                      </div>
+                      <p class="capacity-sub"><Users :size="12" /> {{ primaryDownlineGroup.members.length }} / {{ primaryDownlineGroup.capacity }} Members</p>
+                  </div>
+                  <button class="edit-icon-btn" @click="openEditGroupModal"><Pencil :size="16" /></button>
+              </div>
             </div>
-            <!-- Empty List Message (Centered) -->
-            <div v-if="primaryDownlineGroup.members.length === 0" class="empty-list-msg-centered">
-                No members yet.
+
+            <div class="common-list-card">
+              <div class="list-header label-only">Members List</div>
+              <div v-for="m in primaryDownlineGroup.members" :key="m.id" class="list-item" @click="viewPerson(m)">
+                <div class="avatar-md">{{ m.firstName.charAt(0) }}</div>
+                <div class="info-col">
+                  <span class="name">{{ m.firstName }} {{ m.lastName }}</span>
+                  <span class="status">{{ m.status || 'Active' }}</span>
+                </div>
+                <button class="btn-icon-danger" @click.stop="removeMember(m)"><UserMinus :size="18" /></button>
+              </div>
+              <!-- Empty List Message (Centered) -->
+              <div v-if="primaryDownlineGroup.members.length === 0" class="empty-list-msg-centered">
+                  No members yet.
+              </div>
             </div>
+            <div style="margin-top:24px"><DgroupAbsenceMonitoring /></div>
           </div>
-          <div style="margin-top:24px"><DgroupAbsenceMonitoring /></div>
-        </div>
+        </template>
       </div>
     </div>
 
@@ -591,6 +639,11 @@ function isPersonLeader(person) {
 <style scoped>
 .dgroup-view { padding: 16px; max-width: 900px; margin: 0 auto; position: relative; }
 
+/* TAB DESCRIPTIONS */
+.tab-description { text-align: center; margin-bottom: 24px; padding: 0 16px; }
+.tab-description p { font-size: 13px; color: #64748B; margin: 0; line-height: 1.5; }
+.tab-description strong { color: #334155; font-weight: 800; }
+
 /* PENDING STATUS BANNER */
 .pending-status-banner { margin-bottom: 32px; }
 .banner-glass { background: linear-gradient(135deg, #ffffff, #f0f7ff); border: 2px solid #e0f2fe; border-radius: 28px; padding: 32px; display: flex; align-items: center; gap: 28px; box-shadow: 0 15px 35px -5px rgba(59, 130, 246, 0.1); position: relative; overflow: hidden; }
@@ -620,27 +673,36 @@ function isPersonLeader(person) {
 /* EMPTY STATE CARD */
 .empty-state-card { background: rgba(255, 255, 255, 0.8); backdrop-filter: blur(10px); border: 2px dashed #E2E8F0; border-radius: 32px; padding: 56px 32px; text-align: center; color: #64748B; margin-bottom: 24px; }
 .empty-icon-ring { width: 88px; height: 88px; background: #F8FAFC; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 24px; border: 2px solid #F1F5F9; }
+.empty-icon-ring.blue-ring { background: #EFF6FF; border-color: #DBEAFE; }
 .empty-state-card h3 { margin: 0 0 10px; font-size: 22px; font-weight: 900; color: #1E293B; }
 .empty-state-card p { font-size: 15px; line-height: 1.6; max-width: 360px; margin: 0 auto; font-weight: 500; }
+.encouragement-card { border-style: solid; border-color: #E0E7FF; background: linear-gradient(180deg, #FFFFFF 0%, #F8FAFC 100%); }
+.encourage-text { font-weight: 700; color: #3B82F6 !important; margin-bottom: 8px !important; }
 
-/* DOWNLINE HEADER */
-.drill-header-enhanced { background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); border-radius: 24px; padding: 28px; border: 5px solid #2391ff; margin-bottom: 24px; position: relative; box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.03); }
+/* MODERN DGROUP HEADER - REMOVED BLUE ICON */
+.drill-header-enhanced { 
+  background: #ffffff; 
+  border-radius: 24px; 
+  padding: 28px; 
+  border: 2px solid #3B82F6; /* Clean blue border */
+  margin-bottom: 24px; 
+  position: relative; 
+  box-shadow: 0 10px 25px -5px rgba(59, 130, 246, 0.1); 
+}
 .header-top-row { margin-bottom: 12px; }
 .group-title-label { font-size: 11px; font-weight: 800; color: #94A3B8; text-transform: uppercase; letter-spacing: 0.05em; }
-.group-hero { display: flex; align-items: flex-start; gap: 24px; }
-.hero-icon { width: 64px; height: 64px; border-radius: 20px; background: linear-gradient(135deg, #3B82F6, #2563EB); display: flex; align-items: center; justify-content: center; box-shadow: 0 8px 16px rgba(37, 99, 235, 0.2); }
+.group-hero { display: flex; flex-direction: column; gap: 16px; } /* Stack vertically without the side icon */
 .hero-content { flex: 1; }
-.hero-content h2 { margin: 0 0 8px; font-size: 24px; font-weight: 900; color: #0F172A; }
+.hero-content h2 { margin: 0 0 12px; font-size: 24px; font-weight: 900; color: #0F172A; }
 .hero-badges { display: flex; gap: 8px; margin-bottom: 12px; }
 .info-badge { font-size: 11px; font-weight: 800; padding: 4px 12px; border-radius: 8px; text-transform: uppercase; display: flex; align-items: center; gap: 6px; }
-.id-badge { background: #F8FAFC; border: 1.5px solid #F1F5F9; color: #64748B; cursor: pointer; }
+.id-badge { background: #F8FAFC; border: 1px solid #F1F5F9; color: #64748B; cursor: pointer; }
 .id-badge:hover { background: #F1F5F9; color: #0F172A; }
-.lifestage-badge { background: #EFF6FF; color: #3B82F6; }
-.hero-details { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+.hero-details { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px; }
 .detail-tag { font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 8px; display: flex; align-items: center; gap: 6px; }
 .detail-tag.time { background: #F8FAFC; color: #475569; }
+.detail-tag.age-tag { background: #F3F4F6; color: #475569; } /* Age Tag styling */
 .detail-tag.interest { background: #EC489915; color: #DB2777; }
-.detail-tag.leader-tag { background: #F0F9FF; color: #0284C7; } /* Special tag for leader in group card */
 .capacity-sub { font-size: 12px; color: #94A3B8; font-weight: 600; margin: 0; display: flex; align-items: center; gap: 6px; }
 .edit-icon-btn { position: absolute; top: 28px; right: 28px; width: 40px; height: 40px; border-radius: 12px; border: 1.5px solid #F1F5F9; background: white; color: #64748B; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s; }
 .edit-icon-btn:hover { border-color: #3B82F6; color: #3B82F6; transform: rotate(15deg); }
@@ -660,112 +722,26 @@ function isPersonLeader(person) {
 .btn-icon-danger:hover { background: #FEE2E2; color: #EF4444; }
 
 /* === WAITLIST SECTION STYLING === */
-.requests-card-clean {
-    background: #FFFAFA; /* Very light reddish tint or white */
-    border: 1px solid #FECACA; /* Light Red Border */
-    border-radius: 16px;
-    padding: 20px;
-    margin-bottom: 24px;
-}
-.req-header-group {
-    margin-bottom: 20px;
-}
-.req-header-title {
-    font-size: 15px;
-    font-weight: 700;
-    color: #334155;
-    margin-bottom: 6px;
-}
-.req-header-badge {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    background: #FEE2E2;
-    color: #EF4444;
-    font-size: 12px;
-    font-weight: 700;
-    height: 24px;
-    min-width: 24px;
-    padding: 0 6px;
-    border-radius: 12px;
-}
-.requests-list-clean {
-    display: flex;
-    flex-direction: column;
-    gap: 0;
-}
-.req-item-clean {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding-top: 16px;
-    border-top: 1px solid #FEE2E2;
-}
-.req-item-clean:first-child {
-    border-top: none;
-    padding-top: 0;
-}
-.req-main-info {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-}
-.req-name-clean {
-    font-size: 16px;
-    font-weight: 700;
-    color: #0F172A;
-}
-.req-sub-info {
-    font-size: 13px;
-    color: #64748B;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-}
-.bullet {
-    color: #CBD5E1;
-    font-size: 10px;
-}
-.req-actions-clean {
-    display: flex;
-    gap: 12px;
-}
-.btn-req-action {
-    width: 40px;
-    height: 40px;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border: none;
-    cursor: pointer;
-    transition: all 0.2s;
-}
-.btn-req-action.approve {
-    background: #DCFCE7;
-    color: #16A34A;
-}
-.btn-req-action.approve:hover {
-    background: #BBF7D0;
-}
-.btn-req-action.reject {
-    background: #FEE2E2;
-    color: #DC2626;
-}
-.btn-req-action.reject:hover {
-    background: #FECACA;
-}
+.requests-card-clean { background: #FFFAFA; border: 1px solid #FECACA; border-radius: 16px; padding: 20px; margin-bottom: 24px; }
+.req-header-group { margin-bottom: 20px; }
+.req-header-title { font-size: 15px; font-weight: 700; color: #334155; margin-bottom: 6px; }
+.req-header-badge { display: inline-flex; align-items: center; justify-content: center; background: #FEE2E2; color: #EF4444; font-size: 12px; font-weight: 700; height: 24px; min-width: 24px; padding: 0 6px; border-radius: 12px; }
+.requests-list-clean { display: flex; flex-direction: column; gap: 0; }
+.req-item-clean { display: flex; align-items: center; justify-content: space-between; padding-top: 16px; border-top: 1px solid #FEE2E2; }
+.req-item-clean:first-child { border-top: none; padding-top: 0; }
+.req-main-info { display: flex; flex-direction: column; gap: 4px; }
+.req-name-clean { font-size: 16px; font-weight: 700; color: #0F172A; }
+.req-sub-info { font-size: 13px; color: #64748B; display: flex; align-items: center; gap: 6px; }
+.bullet { color: #CBD5E1; font-size: 10px; }
+.req-actions-clean { display: flex; gap: 12px; }
+.btn-req-action { width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; border: none; cursor: pointer; transition: all 0.2s; }
+.btn-req-action.approve { background: #DCFCE7; color: #16A34A; }
+.btn-req-action.approve:hover { background: #BBF7D0; }
+.btn-req-action.reject { background: #FEE2E2; color: #DC2626; }
+.btn-req-action.reject:hover { background: #FECACA; }
 
 /* === EMPTY LIST MSG (CENTERED) === */
-.empty-list-msg-centered {
-    padding: 32px;
-    text-align: center;
-    color: #94A3B8;
-    font-size: 14px;
-    font-weight: 500;
-    width: 100%;
-    display: block;
-}
+.empty-list-msg-centered { padding: 32px; text-align: center; color: #94A3B8; font-size: 14px; font-weight: 500; width: 100%; display: block; }
 
 /* SEEKER PROMPT */
 .seeker-prompt { background: white; border-radius: 24px; padding: 40px; text-align: center; border: 2px solid #EFF6FF; margin-top: 20px; }

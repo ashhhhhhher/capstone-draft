@@ -103,6 +103,7 @@ async function handleForgotPassword() {
       <div v-if="showWelcome" class="welcome-overlay">
         <div class="welcome-content">
           <h1>Welcome, {{ welcomeName }}!</h1>
+          <h2 class="brand-title">QONNECT</h2>
           <p>Signing you in...</p>
           <div class="spinner"></div>
         </div>
@@ -297,17 +298,13 @@ p {
   font-size: 14px;
 }
 
-/* Welcome Overlay Styles */
+/* =========================================
+   WELCOME TRANSITION OVERLAY
+   ========================================= */
 .welcome-overlay {
   position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background-image: url('/Transition.jpg');
-  background-size: cover;
-  background-position: center;
-  background-repeat: no-repeat;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background-color: #0f172a;
   z-index: 9999;
   display: flex;
   align-items: center;
@@ -316,21 +313,44 @@ p {
   color: white;
 }
 
+.welcome-overlay::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  /* Reverted to LandingPage with a dark gradient tint to keep white text readable */
+  background-image: linear-gradient(rgba(15, 23, 42, 0.7), rgba(15, 23, 42, 0.7)), url('/LandingPage.jpg');
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  z-index: -1;
+}
+
 .welcome-content {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 16px;
+  z-index: 1;
 }
 
 .welcome-content h1 {
-  font-size: 32px;
-  margin: 0 0 180px 0; /* Huge bottom margin to push this up and the rest down */
-  font-weight: 700;
+  font-size: 26px;
+  margin: 0; 
+  font-weight: 600;
+  opacity: 0.9;
+}
+
+.brand-title {
+  font-size: 52px;
+  font-weight: 1000;
+  margin: 0 0 60px 0; /* Creates space above the "Signing you in..." text */
+  letter-spacing: 2px;
+  text-shadow: 0 4px 12px rgba(255, 255, 255, 0.3);
+  color: #33a0ff;
 }
 
 .welcome-content p {
-  color: rgba(255,255,255,0.8);
+  color: rgba(255,255,255,0.9);
   font-size: 16px;
   margin: 0;
 }
@@ -342,7 +362,7 @@ p {
   border-top-color: white;
   border-radius: 50%;
   animation: spin 1s linear infinite;
-  margin-top: 24px;
+  margin-top: 10px;
 }
 
 @keyframes spin {
@@ -354,5 +374,17 @@ p {
 }
 .fade-enter-from, .fade-leave-to {
   opacity: 0;
+}
+
+/* === MOBILE RESPONSIVENESS === */
+@media (max-width: 768px) {
+  .welcome-content h1 {
+    font-size: 22px;
+  }
+  
+  .brand-title {
+    font-size: 40px;
+    margin-bottom: 40px;
+  }
 }
 </style>

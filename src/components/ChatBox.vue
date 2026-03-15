@@ -395,7 +395,6 @@ function formatTime(timestamp) {
 
 <style scoped>
 .chat-system { position: fixed; bottom: 24px; right: 24px; z-index: 9999; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
-@media (max-width: 768px) { .chat-system { bottom: 80px; right: 16px; } }
 
 .chat-fab { width: 65px; height: 65px; border-radius: 16px; background: transparent; border: none; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15); cursor: pointer; display: flex; align-items: center; justify-content: center; transition: transform 0.2s, background 0.2s, border-radius 0.2s; position: relative; z-index: 10001; padding: 0; }
 .chat-fab:hover { transform: scale(1.05); }
@@ -505,8 +504,33 @@ function formatTime(timestamp) {
 .create-btn:disabled { background: #E2E8F0; cursor: not-allowed; }
 
 .slide-up-enter-active, .slide-up-leave-active { transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1); }
-.slide-up-enter-from, .slide-up-leave-to { transform: translateY(20px); opacity: 0; }
+/* Slightly adjusted animation to look smooth with fixed positioning */
+.slide-up-enter-from, .slide-up-leave-to { transform: translateY(40px) scale(0.98); opacity: 0; }
 .h-full { height: 100%; }
 .loading-msg, .empty-msg { text-align: center; color: #94A3B8; margin-top: 40px; font-size: 13px; }
 .empty-state { text-align: center; color: #94A3B8; padding: 40px 20px; font-size: 13px; }
+
+/* ==========================================================
+   RESPONSIVE OVERHAUL (MOBILE)
+   ========================================================== */
+@media (max-width: 768px) { 
+  .chat-system { 
+    bottom: 80px; 
+    right: 16px; 
+  } 
+  
+  .chat-window {
+    /* Fixed positioning escapes the bottom-right container logic, 
+       ensuring it respects the entire screen bounds */
+    position: fixed; 
+    bottom: 160px; /* Floats perfectly above the red chat button/nav */
+    right: 16px;
+    left: 16px; /* Explicitly forces a 16px margin on BOTH sides */
+    width: auto; /* Overrides the rigid 360px desktop width */
+    height: calc(100vh - 190px); /* Dynamically fills vertical space safely */
+    max-height: 550px;
+    border-radius: 20px;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.25);
+  }
+}
 </style>
