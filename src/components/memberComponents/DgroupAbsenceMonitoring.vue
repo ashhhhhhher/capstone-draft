@@ -75,11 +75,9 @@ function parseYMD(dateStr) {
   return new Date(y, m - 1, d)
 }
 
-function weeksSinceDate(dateObj) {
-  if (!dateObj) return Number.POSITIVE_INFINITY
-  const diffMs = Date.now() - dateObj.getTime()
-  if (diffMs <= 0) return 0
-  return Math.floor(diffMs / (7 * 24 * 60 * 60 * 1000))
+function getTodayStart() {
+  const now = new Date()
+  return new Date(now.getFullYear(), now.getMonth(), now.getDate())
 }
 
 /* ------------------------------------------
@@ -176,76 +174,151 @@ function getAttendanceDateTime(att) {
 }
 
 /* ------------------------------------------
-   PAST EVENTS (NEWEST FIRST)
+   CONSECUTIVE ABSENCE (MAIN EVENTS + DGROUP)
 -------------------------------------------*/
 
-const eventById = computed(() => {
-  const map = new Map()
-  for (const ev of allEvents.value || []) {
-    if (ev?.id) map.set(ev.id, ev)
-  }
-  return map
-})
-
-function findLatestMainEventAttendance(member) {
-  const memberId = member?.id
-  if (!memberId) return null
-
-  const combined = [
+const combinedAttendance = computed(() => {
+  return [
     ...(allAttendance.value || []),
     ...(branchAttendanceLogs.value || [])
   ]
+    .map(att => ({
+      ...att,
+      memberId: att?.memberId || att?.id || null
+    }))
+    .filter(att => !!att.memberId)
+})
 
-  let latest = null
+function eventIsCountable(ev, memberId = null) {
+  if (!ev) return false
+  if (ev.ended) return true
 
-  for (const att of combined) {
-    const attMemberId = att?.memberId || att?.id
-    if (attMemberId !== memberId) continue
+  const evDate = parseYMD(ev.date)
+  if (!evDate) return false
 
-    const linkedEvent = att?.eventId ? eventById.value.get(att.eventId) : null
+  const today = getTodayStart()
 
-    // Prefer explicit WKND/B1G event links when available.
-    // If no event link exists (branch attendance docs), still count as attended.
-    const isTrackedEvent =
-      !linkedEvent ||
-      linkedEvent.eventType === 'service' ||
-      linkedEvent.eventType === 'b1g_event'
+  // Past events are always countable checkpoints.
+  if (evDate < today) return true
 
-    if (!isTrackedEvent) continue
-
-    const seenAt = linkedEvent ? getEventDateTime(linkedEvent) : getAttendanceDateTime(att)
-    if (!latest || seenAt > latest.seenAt) {
-      latest = {
-        seenAt,
-        name: linkedEvent?.name || 'WKND / B1G Event'
-      }
-    }
+  // For today's ongoing event, only count it when this member is already marked present.
+  // This lets a newly checked-in member drop off the absence list immediately,
+  // while avoiding false "absent" counts for members before event end.
+  if (memberId && evDate.getTime() === today.getTime()) {
+    return memberAttendedMainEvent(memberId, ev)
   }
 
-  return latest
+  return false
 }
 
-/* ------------------------------------------
-   LAST SEEN (ANY ATTENDED: DGROUP / WKND / B1G)
--------------------------------------------*/
+function meetingIsCountable(meeting) {
+  if (!meeting) return false
+  if (meeting.ended) return true
 
-function findLastSeenRecord(member) {
-  let latest = findLatestMainEventAttendance(member)
+  // Count a dgroup checkpoint as soon as a report is submitted,
+  // even if the meeting has not been auto-ended yet.
+  if (meeting.submittedBy || meeting.submittedById || meeting.isResubmitted) {
+    return true
+  }
 
-  for (const meeting of dgroupMeetingReports.value || []) {
-    const att = meeting.attendees?.[member.id]
-    if (!att?.isPresent) continue
+  const loggingDate = parseYMD(meeting.loggingDate)
+  if (loggingDate && loggingDate <= getTodayStart()) {
+    return true
+  }
 
-    const seenAt = getMeetingDateTime(meeting)
-    if (!latest || seenAt > latest.seenAt) {
-      latest = {
-        seenAt,
-        name: meeting.meetingTitle || 'Dgroup Meeting'
+  const baseDate = meeting.meetingDate || meeting.loggingDate
+  const parsed = parseYMD(baseDate)
+  if (!parsed) return false
+
+  return parsed < getTodayStart()
+}
+
+function memberAttendedMainEvent(memberId, event) {
+  return combinedAttendance.value.some(att => {
+    if (att.memberId !== memberId) return false
+
+    if (att.eventId && event?.id) {
+      return att.eventId === event.id
+    }
+
+    return !!att.dateOnly && !!event?.date && att.dateOnly === event.date
+  })
+}
+
+function mainEventsForMember(member) {
+  const memberType = member.finalTags?.ageCategory === 'B1G' ? 'b1g_event' : 'service'
+
+  return (allEvents.value || [])
+    .filter(e => e.eventType === memberType)
+    .filter(e => eventIsCountable(e, member.id))
+    .sort((a, b) => getEventDateTime(b) - getEventDateTime(a))
+}
+
+function dgroupMeetingsForCurrentLeader() {
+  const leaderId = myProfile.value?.id || null
+  const leaderName = myName.value || ''
+
+  return (dgroupMeetingReports.value || [])
+    .filter(meeting => {
+      if (!meeting) return false
+      if (!meetingIsCountable(meeting)) return false
+
+      if (leaderId && meeting.dgroupLeaderId) return meeting.dgroupLeaderId === leaderId
+      if (leaderName && meeting.dgroupLeader) return meeting.dgroupLeader === leaderName
+      return true
+    })
+    .sort((a, b) => getMeetingDateTime(b) - getMeetingDateTime(a))
+}
+
+function computeConsecutiveSummary(member) {
+  const checkpoints = []
+
+  for (const ev of mainEventsForMember(member)) {
+    checkpoints.push({
+      at: getEventDateTime(ev),
+      name: ev.name || (ev.eventType === 'b1g_event' ? 'B1G Event' : 'WKND Event'),
+      attended: memberAttendedMainEvent(member.id, ev)
+    })
+  }
+
+  for (const meeting of dgroupMeetingsForCurrentLeader()) {
+    checkpoints.push({
+      at: getMeetingDateTime(meeting),
+      name: meeting.meetingTitle || 'Dgroup Meeting',
+      attended: !!meeting.attendees?.[member.id]?.isPresent
+    })
+  }
+
+  checkpoints.sort((a, b) => b.at - a.at)
+
+  let consecutive = 0
+  let lastSeen = null
+
+  for (const cp of checkpoints) {
+    if (cp.attended) {
+      lastSeen = cp
+      break
+    }
+    consecutive++
+  }
+
+  if (!lastSeen) {
+    const latestAttendance = combinedAttendance.value
+      .filter(att => att.memberId === member.id)
+      .sort((a, b) => getAttendanceDateTime(b) - getAttendanceDateTime(a))[0]
+
+    if (latestAttendance) {
+      lastSeen = {
+        at: getAttendanceDateTime(latestAttendance),
+        name: 'WKND / B1G Event'
       }
     }
   }
 
-  return latest
+  return {
+    consecutive,
+    lastSeen
+  }
 }
 
 /* ------------------------------------------
@@ -254,8 +327,8 @@ function findLastSeenRecord(member) {
 
 const monitored = computed(() => {
   const rows = (downlineMembers.value || []).map(m => {
-    const lastSeen = findLastSeenRecord(m)
-    const weeksSinceLastSeen = weeksSinceDate(lastSeen?.seenAt || null)
+    const summary = computeConsecutiveSummary(m)
+    const lastSeen = summary.lastSeen
 
     return {
       id: m.id,
@@ -263,17 +336,17 @@ const monitored = computed(() => {
       lastName: m.lastName,
       dgroupLeader: m.dgroupLeader || '',
       email: m.email || '',
-      weeksSinceLastSeen,
+      consecutive: summary.consecutive,
       lastSeenName: lastSeen?.name || '',
-      lastSeenDate: lastSeen?.seenAt
-        ? lastSeen.seenAt.toLocaleString()
+      lastSeenDate: lastSeen?.at
+        ? lastSeen.at.toLocaleString()
         : null
     }
   })
 
   return rows
-    .filter(r => r.weeksSinceLastSeen >= 4)
-    .sort((a, b) => b.weeksSinceLastSeen - a.weeksSinceLastSeen)
+    .filter(r => r.consecutive >= 3)
+    .sort((a, b) => b.consecutive - a.consecutive)
 })
 
 /* ------------------------------------------
@@ -281,9 +354,9 @@ const monitored = computed(() => {
 -------------------------------------------*/
 
 function severityClass(count) {
-  if (count >= 6) return 'sev-red'
-  if (count === 5) return 'sev-orange'
-  if (count === 4) return 'sev-yellow'
+  if (count >= 5) return 'sev-red'
+  if (count === 4) return 'sev-orange'
+  if (count === 3) return 'sev-yellow'
   return ''
 }
 
@@ -311,7 +384,7 @@ function messageMember(member) {
 
 async function reportToAdmin(member) {
   const memberName = `${member.firstName} ${member.lastName}`
-  const reportDetails = `Member: ${memberName}\nDGroup Leader: ${member.dgroupLeader || '—'}\nWeeks since last seen: ${Number.isFinite(member.weeksSinceLastSeen) ? member.weeksSinceLastSeen : '6+'}\nLast seen: ${member.lastSeenName || 'Never'} ${member.lastSeenDate ? `— ${member.lastSeenDate}` : ''}\nMember ID: ${member.id}`
+  const reportDetails = `Member: ${memberName}\nDGroup Leader: ${member.dgroupLeader || '—'}\nConsecutive absences: ${member.consecutive}\nLast seen: ${member.lastSeenName || 'Never'} ${member.lastSeenDate ? `— ${member.lastSeenDate}` : ''}\nMember ID: ${member.id}`
 
   try {
     // Prevent duplicate reports
@@ -327,8 +400,8 @@ async function reportToAdmin(member) {
       memberId: member.id,
       memberName,
       dgroupLeader: member.dgroupLeader || '',
-      consecutiveAbsences: Number.isFinite(member.weeksSinceLastSeen) ? member.weeksSinceLastSeen : 999,
-      weeksSinceLastSeen: Number.isFinite(member.weeksSinceLastSeen) ? member.weeksSinceLastSeen : null,
+      consecutiveAbsences: member.consecutive,
+      weeksSinceLastSeen: null,
       lastSeenName: member.lastSeenName || '',
       lastSeenDate: member.lastSeenDate || null,
       reportDetails,
@@ -363,10 +436,10 @@ async function reportToAdmin(member) {
       </div>
 
       <div class="absence-sub-inline">
-        Monitoring weeks since last attendance (Dgroup / WKND / B1G)
-        <span class="legend-pill yellow">4w</span>
-        <span class="legend-pill orange">5w</span>
-        <span class="legend-pill red">6w+</span>
+        Monitoring consecutive absences (WKND/B1G + Dgroup Meetings)
+        <span class="legend-pill yellow">3</span>
+        <span class="legend-pill orange">4</span>
+        <span class="legend-pill red">5+</span>
       </div>
     </div>
 
@@ -384,7 +457,7 @@ async function reportToAdmin(member) {
           v-for="m in monitored"
           :key="m.id"
           class="list-item absence-item"
-          :class="severityClass(m.weeksSinceLastSeen)"
+          :class="severityClass(m.consecutive)"
         >
           <div class="info-col">
             <span class="name">
@@ -398,15 +471,13 @@ async function reportToAdmin(member) {
               </strong>
               <span v-if="m.lastSeenName"> — </span>
               {{ m.lastSeenDate || 'Never' }}
-              <span>
-                ({{ Number.isFinite(m.weeksSinceLastSeen) ? `${m.weeksSinceLastSeen} week(s) ago` : 'Never attended yet' }})
-              </span>
+              <span> ({{ m.consecutive }} consecutive absences)</span>
             </span>
           </div>
 
           <div class="actions">
             <button
-              v-if="m.weeksSinceLastSeen >= 4"
+              v-if="m.consecutive >= 3"
               class="message-btn"
               :class="{ 'done': messagedMembers.has(m.id) }"
               :disabled="messagedMembers.has(m.id)"
@@ -415,7 +486,7 @@ async function reportToAdmin(member) {
               {{ messagedMembers.has(m.id) ? '✓ Messaged' : 'Message' }}
             </button>
             <button
-              v-if="m.weeksSinceLastSeen >= 6"
+              v-if="m.consecutive >= 5"
               class="report-btn"
               :class="{ 'done': reportedMembers.has(m.id) }"
               :disabled="reportedMembers.has(m.id)"
