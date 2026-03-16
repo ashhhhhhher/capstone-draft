@@ -248,9 +248,23 @@ function memberAttendedMainEvent(memberId, event) {
 function mainEventsForMember(member) {
   const memberType = member.finalTags?.ageCategory === 'B1G' ? 'b1g_event' : 'service'
 
+  // Only count events that happened on or after the member's join/creation date.
+  // This prevents newly added members (e.g. bypass sign-ups) from inheriting
+  // all historical events as consecutive absences.
+  const joinDateStr = member.createdAt
+    ? new Date(member.createdAt).toISOString().split('T')[0]
+    : null
+  const memberJoinDate = parseYMD(joinDateStr)
+
   return (allEvents.value || [])
     .filter(e => e.eventType === memberType)
-    .filter(e => eventIsCountable(e, member.id))
+    .filter(e => {
+      if (memberJoinDate) {
+        const evDate = parseYMD(e.date)
+        if (evDate && evDate < memberJoinDate) return false
+      }
+      return eventIsCountable(e, member.id)
+    })
     .sort((a, b) => getEventDateTime(b) - getEventDateTime(a))
 }
 
@@ -288,13 +302,23 @@ function computeConsecutiveSummary(member) {
       attended: !!meeting.attendees?.[member.id]?.isPresent
     })
   }
+  // Determine member join date for filtering
+  const joinDateStr = member.createdAt
+    ? new Date(member.createdAt).toISOString().split('T')[0]
+    : null
+  const memberJoinDate = parseYMD(joinDateStr)
 
-  checkpoints.sort((a, b) => b.at - a.at)
+  // Remove checkpoints that pre-date when the member joined the system
+  const filteredCheckpoints = memberJoinDate
+    ? checkpoints.filter(cp => cp.at >= memberJoinDate)
+    : checkpoints
+
+  filteredCheckpoints.sort((a, b) => b.at - a.at)
 
   let consecutive = 0
   let lastSeen = null
 
-  for (const cp of checkpoints) {
+  for (const cp of filteredCheckpoints) {
     if (cp.attended) {
       lastSeen = cp
       break

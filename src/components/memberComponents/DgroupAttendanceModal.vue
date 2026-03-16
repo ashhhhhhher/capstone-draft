@@ -79,7 +79,9 @@ async function checkExistingReport() {
     try {
         const existing = await attendanceStore.getDgroupMeetingReport(leaderId, weekId.value)
         existingReport.value = existing || null
-        hasSubmittedReport.value = !!existing
+        // Only mark as "submitted" if the report has submission metadata (submittedBy or submittedAt).
+        // A meeting can exist in the database without being submitted yet.
+        hasSubmittedReport.value = !!(existing && (existing.submittedBy))
 
         if (existing) {
             attendanceForm.guests = Number(existing.guests || 0)
