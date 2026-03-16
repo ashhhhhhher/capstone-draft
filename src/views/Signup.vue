@@ -83,7 +83,7 @@ async function handleSignup() {
     console.error("Signup Error:", error)
     if (error.code === 'auth/email-already-in-use') {
       errorMessage.value = 'This email is already in use.'
-    } else if (error.code === 'auth/weak-password') {
+    } else if (error.code === 'auth/password-does-not-meet-requirements') {
       errorMessage.value = 'Password is too weak.'
     } else {
       errorMessage.value = 'An unexpected error occurred during signup.'
@@ -182,7 +182,7 @@ function clearTcError() {
                 :type="showPassword ? 'text' : 'password'" 
                 id="password" 
                 v-model="password" 
-                placeholder="At least 6 characters" 
+                placeholder="At least 8 characters" 
                 required
               >
               <button type="button" class="eye-btn" @click="showPassword = !showPassword">
