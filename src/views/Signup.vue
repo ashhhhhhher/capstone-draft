@@ -190,6 +190,7 @@ function clearTcError() {
                 <Eye v-else :size="18" />
               </button>
             </div>
+            <small class="password-hint">Must be at least 8 characters, include uppercase, lowercase, and a special character.</small>
           </div>
 
           <div class="form-group">
@@ -439,6 +440,8 @@ hr { border: none; border-top: 1px solid #ECEFF1; margin: 16px 0 24px 0; }
 .password-wrapper input { padding-right: 40px; }
 .eye-btn { position: absolute; right: 12px; background: none; border: none; cursor: pointer; color: #78909C; display: flex; align-items: center; padding: 0; }
 .eye-btn:hover { color: #37474F; }
+
+.password-hint { display: block; margin-top: 6px; font-size: 12px; color: #78909C; line-height: 1.4; }
 
 /* Agreement row styling */
 .agree-row { display: flex; align-items: center; gap: 8px; }
