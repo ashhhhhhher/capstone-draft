@@ -24,7 +24,9 @@ import {
   getDocs, 
   orderBy, 
   limit 
-  , onSnapshot
+  , onSnapshot,
+  disableNetwork,
+  enableNetwork
 } from "firebase/firestore";
 
 export const useAuthStore = defineStore('auth', () => {
@@ -35,6 +37,22 @@ export const useAuthStore = defineStore('auth', () => {
   const isLoading = ref(false)
   const isAuthReady = ref(false)
   let profileUnsub = null
+  let pendingProfileUnsub = null
+
+  function cleanupProfileListeners() {
+    if (profileUnsub) {
+      profileUnsub()
+      profileUnsub = null
+    }
+    if (pendingProfileUnsub) {
+      pendingProfileUnsub()
+      pendingProfileUnsub = null
+    }
+
+    // Stop cross-store listeners that rely on auth context.
+    const notificationsStore = useNotificationsStore()
+    notificationsStore.stopNotificationsListener?.()
+  }
   
   // --- 1. PATTERNED ID GENERATION (YYMM##) ---
   // Example: Jan 2026 -> 260101, 260102...
@@ -266,6 +284,13 @@ async function login(email, password) {
 
 
   async function logout() {
+    cleanupProfileListeners()
+    try {
+      // Stop active Firestore streams before auth credentials are removed.
+      await disableNetwork(db)
+    } catch (e) {
+      console.warn('Failed to disable Firestore network during logout:', e)
+    }
     await signOut(auth)
     user.value = null
     userRole.value = null
@@ -277,13 +302,18 @@ async function login(email, password) {
     return new Promise((resolve) => {
       onAuthStateChanged(auth, async (loggedInUser) => {
         if (loggedInUser) {
+          try {
+            await enableNetwork(db)
+          } catch (e) {
+            console.warn('Failed to enable Firestore network after login:', e)
+          }
           user.value = loggedInUser
           // initial fetch
           await fetchUserProfile(loggedInUser.uid)
 
           // setup realtime listeners to react to admin approval/rejection
           // clean up previous listener
-          if (profileUnsub) profileUnsub()
+          cleanupProfileListeners()
 
           // listen to members collection for this user's authUid
           try {
@@ -292,22 +322,38 @@ async function login(email, password) {
             const pendingRef = collection(db, "branches", branchId.value || 'baguio', "pendingMembers");
             const pq = query(pendingRef, where("authUid", "==", loggedInUser.uid));
 
-            profileUnsub = onSnapshot(mq, (snap) => {
-              if (!snap.empty) {
-                userRole.value = 'member';
-                branchId.value = branchId.value || 'baguio';
-                userProfile.value = snap.docs[0].data();
+            profileUnsub = onSnapshot(
+              mq,
+              (snap) => {
+                if (!snap.empty) {
+                  userRole.value = 'member';
+                  branchId.value = branchId.value || 'baguio';
+                  userProfile.value = snap.docs[0].data();
+                }
+              },
+              (err) => {
+                if (err?.code !== 'permission-denied') {
+                  console.warn('Member profile listener error:', err)
+                }
               }
-            })
+            )
 
             // Also listen to pending registration changes
-            onSnapshot(pq, (snap) => {
-              if (!snap.empty) {
-                userRole.value = 'pending';
-                branchId.value = branchId.value || 'baguio';
-                userProfile.value = snap.docs[0].data();
+            pendingProfileUnsub = onSnapshot(
+              pq,
+              (snap) => {
+                if (!snap.empty) {
+                  userRole.value = 'pending';
+                  branchId.value = branchId.value || 'baguio';
+                  userProfile.value = snap.docs[0].data();
+                }
+              },
+              (err) => {
+                if (err?.code !== 'permission-denied') {
+                  console.warn('Pending profile listener error:', err)
+                }
               }
-            })
+            )
           } catch (e) {
             console.warn('Failed to setup realtime profile listeners', e)
           }
@@ -316,6 +362,7 @@ async function login(email, password) {
               await fetchMemberProfile(loggedInUser.uid, branchId.value);
           }
         } else {
+          cleanupProfileListeners()
           user.value = null
           userRole.value = null
           branchId.value = null

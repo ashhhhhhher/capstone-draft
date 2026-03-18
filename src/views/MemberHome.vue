@@ -132,7 +132,6 @@ watch(() => authStore.userProfile, () => {
   const leaderId = resolveMeetingLeaderId()
   startMeetingsListener(leaderId)
 })
-watch(memberProfile, (v) => startMeetingsListener(v?.id))
 onUnmounted(() => stopMeetingsListener())
 
 const upcomingEvents = computed(() => {

@@ -259,7 +259,7 @@ export const useDgroupEventsStore = defineStore('dgroupevents', () => {
  * Real-time listener for meetings under a dgroup.
  * Returns an unsubscribe function.
  */
-async function listenToDgroupMeetings(dgroupLeaderId, callback) {
+function listenToDgroupMeetings(dgroupLeaderId, callback) {
   const authStore = useAuthStore()
   if (!authStore.branchId || !dgroupLeaderId) return () => {}
   const pendingAutoEndWrites = new Set()
@@ -299,7 +299,9 @@ async function listenToDgroupMeetings(dgroupLeaderId, callback) {
 
       try { callback(results) } catch (e) { console.error('dgroupevents callback error', e) }
     }, err => {
-      console.error('listenToDgroupMeetings onSnapshot error:', err)
+      if (err?.code !== 'permission-denied') {
+        console.error('listenToDgroupMeetings onSnapshot error:', err)
+      }
     })
     return unsub
   } catch (e) {

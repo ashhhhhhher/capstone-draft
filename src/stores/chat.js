@@ -110,15 +110,23 @@ export const useChatStore = defineStore('chat', () => {
         where('participants', 'array-contains', id)
       )
 
-      return onSnapshot(qChats, snapshot => {
-        snapshot.docs.forEach(d => {
-          merged.set(d.id, {
-            id: d.id,
-            ...d.data()
+      return onSnapshot(
+        qChats,
+        snapshot => {
+          snapshot.docs.forEach(d => {
+            merged.set(d.id, {
+              id: d.id,
+              ...d.data()
+            })
           })
-        })
-        chats.value = Array.from(merged.values())
-      })
+          chats.value = Array.from(merged.values())
+        },
+        err => {
+          if (err?.code !== 'permission-denied') {
+            console.error('chat list onSnapshot error:', err)
+          }
+        }
+      )
     })
 
     chatsUnsub = unsubs
@@ -156,20 +164,28 @@ export const useChatStore = defineStore('chat', () => {
       orderBy('createdAt', 'asc')
     )
 
-    messagesUnsub = onSnapshot(msgsQuery, snapshot => {
+    messagesUnsub = onSnapshot(
+      msgsQuery,
+      snapshot => {
 
-      messages.value = snapshot.docs.map(d => ({
-        id: d.id,
-        ...d.data()
-      }))
+        messages.value = snapshot.docs.map(d => ({
+          id: d.id,
+          ...d.data()
+        }))
 
-      isLoadingMessages.value = false
+        isLoadingMessages.value = false
 
-      if (activeChatId.value === chatId) {
-        markAsRead(chatId)
+        if (activeChatId.value === chatId) {
+          markAsRead(chatId)
+        }
+
+      },
+      err => {
+        if (err?.code !== 'permission-denied') {
+          console.error('chat messages onSnapshot error:', err)
+        }
       }
-
-    })
+    )
 
   }
 
@@ -385,6 +401,23 @@ export const useChatStore = defineStore('chat', () => {
 
   }
 
+  function stopAllChatListeners() {
+    if (chatsUnsub) {
+      if (Array.isArray(chatsUnsub)) chatsUnsub.forEach(u => u && u())
+      else chatsUnsub()
+      chatsUnsub = null
+    }
+    if (messagesUnsub) {
+      messagesUnsub()
+      messagesUnsub = null
+    }
+    activeChatId.value = null
+    chats.value = []
+    messages.value = []
+    isLoadingMessages.value = false
+    shouldOpenChatBox.value = false
+  }
+
 
   function resetChatBoxSignal() {
 
@@ -411,6 +444,7 @@ export const useChatStore = defineStore('chat', () => {
     openPrivateChatWith,
     createGroupChat,
     clearActiveChat,
+    stopAllChatListeners,
     resetChatBoxSignal,
     markAsRead
 

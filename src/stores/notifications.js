@@ -67,18 +67,34 @@ export const useNotificationsStore = defineStore('notifications', () => {
 
     if (unsubscribe) unsubscribe()
 
-    unsubscribe = onSnapshot(q, (snapshot) => {
-      localNotifications.value = snapshot.docs.map(docSnap => ({
-        id: docSnap.id,
-        header: docSnap.data().header,
-        body: docSnap.data().body,
-        type: docSnap.data().type || 'info',
-        // support both payload styles used in the app: `focus` and legacy `reference`
-        focus: docSnap.data().focus || docSnap.data().reference || null,
-        read: docSnap.data().read || false,
-        createdAt: docSnap.data().createdAt
-      }))
-    })
+    unsubscribe = onSnapshot(
+      q,
+      (snapshot) => {
+        localNotifications.value = snapshot.docs.map(docSnap => ({
+          id: docSnap.id,
+          header: docSnap.data().header,
+          body: docSnap.data().body,
+          type: docSnap.data().type || 'info',
+          // support both payload styles used in the app: `focus` and legacy `reference`
+          focus: docSnap.data().focus || docSnap.data().reference || null,
+          read: docSnap.data().read || false,
+          createdAt: docSnap.data().createdAt
+        }))
+      },
+      (err) => {
+        if (err?.code !== 'permission-denied') {
+          console.error('notifications onSnapshot error:', err)
+        }
+      }
+    )
+  }
+
+  function stopNotificationsListener() {
+    if (typeof unsubscribe === 'function') {
+      unsubscribe()
+      unsubscribe = null
+    }
+    localNotifications.value = []
   }
 
   // 🔹 Send notification to specific user
@@ -306,6 +322,7 @@ async function notifyAdminsAbsenceReport(branchId, memberName, reportDetails) {
     localNotifications,
     unreadCount,
     initUserNotifications,
+    stopNotificationsListener,
     sendToUser,
     markAsRead,
     clearLocalNotifications,

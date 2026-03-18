@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { useMembersStore } from '../../stores/members'
 import { db } from '../../firebase'
 import { collectionGroup, onSnapshot } from 'firebase/firestore'
@@ -13,6 +13,7 @@ const logs = ref([])
 const loading = ref(true)
 const selectedWeekId = ref('') // Week ID like 260308-14
 const membersStore = useMembersStore()
+let unsubscribeLogs = null
 
 // BUG FIX: Parse dates manually to avoid timezone shifting (the JS off-by-one date bug)
 function parseYMD(dateStr) {
@@ -32,7 +33,7 @@ function localYMD(input) {
 onMounted(() => {
   const authStore = useAuthStore()
   const cg = collectionGroup(db, 'meetings')
-  onSnapshot(cg, (snapshot) => {
+  unsubscribeLogs = onSnapshot(cg, (snapshot) => {
     const items = []
     snapshot.forEach(docSnap => {
       const path = docSnap.ref.path
@@ -61,8 +62,19 @@ onMounted(() => {
         selectedWeekId.value = generateWeekId(localYMD())
       }
     }
+  }, (err) => {
+    if (err?.code !== 'permission-denied') {
+      console.error('DgroupWeeklyLogs onSnapshot error:', err)
+    }
   })
   membersStore.fetchMembers()
+})
+
+onUnmounted(() => {
+  if (typeof unsubscribeLogs === 'function') {
+    unsubscribeLogs()
+    unsubscribeLogs = null
+  }
 })
 
 function toISODate(d) {
