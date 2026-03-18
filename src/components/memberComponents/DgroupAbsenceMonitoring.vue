@@ -500,7 +500,7 @@ async function reportToAdmin(member) {
           </div>
 
           <div class="actions">
-            <button
+            <!--TEMPORARY <button
               v-if="m.consecutive >= 3"
               class="message-btn"
               :class="{ 'done': messagedMembers.has(m.id) }"
@@ -508,7 +508,7 @@ async function reportToAdmin(member) {
               @click="messageMember(m)"
             >
               {{ messagedMembers.has(m.id) ? '✓ Messaged' : 'Message' }}
-            </button>
+            </button> -->
             <button
               v-if="m.consecutive >= 5"
               class="report-btn"
