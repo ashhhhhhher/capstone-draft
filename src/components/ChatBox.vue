@@ -181,7 +181,9 @@ function formatTime(timestamp) {
 </script>
 
 <template>
-  <div class="chat-system" v-if="!hideChatBox">
+  <!-- 🛑 CHATBOX TEMPORARILY DISABLED FOR TESTING 🛑 -->
+  <!-- Change `v-if="false"` back to `v-if="!hideChatBox"` when you want to bring it back -->
+  <div class="chat-system" v-if="false">
     
     <!-- FLOATING TOGGLE BUTTON -->
     <button class="chat-fab" @click="toggleChat" :class="{ 'is-open': isOpen }">
