@@ -50,8 +50,7 @@ const editGroupForm = reactive({
   capacity: 12,
   interests: [],
   meetingTime: 'Flexible',
-  meetingDays: 'Flexible',
-  civilStatus: 'N/A'
+  meetingDays: 'Flexible'
 })
 
 const dgroupIdInput = ref('')
@@ -199,7 +198,6 @@ function openEditGroupModal() {
   editGroupForm.interests = myProfile.value.dgroupDetails?.interests || []
   editGroupForm.meetingTime = myProfile.value.dgroupDetails?.meetingTime || 'Flexible'
   editGroupForm.meetingDays = myProfile.value.dgroupDetails?.meetingDays || 'Flexible'
-  editGroupForm.civilStatus = myProfile.value.civilStatus || 'N/A'
   showEditGroupModal.value = true
 }
 
@@ -214,7 +212,6 @@ async function saveGroupDetails() {
     await authStore.updateExtendedProfile({
       dgroupName: editGroupForm.dgroupName,
       dgroupCapacity: editGroupForm.capacity,
-      civilStatus: editGroupForm.civilStatus,
       dgroupDetails: {
         interests: editGroupForm.interests,
         meetingTime: editGroupForm.meetingTime,
@@ -374,7 +371,7 @@ function isPersonLeader(person) {
                           <User :size="10" /> Ages: {{ myUplineAgeRange }}
                        </div>
                        <div class="detail-tag interest" v-for="tag in myMemberGroupDetails.interests" :key="tag">
-                         #{{ INTEREST_OPTIONS.find(o => o.id === tag)?.label || tag }}
+                          #{{ INTEREST_OPTIONS.find(o => o.id === tag)?.label || tag }}
                        </div>
                     </div>
                     <p class="capacity-sub"><Users :size="12" /> {{ myUplineGroup.length }} / {{ myMemberGroupDetails.capacity }} Members</p>
@@ -533,15 +530,6 @@ function isPersonLeader(person) {
           <div class="form-section">
             <label>Group Name</label>
             <input v-model="editGroupForm.dgroupName" class="modern-input" />
-          </div>
-
-          <div class="form-section">
-            <label>Dgroup Leader Civil Status</label>
-            <select v-model="editGroupForm.civilStatus" class="modern-select">
-              <option value="N/A">N/A</option>
-              <option value="Single">Single</option>
-              <option value="Married">Married</option>
-            </select>
           </div>
 
           <div class="form-section">

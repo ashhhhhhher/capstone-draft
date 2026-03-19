@@ -1,13 +1,15 @@
 <script setup>
 import { ref, onMounted, reactive, computed } from 'vue'
 import { useAuthStore } from '../stores/auth'
+import { useMembersStore } from '../stores/members' // <-- Added import
 import { storage } from '../firebase'
 import { ref as storageRef, uploadBytesResumable, getDownloadURL, deleteObject } from "firebase/storage"
 import { getAuth, verifyBeforeUpdateEmail } from "firebase/auth" // Import specific auth functions
 import { v4 as uuidv4 } from 'uuid'
-import { Camera, Save, Lock, Mail, Phone, Facebook, GraduationCap, X, Upload, Users } from 'lucide-vue-next'
+import { Camera, Save, Lock, Mail, Phone, Facebook, GraduationCap, X, Upload, Users, Heart } from 'lucide-vue-next'
 
 const authStore = useAuthStore()
+const membersStore = useMembersStore() // <-- Initialized membersStore
 const auth = getAuth()
 
 const isLoading = ref(false)
@@ -47,7 +49,8 @@ const profile = reactive({
   contactNumber: '',
   fbAccount: '',
   profilePicture: '',
-  lifeStage: ''
+  lifeStage: '',
+  civilStatus: 'N/A'
 })
 
 // --- Password Data ---
@@ -80,7 +83,8 @@ onMounted(() => {
       contactNumber: p.contactNumber || '',
       fbAccount: p.fbAccount || '',
       profilePicture: p.profilePicture || '',
-      lifeStage: p.finalTags?.lifeStage || ''
+      lifeStage: p.finalTags?.lifeStage || '',
+      civilStatus: p.civilStatus || 'N/A'
     })
 
     // Set initial dropdown state based on saved school
@@ -237,6 +241,7 @@ async function saveProfile() {
     // or we can save it for record keeping, but Auth email is source of truth.
     // Let's save it to Firestore profile for display consistency.
     email: profile.email,
+    civilStatus: profile.civilStatus,
     finalTags: {
       ...(authStore.userProfile.finalTags || {}),
       lifeStage: profile.lifeStage
@@ -245,6 +250,12 @@ async function saveProfile() {
 
   try {
     await authStore.updateExtendedProfile(updates)
+    
+    // --> FIXED: Force the members store to re-fetch so Dgroups directory updates instantly! <--
+    if (membersStore.fetchMembers) {
+      await membersStore.fetchMembers()
+    }
+
     alert("Personal details saved successfully!")
   } catch (e) {
     console.error(e)
@@ -350,6 +361,20 @@ async function updatePassword() {
         </div>
 
         <div class="input-group">
+          <label>Civil Status</label>
+          <div class="input-wrapper">
+            <Heart :size="18" class="icon" />
+            <select v-model="profile.civilStatus">
+              <option value="N/A">N/A</option>
+              <option value="Single">Single</option>
+              <option value="Married">Married</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="input-group full">
           <label>School / Workplace</label>
           <div class="input-wrapper">
             <GraduationCap :size="18" class="icon" />
