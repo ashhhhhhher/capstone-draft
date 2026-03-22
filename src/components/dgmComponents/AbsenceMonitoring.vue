@@ -126,7 +126,7 @@ defineExpose({ buildAbsenceNotifications })
           <div class="report-meta">ID: {{ r.memberId || '—' }}</div>
           <pre class="report-message">{{ r.message }}</pre>
           <div class="report-actions">
-            <!--TEMPORARY <button v-if="r.memberId" class="message-btn" @click="messageMemeber(r.memberId, r.name)">Message</button> -->
+           <button v-if="r.memberId" class="message-btn" @click="messageMemeber(r.memberId, r.name)">Message</button>
             <button v-if="r.memberId" class="archive-btn" @click="archiveMember(r.memberId, r.id)">Archive Member</button>
             <button class="delete-btn" @click="deleteReport(r.id)">Delete</button>
           </div>
