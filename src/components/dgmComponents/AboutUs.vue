@@ -38,7 +38,6 @@ const features = {
   }
 }
 
-// Logic to auto-open feature and toggle global body class for chatbox
 watch(() => props.isOpen, (newVal) => {
   if (newVal) {
     document.body.classList.add('about-us-open');
@@ -50,15 +49,8 @@ watch(() => props.isOpen, (newVal) => {
   }
 });
 
-onMounted(() => {
-  if (props.isOpen) {
-    document.body.classList.add('about-us-open');
-  }
-});
-
-onUnmounted(() => {
-  document.body.classList.remove('about-us-open');
-});
+onMounted(() => { if (props.isOpen) document.body.classList.add('about-us-open'); });
+onUnmounted(() => { document.body.classList.remove('about-us-open'); });
 
 function handleClose() { 
   emit('close'); 
@@ -80,14 +72,11 @@ function closeFeature() { selectedFeature.value = null }
   <transition name="slide-up">
     <div v-if="isOpen" class="about-view-overlay">
       
-      <!-- Feature Details Modal -->
       <transition name="fade">
         <div v-if="selectedFeature" class="feature-modal-backdrop" @click.self="closeFeature">
           <div class="feature-modal-content premium-layout">
             <button class="modal-close-circle" @click="closeFeature">✕</button>
             <div class="modal-flex-container">
-              
-              <!-- Left/Top Image Gallery Area -->
               <div class="modal-visual-pane">
                 <div class="gallery-label"><span class="red-dash"></span> EXPERIENCE THE MOVEMENT</div>
                 <div class="modal-gallery-wrapper custom-scrollbar">
@@ -101,8 +90,6 @@ function closeFeature() { selectedFeature.value = null }
                   <span class="hint-text">Scroll or Swipe to explore →</span>
                 </div>
               </div>
-
-              <!-- Right/Bottom Text Information Area -->
               <div class="modal-info-pane">
                 <div class="header-stack">
                   <h2 class="title-main">{{ selectedFeature.title.split(' ')[0] }}</h2>
@@ -113,49 +100,60 @@ function closeFeature() { selectedFeature.value = null }
                   <p class="premium-desc">{{ selectedFeature.longDesc }}</p>
                   <div class="premium-info-card">
                     <div class="icon-wrap">📍</div>
-                    <div class="text-wrap">
-                      <span class="label">LOCATION & TIME</span>
-                      <p>{{ selectedFeature.info }}</p>
-                    </div>
+                    <div class="text-wrap"><span class="label">LOCATION & TIME</span><p>{{ selectedFeature.info }}</p></div>
                   </div>
                 </div>
                 <button class="btn-cta-red" @click="closeFeature">CLOSE PREVIEW</button>
               </div>
-
             </div>
           </div>
         </div>
       </transition>
 
-      <!-- Main About Us Navigation -->
       <nav class="about-internal-nav">
         <button class="nav-back-circle" @click="handleClose">←</button>
-
         <button class="hamburger" :class="{ 'nav-active': isMobileMenuOpen }" @click="isMobileMenuOpen = !isMobileMenuOpen">
           <span></span><span></span><span></span>
         </button>
-
         <div class="nav-links" :class="{ 'nav-active': isMobileMenuOpen }">
           <button @click="scrollToSection('hero')">Home</button>
+          <button @click="scrollToSection('organizations')">Organizations</button>
           <button @click="scrollToSection('mission-vision')">Mission</button>
           <button @click="scrollToSection('whatwedo')">Programs</button>
           <button @click="scrollToSection('contact')">Contact</button>
         </div>
       </nav>
       
-      <!-- Main Content Container -->
       <div class="about-scroll-container" ref="scrollContainer">
         
-        <!-- Hero Section -->
         <section id="hero" class="hero-section" style="background-image: url('/northwest.jpg')">
           <div class="content-overlay dark-grad">
             <img src="/elevate word.PNG" alt="ELEVATE" class="hero-logo" />
             <p class="hero-text">Taking students to the next <span class="highlight-red">LEVEL</span> through <br><span class="white-box-text">Values, Excellence, and Leadership.</span></p>
-            <div class="scroll-indicator" @click="scrollToSection('mission-vision')">↓</div>
+            <div class="scroll-indicator" @click="scrollToSection('organizations')">↓</div>
           </div>
         </section>
 
-        <!-- Mission / Vision -->
+        <!-- Elevate & B1G Organizations Section -->
+        <section id="organizations" class="orgs-section">
+          <div class="orgs-container">
+            <div class="org-card elevate-card">
+              <div class="org-content">
+                <div class="org-tag">STUDENT MOVEMENT</div>
+                <h2>ELEVATE</h2>
+                <p>A global student organization that aims to take students to the next <span class="text-red">L.E.V.E.L.</span> — we want every student to experience a <strong>Life Empowered by Values, Excellence, and Leadership!</strong></p>
+              </div>
+            </div>
+            <div class="org-card b1g-card">
+              <div class="org-content">
+                <div class="org-tag">YOUNG PROFESSIONALS</div>
+                <h2>B1G (Be One with God)</h2>
+                <p><strong>Be One with God</strong> — a community of single (not-yet-married) people who gather to know more about Jesus and life's real purpose.</p>
+              </div>
+            </div>
+          </div>
+        </section>
+
         <section id="mission-vision" class="mission-vision-section">
           <div class="mv-container">
             <div class="mv-card white-theme">
@@ -191,7 +189,6 @@ function closeFeature() { selectedFeature.value = null }
 
         <div id="whatwedo" class="divider-header"><h2>WHAT WE DO</h2><span class="red-line"></span></div>
 
-        <!-- Features Grid -->
         <section class="what-we-do-grid">
           <div v-for="(f, k) in features" :key="k" class="feature-col" :style="{ backgroundImage: `url('${f.img}')` }" @click="openFeature(k)">
             <div class="col-overlay-static">
@@ -202,7 +199,6 @@ function closeFeature() { selectedFeature.value = null }
           </div>
         </section>
 
-        <!-- Contact Section -->
         <section id="contact" class="contact-section">
           <div class="contact-container">
             <h2 class="section-title white-text">Contact Us</h2>
@@ -233,12 +229,12 @@ function closeFeature() { selectedFeature.value = null }
 .custom-scrollbar::-webkit-scrollbar-thumb { background: #D32F2F; border-radius: 10px; }
 
 /* NAVIGATION */
-.about-internal-nav { position: absolute; top: 0; left: 0; right: 0; z-index: 3100; height: 80px; display: flex; align-items: center; padding: 0 5%; background: linear-gradient(to bottom, rgba(0,0,0,0.8), transparent); justify-content: space-between; }
+.about-internal-nav { position: absolute; top: 0; left: 0; right: 0; z-index: 3100; height: 80px; display: flex; align-items: center; padding: 0 5%; background: rgba(10, 10, 10, 0.95); border-bottom: 1px solid rgba(255, 255, 255, 0.1); backdrop-filter: blur(10px); justify-content: space-between; box-shadow: 0 4px 20px rgba(0,0,0,0.5); }
 .nav-back-circle { width: 45px; height: 45px; border-radius: 50%; border: 1px solid rgba(255,255,255,0.2); background: rgba(0,0,0,0.3); color: white; cursor: pointer; backdrop-filter: blur(5px); transition: 0.3s; display: flex; align-items: center; justify-content: center; z-index: 3200; }
 .nav-back-circle:hover { background: #D32F2F; border-color: #D32F2F; transform: scale(1.1); }
 .nav-links { display: flex; gap: 25px; }
-.nav-links button { background: none; border: none; color: #aaa; font-weight: 700; cursor: pointer; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 2px; transition: 0.3s; }
-.nav-links button:hover { color: #fff; }
+.nav-links button { background: none; border: none; color: #fff; font-weight: 800; cursor: pointer; font-size: 0.9rem; text-transform: uppercase; letter-spacing: 2px; transition: 0.3s; text-shadow: 0 2px 4px rgba(0,0,0,0.8); }
+.nav-links button:hover { color: #D32F2F; }
 
 /* HAMBURGER MENU */
 .hamburger { display: none; flex-direction: column; justify-content: space-around; width: 30px; height: 24px; background: transparent; border: none; cursor: pointer; padding: 0; z-index: 3200; }
@@ -246,6 +242,18 @@ function closeFeature() { selectedFeature.value = null }
 .hamburger.nav-active span:first-child { transform: rotate(45deg); }
 .hamburger.nav-active span:nth-child(2) { opacity: 0; }
 .hamburger.nav-active span:nth-child(3) { transform: rotate(-45deg); }
+
+/* ORGS SECTION */
+.orgs-section { padding: 120px 5%; background: #050505; }
+.orgs-container { display: flex; gap: 30px; max-width: 1300px; margin: 0 auto; flex-wrap: wrap; }
+.org-card { flex: 1; min-width: 300px; padding: 60px 40px; border-radius: 24px; position: relative; overflow: hidden; transition: 0.5s; border: 1px solid rgba(255,255,255,0.05); }
+.elevate-card { background: linear-gradient(135deg, #111, #1a1a1a); }
+.b1g-card { background: linear-gradient(135deg, #1a1a1a, #111); }
+.org-card:hover { transform: translateY(-10px); border-color: #D32F2F; box-shadow: 0 20px 40px rgba(0,0,0,0.6); }
+.org-tag { font-size: 11px; font-weight: 900; color: #D32F2F; letter-spacing: 3px; margin-bottom: 20px; }
+.org-card h2 { font-size: 3.5rem; font-weight: 900; margin-bottom: 20px; letter-spacing: -2px; }
+.org-card p { font-size: 1.15rem; line-height: 1.7; color: #ccc; }
+.text-red { color: #D32F2F; font-weight: 900; }
 
 /* SECTIONS */
 .hero-section, .verse-section { min-height: 100vh; background-size: cover; background-position: center; display: flex; align-items: center; justify-content: center; background-color: #000; background-repeat: no-repeat; }
@@ -303,29 +311,9 @@ function closeFeature() { selectedFeature.value = null }
 .modal-gallery-wrapper { flex: 1; display: flex; gap: 20px; overflow-x: auto; padding: 10px 0 20px; snap-type: x mandatory; }
 
 /* FIXED IMAGE SIZING FOR RESPONSIVENESS */
-.gallery-card-large { 
-  min-width: 450px; 
-  height: 100%; 
-  position: relative; 
-  border-radius: 20px; 
-  overflow: hidden; 
-  snap-align: center; 
-  box-shadow: 0 20px 40px rgba(0,0,0,0.1); 
-  transition: 0.5s; 
-  flex-shrink: 0; 
-  background: #000; /* Use black to frame the contained images cleanly */
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.gallery-card-large img { 
-  width: 100%; 
-  height: 100%; 
-  object-fit: contain !important; /* CRUCIAL FIX: Ensures entire photo is visible without cropping */
-  transition: 0.5s; 
-}
+.gallery-card-large { min-width: 450px; height: 100%; position: relative; border-radius: 20px; overflow: hidden; snap-align: center; box-shadow: 0 20px 40px rgba(0,0,0,0.1); transition: 0.5s; flex-shrink: 0; background: #000; display: flex; align-items: center; justify-content: center; }
+.gallery-card-large img { width: 100%; height: 100%; object-fit: contain !important; transition: 0.5s; }
 .gallery-card-large:hover img { transform: scale(1.05); }
-
 .card-number { position: absolute; top: 20px; left: 20px; background: #D32F2F; color: #fff; padding: 6px 12px; border-radius: 10px; font-weight: 900; font-size: 13px; box-shadow: 0 10px 20px rgba(211,47,47,0.3); }
 .gallery-footer-info { display: flex; justify-content: space-between; align-items: center; margin-top: 15px; flex-shrink: 0; }
 .scroll-dots { display: flex; gap: 8px; }
@@ -364,11 +352,6 @@ function closeFeature() { selectedFeature.value = null }
 .fade-enter-active, .fade-leave-active { transition: opacity 0.3s; }
 .fade-enter-from, .fade-leave-to { opacity: 0; }
 
-/* ==========================================================
-   RESPONSIVE OVERHAUL (TABLET & MOBILE)
-   ========================================================== */
-
-/* TABLET ADJUSTMENTS */
 @media (max-width: 1024px) { 
   .modal-flex-container { flex-direction: column; overflow-y: auto; } 
   .modal-visual-pane { flex: none; height: auto; padding: 30px; border-right: none; border-bottom: 1px solid #e2e8f0; } 
@@ -378,135 +361,53 @@ function closeFeature() { selectedFeature.value = null }
   .feature-modal-content.premium-layout { height: 92vh; width: 95%; margin: auto; border-radius: 20px; } 
 }
 
-/* MOBILE-SPECIFIC ADJUSTMENTS */
 @media (max-width: 768px) {
-  
-  /* Mobile Navigation Setup */
   .hamburger { display: flex; }
-  .nav-links {
-    position: fixed; 
-    top: 75px; 
-    right: 5%; 
-    width: 180px; 
-    background: rgba(15, 15, 15, 0.98); 
-    backdrop-filter: blur(10px);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 16px;
-    padding: 20px;
-    flex-direction: column; 
-    align-items: flex-end; 
-    gap: 15px;
-    transform: translateY(-15px);
-    opacity: 0;
-    visibility: hidden;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); 
-    box-shadow: 0 10px 30px rgba(0,0,0,0.6);
-  }
+  .nav-links { position: fixed; top: 75px; right: 5%; width: 180px; background: rgba(15, 15, 15, 0.98); backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 16px; padding: 20px; flex-direction: column; align-items: flex-end; gap: 15px; transform: translateY(-15px); opacity: 0; visibility: hidden; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); box-shadow: 0 10px 30px rgba(0,0,0,0.6); }
   .nav-links.nav-active { transform: translateY(0); opacity: 1; visibility: visible; }
   .nav-links button { font-size: 0.85rem; text-align: right; width: 100%; padding: 8px 0; }
-  
-  /* Typography & Hero Resizing - Switched to Cover with shorter heights to prevent extreme cropping */
-  .hero-section, .verse-section { 
-    min-height: 60vh; /* Reduces vertical stretching and side-cropping */
-    background-size: cover; 
-    background-position: center; 
-    background-repeat: no-repeat;
-  }
+  .hero-section, .verse-section { min-height: 60vh; background-size: cover; background-position: center; background-repeat: no-repeat; }
   .hero-text { font-size: 1.1rem; padding: 0 15px; }
   .white-box-text { padding: 4px 10px; font-size: 1rem; line-height: 2; }
   .bible-verse { font-size: 1.3rem; padding: 0 15px; }
   .section-title { font-size: 2.2rem; }
   .divider-header h2 { font-size: 1.8rem; }
-  
-  /* Mission & Vision Constraints */
+  .org-card { padding: 40px 25px; }
+  .org-card h2 { font-size: 2.5rem; }
   .mission-vision-section { padding: 70px 20px; }
   .mv-container { gap: 20px; }
   .mv-inner { padding: 40px 25px; }
   .mv-card h3 { font-size: 1.7rem; }
   .mv-card p { font-size: 1rem; }
-
-  /* Feature Grid Resizing */
   .what-we-do-grid { flex-direction: column; }
   .feature-col { min-width: 100%; min-height: 350px; flex-basis: 100%; }
   .col-overlay-static { padding: 30px 25px; }
   .feature-title { font-size: 1.5rem; }
   .feature-desc { font-size: 0.95rem; }
-  
-  /* Modal Overlay Complete Mobile Overhaul */
-  .feature-modal-content.premium-layout {
-    height: 85vh; /* Prevents overflow into mobile browser UI */
-    border-radius: 16px;
-  }
-  
-  .modal-close-circle {
-    top: 10px; right: 10px; width: 32px; height: 32px; font-size: 1rem;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
-    background: #fff; color: #000; z-index: 5000;
-  }
-  
-  /* Change modal to scroll naturally top-to-bottom */
-  .modal-flex-container { 
-    display: block; 
-    overflow-y: auto; 
-    height: 100%;
-    padding-bottom: 20px;
-  }
-  
-  .modal-visual-pane { 
-    padding: 20px 15px 10px 15px; 
-    display: block; 
-    height: auto;
-  }
-  
+  .feature-modal-content.premium-layout { height: 85vh; border-radius: 16px; }
+  .modal-close-circle { top: 10px; right: 10px; width: 32px; height: 32px; font-size: 1rem; box-shadow: 0 2px 8px rgba(0,0,0,0.15); background: #fff; color: #000; z-index: 5000; }
+  .modal-flex-container { display: block; overflow-y: auto; height: 100%; padding-bottom: 20px; }
+  .modal-visual-pane { padding: 20px 15px 10px 15px; display: block; height: auto; }
   .gallery-label { margin-bottom: 12px; font-size: 10px; justify-content: center; }
-  
-  /* PERFECT Photo Size Fix for Mobile Phones */
   .modal-gallery-wrapper { gap: 10px; padding-bottom: 10px; display: flex; flex-wrap: nowrap; overflow-x: auto; }
-  .gallery-card-large { 
-    min-width: 100%; 
-    height: auto; 
-    aspect-ratio: 16 / 9; /* Perfect horizontal ratio locked */
-    background: #000; 
-    border-radius: 12px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-  .gallery-card-large img {
-    position: absolute;
-    top: 0; left: 0;
-    width: 100%;
-    height: 100%;
-    object-fit: contain !important; /* ABSOLUTE FIX: Photo is ALWAYS completely visible */
-    border-radius: 12px;
-  }
+  .gallery-card-large { min-width: 100%; height: auto; aspect-ratio: 16 / 9; background: #000; border-radius: 12px; display: flex; align-items: center; justify-content: center; }
+  .gallery-card-large img { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: contain !important; border-radius: 12px; }
   .card-number { top: 10px; left: 10px; padding: 4px 8px; font-size: 11px; }
-  
   .modal-info-pane { padding: 10px 15px; display: block; height: auto; }
-  
   .header-stack { margin-bottom: 15px; text-align: center; align-items: center; display: flex; flex-direction: column; }
   .title-main, .title-sub { font-size: 1.8rem; line-height: 1.1; }
   .title-accent { display: none; }
-  
   .scrollable-body-text { overflow: visible; margin-bottom: 20px; }
   .premium-desc { font-size: 0.95rem; margin-bottom: 20px; text-align: center; }
-  
   .premium-info-card { flex-direction: row; text-align: left; gap: 12px; padding: 15px; border-radius: 12px; }
   .icon-wrap { width: 40px; height: 40px; font-size: 1.2rem; }
   .text-wrap p { font-size: 0.9rem; }
-  
   .btn-cta-red { padding: 16px; font-size: 0.9rem; border-radius: 12px; margin-top: 10px; }
-  
-  /* Contact Resizing */
   .contact-section { padding: 70px 20px; }
   .contact-card { min-width: 100%; padding: 20px; }
 }
 </style>
 
-<!-- GLOBAL STYLES FOR OVERLAYS -->
 <style>
-/* Automatically hide the floating chatbox system if About Us page is open */
-body.about-us-open .chat-system {
-  display: none !important;
-}
+body.about-us-open .chat-system { display: none !important; }
 </style>
