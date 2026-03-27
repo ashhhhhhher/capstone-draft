@@ -168,7 +168,7 @@ async function handleForgotPassword() {
   align-items: center;
   justify-content: center;
   height: 100vh;
-  background-image: url('/LandingPage.jpg');
+  background-image: url('/Login.jpg');
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
@@ -318,7 +318,7 @@ p {
   position: absolute;
   inset: 0;
   /* Reverted to LandingPage with a dark gradient tint to keep white text readable */
-  background-image: linear-gradient(rgba(15, 23, 42, 0.7), rgba(15, 23, 42, 0.7)), url('/LandingPage.jpg');
+  background-image: linear-gradient(rgba(15, 23, 42, 0.7), rgba(15, 23, 42, 0.7)), url('/Login.jpg');
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
