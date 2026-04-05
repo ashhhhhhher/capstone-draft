@@ -259,11 +259,16 @@ async function joinDgroupById() {
 }
 
 function getMinistry(person) {
-  if (!person || !person.finalTags) return 'Unknown'
-  const ageCat = person.finalTags.ageCategory
-  if (ageCat === 'professional') return 'B1G'
-  if (ageCat === 'college' || ageCat === 'high-school') return 'ELEVATE'
-  return 'B1G' 
+  if (!person) return '--'
+
+  let age = Number(person.age)
+  if (Number.isNaN(age) && person.birthday) {
+    age = Number(calculateAge(person.birthday))
+  }
+
+  if (Number.isNaN(age) || age < 0) return '--'
+  if (age <= 21) return 'ELEVATE'
+  return 'B1G'
 }
 
 function formatLifeStage(person) {
