@@ -516,7 +516,7 @@ async function reportToAdmin(member) {
               :disabled="reportedMembers.has(m.id)"
               @click="reportToAdmin(m)"
             >
-              {{ reportedMembers.has(m.id) ? '✓ Reported to Admin' : 'Report to Admin' }}
+              {{ reportedMembers.has(m.id) ? '✓ Flagged for Review' : 'Flag for Admin Review' }}
             </button>
           </div>
         </div>
@@ -719,11 +719,11 @@ async function reportToAdmin(member) {
 
 /* Optional: better contrast on red rows */
 .list-item.sev-red .report-btn:hover:not(:disabled) {
-  background: #991B1B;
+  background: #99561b;
 }
 
 .list-item.sev-red .report-btn:not(.done) {
-  background: #B91C1C;
+  background: #b9701c;
 }
 
 /* -----------------------------------

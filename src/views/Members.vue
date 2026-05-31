@@ -165,9 +165,12 @@ function toggleHeaderMenu() { showHeaderMenu.value = !showHeaderMenu.value }
 
 function formatArchiveDate(dateString) {
   if (!dateString) return 'Unknown';
-  const d = new Date(dateString);
-  if (isNaN(d.getTime())) return 'Unknown';
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  // handle Firestore Timestamp (.toDate), {seconds}, Date, number, or string
+  let d;
+  if (dateString && typeof dateString.toDate === 'function') d = dateString.toDate();
+  else if (dateString && dateString.seconds) d = new Date(dateString.seconds * 1000);
+  else d = new Date(typeof dateString === 'string' && /^\d+$/.test(dateString) ? Number(dateString) : dateString);
+  return d && !isNaN(d.getTime()) ? d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'Unknown';
 }
 
 async function quickRestoreMember(member) {
