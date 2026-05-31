@@ -125,8 +125,7 @@ async function signup(email, password, basicData) {
     // Create pending profile only (not full member)
     await createPendingProfile(user.value.uid, defaultBranch, basicData.profile, newMemberId)
 
-    // --- TEMPORARY BYPASS: Change 'pending' to 'member' ---
-    userRole.value = 'member' 
+    userRole.value = 'pending'
     branchId.value = defaultBranch
 
   } catch (error) {
@@ -149,8 +148,7 @@ async function signup(email, password, basicData) {
       // to the email collected in the form data.
       email: (auth.currentUser && auth.currentUser.email) || basicData.email || '',
       emailVerified: false, // New signups who are not yet verified
-      // --- TEMPORARY BYPASS: Change 'pending' to 'active' ---
-      status: 'active', 
+      status: 'pending', 
       createdAt: todayISO,
       role: 'member',
       branchId: branchId,
@@ -180,7 +178,7 @@ async function signup(email, password, basicData) {
     }
 
     // --- TEMPORARY BYPASS: Change "pendingMembers" to "members" ---
-    const pendingRef = doc(db, "branches", branchId, "members", memberId); 
+    const pendingRef = doc(db, "branches", branchId, "pendingMembers", memberId); 
     await setDoc(pendingRef, pendingData);
     const notificationsStore = useNotificationsStore()
 
