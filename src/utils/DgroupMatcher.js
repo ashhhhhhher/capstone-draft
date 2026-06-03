@@ -1,9 +1,9 @@
 /**
  * Prescriptive Analytics Recommendation Engine for Dgroups
- * * Weights:
+ * * Updated Weights:
  * 1. Age Similarity (50%)
- * 2. Life Stage Similarity (25%)
- * 3. Schedule Compatibility (15%)
+ * 2. Schedule Compatibility (25%)
+ * 3. Life Stage Similarity (15%)
  * 4. Shared Interests (10%)
  */
 
@@ -37,8 +37,8 @@ export function calculateDgroupMatches(seeker, leaders, allMembers) {
     );
     
     let ageScore = 0;
-    let lifeStageScore = 0;
     let scheduleScore = 0;
+    let lifeStageScore = 0;
     let interestScore = 0;
     let reasons = [];
 
@@ -58,7 +58,7 @@ export function calculateDgroupMatches(seeker, leaders, allMembers) {
     if (seekerAge && roundedAverageAge) {
       ageDifference = Math.abs(seekerAge - roundedAverageAge);
       
-      // Scoring brackets for age difference
+      // Scoring brackets for age difference (Max 50)
       if (ageDifference <= 2) { 
         ageScore = 50; 
         reasons.push('Highly compatible age group'); 
@@ -76,7 +76,48 @@ export function calculateDgroupMatches(seeker, leaders, allMembers) {
       ageScore = 25; // Default middle score if age data is missing
     }
 
-    // --- B. LIFE STAGE SIMILARITY (Weight: 25%) ---
+// --- B. SCHEDULE COMPATIBILITY (Weight: 25%) ---
+    const groupTime = l.dgroupDetails?.meetingTime || 'Flexible';
+    const groupDay = l.dgroupDetails?.meetingDays || 'Flexible';
+    
+    const seekerTimes = seekerPrefs.meetingTime || [];
+    const seekerDays = seekerPrefs.meetingDays || []; // Ensure your seeker object passes this
+
+    // Helper booleans to check for flexibility
+    const isGroupTimeFlex = groupTime === 'Flexible';
+    const isGroupDayFlex = groupDay === 'Flexible';
+    const isSeekerTimeFlex = seekerTimes.includes('Flexible') || seekerTimes.length === 0;
+    const isSeekerDayFlex = seekerDays.includes('Flexible') || seekerDays.length === 0;
+
+    // Helper booleans to check for exact specific matches
+    const timeExactMatch = seekerTimes.includes(groupTime) && !isGroupTimeFlex && !isSeekerTimeFlex;
+    const dayExactMatch = seekerDays.includes(groupDay) && !isGroupDayFlex && !isSeekerDayFlex;
+    
+    // Check if they are completely incompatible (e.g., Morning vs Evening)
+    const timeCompatible = timeExactMatch || isGroupTimeFlex || isSeekerTimeFlex;
+    const dayCompatible = dayExactMatch || isGroupDayFlex || isSeekerDayFlex;
+
+    if (timeCompatible && dayCompatible) {
+      if (timeExactMatch && dayExactMatch) {
+        // Tier 1: Perfect Specific Match (e.g., 5-7pm AND Weekends)
+        scheduleScore = 25;
+        reasons.push('Perfect Specific Schedule Match');
+      } else if (timeExactMatch || dayExactMatch) {
+        // Tier 2: Partial Specific Match (e.g., 5-7pm matches, but days are flexible)
+        scheduleScore = 18; 
+        reasons.push('Partial Schedule Match (Requires Coordination)');
+      } else {
+        // Tier 3: Double Flexible (Both parties are flexible)
+        scheduleScore = 10;
+        reasons.push('Compatible via Flexible Schedule');
+      }
+    } else {
+      // Tier 4: Hard Conflict (e.g., Seeker wants Weekends, Group meets Weekdays)
+      scheduleScore = 0; 
+    }
+
+    // --- C. LIFE STAGE SIMILARITY (Weight: 15%) ---
+    // Adjusted ratio calculation to max out at 15.
     let sameLifeStageCount = 0;
     if (seekerLifeStage) {
       sameLifeStageCount = groupMembers.filter(m => 
@@ -85,31 +126,19 @@ export function calculateDgroupMatches(seeker, leaders, allMembers) {
 
       if (groupMembers.length > 0) {
         const ratio = sameLifeStageCount / groupMembers.length;
-        lifeStageScore = Math.round(ratio * 25);
+        lifeStageScore = Math.round(ratio * 15); 
       } else {
         // Compare with leader if the group is empty
         const leaderLifeStage = l.finalTags?.lifeStage || l.lifeStage;
         if (leaderLifeStage === seekerLifeStage) {
-          lifeStageScore = 25;
+          lifeStageScore = 15;
           sameLifeStageCount = 1;
         }
       }
       
-      if (lifeStageScore >= 15) {
+      if (lifeStageScore >= 10) {
         reasons.push('Shares your life stage');
       }
-    }
-
-    // --- C. SCHEDULE COMPATIBILITY (Weight: 15%) ---
-    const groupTime = l.dgroupDetails?.meetingTime || 'Flexible';
-    const seekerTimes = seekerPrefs.meetingTime || [];
-    
-    if (seekerTimes.includes('Flexible') || groupTime === 'Flexible') {
-      scheduleScore = 15;
-      reasons.push('Flexible Schedule Match');
-    } else if (seekerTimes.includes(groupTime)) {
-      scheduleScore = 15;
-      reasons.push('Exact Schedule Match');
     }
 
     // --- D. SHARED INTERESTS (Weight: 10%) ---
@@ -129,7 +158,7 @@ export function calculateDgroupMatches(seeker, leaders, allMembers) {
     }
 
     // 3. Final Calculation
-    const totalScore = ageScore + lifeStageScore + scheduleScore + interestScore;
+    const totalScore = ageScore + scheduleScore + lifeStageScore + interestScore;
 
     // Determine visual group type (Elevate, B1G, Mixed)
     let groupType = 'Mixed Age Group';
@@ -159,8 +188,8 @@ export function calculateDgroupMatches(seeker, leaders, allMembers) {
       // Breakdown output required by instructions
       matchBreakdown: {
         ageScore,
-        lifeStageScore,
         scheduleScore,
+        lifeStageScore,
         interestScore,
         totalScore: Math.min(100, totalScore),
         roundedAverageAge,
