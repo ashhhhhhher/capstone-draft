@@ -147,7 +147,8 @@ async function buildChecklist() {
             name: `${firstName} ${lastName}`.trim(),
             isPresent: existingData?.isPresent ? true : hasScanned,
             scanned: hasScanned,
-            tag: existingData?.tag || autoTag
+            tag: existingData?.tag || autoTag,
+            locked: !!existingData?.isPresent
         }
     })
     attendanceForm.attendees = checklist
@@ -214,6 +215,8 @@ async function confirmSubmit() {
 async function cancelCurrentMeeting() {
     if (!isLeader.value) return
 
+    if (hasSubmittedReport.value) return
+
     const dgroupLeaderId = props.group?.dgroupLeaderId || props.meeting?.dgroupLeaderId || props.leaderId || authStore.userProfile?.id
 
     if (!weekId.value || !dgroupLeaderId) {
@@ -256,7 +259,7 @@ async function cancelCurrentMeeting() {
             <label class="section-label">Members & Status</label>
             <div class="attendance-checklist-updated">
                 <div v-for="(data, id) in attendanceForm.attendees" :key="id" class="attendance-item">
-                    <input type="checkbox" v-model="data.isPresent" :disabled="!isLeader" />
+                    <input type="checkbox" v-model="data.isPresent" :disabled="!isLeader || data.locked" />
                     <div class="member-info-stack" style="flex: 1; margin-left: 8px;">
                         <span class="member-name">{{ data.name }}</span>
                     </div>
@@ -290,7 +293,9 @@ async function cancelCurrentMeeting() {
 
             <div class="actions">
                 <button @click="close" class="cancel">Close</button>
-                <button v-if="isLeader" @click="cancelCurrentMeeting" class="cancel-meeting">Cancel Meeting</button>
+                <button v-if="isLeader" @click="cancelCurrentMeeting" class="cancel-meeting" :disabled="hasSubmittedReport">
+                    Cancel Meeting
+                </button>
                 <button v-if="isLeader" @click="openSubmitConfirm" :class="hasSubmittedReport ? 'resubmit-report' : 'submit-report'">
                     {{ hasSubmittedReport ? 'Re-submit Report' : 'Submit Report' }}
                 </button>
@@ -329,6 +334,7 @@ async function cancelCurrentMeeting() {
 .actions { display:flex; gap:8px; justify-content:flex-end; margin-top:16px; }
 .cancel { background:transparent; border:1px solid #CFD8DC; padding:8px 14px; border-radius:8px; color:#37474F; font-weight:700 }
 .cancel-meeting { background:#fff3e0; color:#e65100; padding:8px 14px; border-radius:8px; border:1px solid #ffcc80; font-weight:700 }
+.cancel-meeting:disabled { background:#F1F5F9; color:#94A3B8; border-color:#E2E8F0; cursor:not-allowed; opacity:0.85 }
 .submit-report { background:#2E7D32; color:white; padding:8px 14px; border-radius:8px; border:none; font-weight:700 }
 .submit-report:hover { background:#1B5E20; }
 .resubmit-report { background:#1976D2; color:white; padding:8px 14px; border-radius:8px; border:none; font-weight:700 }

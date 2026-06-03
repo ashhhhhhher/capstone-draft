@@ -1,8 +1,10 @@
 <script setup>
 // Admin Absence Monitoring: listen for reports sent to admin and allow messaging
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { storeToRefs } from 'pinia'
 import { useAuthStore } from '../../stores/auth'
 import { useMembersStore } from '../../stores/members'
+import { useAttendanceStore } from '../../stores/attendance'
 import { useChatStore } from '../../stores/chat'
 import { db } from '../../firebase'
 import { collection, query, orderBy, onSnapshot, deleteDoc, doc, updateDoc } from 'firebase/firestore'
@@ -11,7 +13,13 @@ import { collection, query, orderBy, onSnapshot, deleteDoc, doc, updateDoc } fro
 const reports = ref([])
 const authStore = useAuthStore()
 const membersStore = useMembersStore()
+const attendanceStore = useAttendanceStore()
+const { currentEventAttendees } = storeToRefs(attendanceStore)
 const chatStore = useChatStore()
+
+const presentMemberIds = computed(() => {
+  return new Set((currentEventAttendees.value || []).map(att => att.memberId).filter(Boolean))
+})
 
 function buildAbsenceNotifications() {
   // kept for compatibility
@@ -37,6 +45,24 @@ onMounted(() => {
     })
   })
 })
+
+watch([presentMemberIds, reports], async ([memberIds]) => {
+  if (!memberIds.size || !reports.value.length || !authStore.branchId) return
+
+  const resolvedReports = reports.value.filter(report => report.memberId && memberIds.has(report.memberId))
+  if (!resolvedReports.length) return
+
+  try {
+    await Promise.all(resolvedReports.map(report => {
+      const reportRef = doc(db, 'branches', authStore.branchId, 'absenceReports', report.id)
+      return deleteDoc(reportRef)
+    }))
+
+    reports.value = reports.value.filter(report => !report.memberId || !memberIds.has(report.memberId))
+  } catch (err) {
+    console.error('Failed to auto-remove resolved absence reports', err)
+  }
+}, { immediate: true })
 
 onUnmounted(() => { if (unsub) unsub() })
 
