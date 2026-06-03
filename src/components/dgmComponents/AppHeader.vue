@@ -126,7 +126,11 @@ onUnmounted(() => {
         <div v-if="showNotifications" class="notification-overlay">
           <div class="notif-backdrop" @click="showNotifications = false"></div>
           <aside class="notification-panel">
-            <div class="panel-header"><h4>Notifications</h4><button class="close-btn" @click="showNotifications = false">×</button></div>
+            <div class="panel-header">
+              <h4>Notifications</h4>
+              <button class="close-btn" @click="showNotifications = false">×</button>
+            </div>
+            
             <div class="panel-body">
               <div v-if="!notificationsStore.localNotifications.length" class="empty-notif">No new updates</div>
               <div v-else class="notif-list">
@@ -137,7 +141,11 @@ onUnmounted(() => {
                   <div class="notif-action" v-if="n.focus"><button class="notif-cta" @click.stop="openNotificationFocus(n.focus)">View details →</button></div>
                 </div>
               </div>
-              <div class="panel-footer"><button class="clear-btn" @click="dismissAll">Dismiss All</button></div>
+            </div>
+            
+            <!-- Kept this outside .panel-body to keep it sticky -->
+            <div class="panel-footer" v-if="notificationsStore.localNotifications.length">
+              <button class="clear-btn" @click="dismissAll">Dismiss All</button>
             </div>
           </aside>
         </div>
@@ -205,8 +213,25 @@ onUnmounted(() => {
 .dropdown-item.logout { color: #dc2626; border-top: 1px solid #f8fafc; }
 .notification-overlay { position: fixed; inset: 0; z-index: 2000; }
 .notif-backdrop { position: absolute; inset: 0; background: rgba(15, 23, 42, 0.3); backdrop-filter: blur(4px); }
-.notification-panel { position: fixed; right: 0; top: 0; height: 100vh; width: 320px; background: white; box-shadow: -10px 0 40px rgba(0,0,0,0.1); display: flex; flex-direction: column; }
-.panel-header { padding: 20px; border-bottom: 1px solid #f1f5f9; display: flex; justify-content: space-between; align-items: center; }
+
+/* Updated Notification Panel to be a constrained dropdown */
+.notification-panel { 
+  position: fixed; 
+  right: 16px; 
+  top: 70px; 
+  width: 320px; 
+  max-height: calc(100vh - 160px); /* Restricts the panel from touching the bottom nav */
+  background: white; 
+  border-radius: 16px;
+  box-shadow: 0 10px 40px rgba(0,0,0,0.15); 
+  border: 1px solid rgba(0,0,0,0.05);
+  display: flex; 
+  flex-direction: column; 
+  overflow: hidden; /* Keeps the rounded corners perfect */
+  z-index: 2001;
+}
+
+.panel-header { padding: 20px; border-bottom: 1px solid #f1f5f9; display: flex; justify-content: space-between; align-items: center; background: white; }
 .panel-header h4 { margin: 0; font-weight: 800; color: #1e293b; }
 .panel-body { flex: 1; overflow-y: auto; padding: 16px; background: #f8fafc; }
 .notif-card { position: relative; padding: 14px; border-radius: 16px; border: 1px solid rgba(0,0,0,0.03); background: white; margin-bottom: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.02); transition: transform 0.2s; }
@@ -217,7 +242,7 @@ onUnmounted(() => {
 .notif-cta { background: #1976D2; color: white; border: none; padding: 6px 12px; border-radius: 8px; font-size: 12px; font-weight: 700; cursor: pointer; }
 .notif-delete { position: absolute; top: 8px; right: 8px; width: 28px; height: 28px; border-radius: 8px; border: none; background: #f1f5f9; color: #475569; font-weight: 800; cursor: pointer; display: flex; align-items: center; justify-content: center; }
 .notif-delete:hover { background: #ffecec; color: #b91c1c; }
-.panel-footer { padding: 16px; background: white; border-top: 1px solid #f1f5f9; display: flex; justify-content: center; }
+.panel-footer { padding: 16px; background: white; border-top: 1px solid #f1f5f9; display: flex; justify-content: center; z-index: 10; }
 .clear-btn { background: #f1f5f9; border: none; color: #64748b; padding: 10px 20px; border-radius: 12px; font-weight: 700; font-size: 13px; cursor: pointer; width: 100%; transition: all 0.2s; }
 .clear-btn:hover { background: #BBDEFB; color: #1976D2; }
 .close-btn { background: #f1f5f9; border: none; width: 32px; height: 32px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 18px; cursor: pointer; color: #64748b; }
