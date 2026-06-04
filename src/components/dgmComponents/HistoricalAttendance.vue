@@ -50,8 +50,15 @@ const membersStore = useMembersStore()
 const { allEvents } = storeToRefs(eventsStore)
 const { members } = storeToRefs(membersStore)
 
-// 🚀 OPTIMIZATION: Use a local ref to store ONLY the currently viewed range
+// 🚀 OPTIMIZATION: Used strictly for the Chart (Filtered by UI)
 const fetchedRangeAttendance = ref([])
+
+// 🛠️ FIX: Independent State for the Latest 10 Table (Always accurate regardless of chart filter)
+const tableAttendance = ref([])
+
+// 🛠️ FIX: Independent State for the Full History Modal (Fetched lazily on click)
+const fullHistoryAttendance = ref([])
+const isLoadingFullHistory = ref(false)
 
 // --- UI Controls State ---
 const todayStr = new Date().toISOString().split('T')[0]
@@ -65,7 +72,7 @@ const selectedMonth = ref(new Date().toISOString().substring(0, 7))
 const fromDate = ref((() => { const d = new Date(); d.setDate(d.getDate() - 30); return d.toISOString().split('T')[0] })())
 const toDate = ref(todayStr)
 
-// --- Watch Filters to Load Data ---
+// --- Watch Filters to Load Chart Data ---
 async function loadDataForRange() {
   let start = '';
   let end = '';
@@ -74,7 +81,6 @@ async function loadDataForRange() {
     start = `${selectedYear.value}-01-01`;
     end = `${selectedYear.value}-12-31`;
   } else if (activeFilter.value === 'monthly') {
-    // Basic calculation for end of month
     start = `${selectedMonth.value}-01`;
     const tempDate = new Date(`${selectedMonth.value}-01`);
     tempDate.setMonth(tempDate.getMonth() + 1);
@@ -145,7 +151,7 @@ const allEventsOfType = computed(() => {
         ? (e.eventType === 'b1g' || e.name.toLowerCase().includes('b1g'))
         : e.eventType === props.eventType;
     })
-    .sort((a, b) => new Date(a.date) - new Date(b.date));
+    .sort((a, b) => new Date(a.date) - new Date(b.date)); // ASCENDING
 });
 
 const availableYears = computed(() => {
@@ -242,14 +248,43 @@ const latestEventsForTable = computed(() => {
   
   return allEventsOfType.value
     .filter(e => new Date(e.date) <= today)
-    .sort((a, b) => new Date(b.date) - new Date(a.date))
+    .sort((a, b) => new Date(b.date) - new Date(a.date)) // DESCENDING (Latest first)
     .slice(0, 10);
 });
 
+// 🛠️ FIX: Automatically keep the table's attendance data updated purely based on the top 10 events
+watch(latestEventsForTable, async (newEvents) => {
+  if (newEvents && newEvents.length > 0) {
+    const maxDate = newEvents[0].date;
+    const minDate = newEvents[newEvents.length - 1].date;
+    tableAttendance.value = await attendanceStore.fetchAttendanceByDateRange(minDate, maxDate);
+  }
+}, { immediate: true });
+
+// 🛠️ FIX: Method to lazily load all history only when the modal is requested
+const handleOpenFullHistory = async () => {
+  if (fullHistoryAttendance.value.length === 0) {
+    isLoadingFullHistory.value = true;
+    try {
+      const pastEvents = allEventsOfType.value.filter(e => new Date(e.date) <= new Date());
+      if (pastEvents.length > 0) {
+        const sortedDates = pastEvents.map(e => e.date).sort();
+        const earliestDate = sortedDates[0];
+        fullHistoryAttendance.value = await attendanceStore.fetchAttendanceByDateRange(earliestDate, todayStr);
+      }
+    } catch (error) {
+      console.error("Failed to load full history:", error);
+    } finally {
+      isLoadingFullHistory.value = false;
+    }
+  }
+  showAttendanceOverview.value = true;
+};
+
 const tableRecords = computed(() => {
   return latestEventsForTable.value.map(event => {
-    // Use the locally fetched range instead of ALL history
-    const eventAttendance = fetchedRangeAttendance.value.filter(a => a.eventId === event.id)
+    // 🛠️ FIX: Use independent tableAttendance instead of fetchedRangeAttendance
+    const eventAttendance = tableAttendance.value.filter(a => a.eventId === event.id)
     
     let elevF = 0, elevM = 0, b1gF = 0, b1gM = 0, dl = 0, vols = 0;
     
@@ -361,9 +396,10 @@ const formatDate = (dateString) => {
            <span class="badge">{{ eventType === 'service' ? 'WKND' : 'B1G' }}</span>
            <span class="title-text">LATEST ATTENDANCE RECORDS</span>
        </div>
-       <!-- Note: The Overview modal might need similar pagination if it shows all time. For now, we will pass the fetched range to it. -->
-       <button class="view-full-btn" @click="showAttendanceOverview = true">
-          <Eye :size="16" /> View Full History
+       <!-- 🛠️ FIX: Use handleOpenFullHistory to gracefully load the modal data -->
+       <button class="view-full-btn" @click="handleOpenFullHistory" :disabled="isLoadingFullHistory">
+          <Eye v-if="!isLoadingFullHistory" :size="16" />
+          {{ isLoadingFullHistory ? 'Loading...' : 'View Full History' }}
        </button>
     </div>
 
@@ -399,9 +435,9 @@ const formatDate = (dateString) => {
       <p v-if="tableRecords.length === 0" class="no-data-text pt-4">No records to display.</p>
     </div>
 
-    <!-- Full History Modal - Passes Range Data to avoid fetching all history -->
+    <!-- Full History Modal - 🛠️ FIX: Passes fullHistoryAttendance safely -->
     <Modal v-if="showAttendanceOverview" @close="showAttendanceOverview = false" size="xl">
-      <AttendanceOverviewModal :events="allEventsOfType" :attendance="fetchedRangeAttendance" :members="members" @close="showAttendanceOverview = false" />
+      <AttendanceOverviewModal :events="allEventsOfType" :attendance="fullHistoryAttendance" :members="members" @close="showAttendanceOverview = false" />
     </Modal>
   </div>
 </template>
@@ -586,6 +622,10 @@ const formatDate = (dateString) => {
 }
 .view-full-btn:hover {
   background: #1565C0;
+}
+.view-full-btn:disabled {
+  background: #90A4AE;
+  cursor: not-allowed;
 }
 
 /* Table styling */
