@@ -1,7 +1,7 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Search, Archive, Filter, X } from 'lucide-vue-next'
+import { Search, Archive, Filter, X, ChevronLeft, ChevronRight } from 'lucide-vue-next'
 import { storeToRefs } from 'pinia'
 import { useMembersStore } from '../stores/members'
 import { useAttendanceStore } from '../stores/attendance'
@@ -42,6 +42,10 @@ const showAbsenceMonitoringModal = ref(false)
 const showPendingModal = ref(false)
 const selectedPending = ref(null)
 const showHeaderMenu = ref(false)
+const PAGE_SIZE = 10
+const presentPage = ref(1)
+const absentPage = ref(1)
+const archivedPage = ref(1)
 
 // --- Filters State ---
 const currentFilters = ref({
@@ -64,70 +68,69 @@ const presentMemberIds = computed(() => {
   return new Set(currentEventAttendees.value.map(att => att.memberId))
 })
 
-// --- Main Filter Logic ---
-const filteredMembers = computed(() => {
+function applyMemberFilters(sourceMembers = []) {
   // copy to avoid mutating store arrays
-  let list = (showArchived.value ? archivedMembers.value : activeMembers.value).slice()
+  let list = sourceMembers.slice()
 
   // 1. Text Search (Now Handles Full Names with Spaces)
   if (searchQuery.value.trim() !== '') {
     const searchTerms = searchQuery.value.toLowerCase().split(' ').filter(Boolean)
-    
+
     list = list.filter(member => {
       const fullName = `${member.firstName} ${member.lastName}`.toLowerCase()
       const email = (member.email || '').toLowerCase()
-      
+
       // Member must match ALL typed words (e.g. "Jake" AND "Pan")
-      return searchTerms.every(term => 
+      return searchTerms.every(term =>
         fullName.includes(term) || email.includes(term)
       )
     })
   }
 
-  const f = currentFilters.value;
+  const f = currentFilters.value
 
   // 2. Age Filter
   if (f.age.length > 0) {
-    list = list.filter(m => f.age.includes(m.finalTags.ageCategory));
+    list = list.filter(m => f.age.includes(m.finalTags.ageCategory))
   }
 
   // 3. Type Filter (Inclusion)
   if (f.type.included.length > 0) {
     list = list.filter(m => {
-      if (f.type.included.includes('First Timer') && m.finalTags.isFirstTimer) return true;
-      if (f.type.included.includes('Seeker') && m.finalTags.isSeeker) return true;
-      if (f.type.included.includes('Regular') && m.finalTags.isRegular) return true;
-      if (f.type.included.includes('Dgroup Leader') && m.finalTags.isDgroupLeader) return true;
-      if (f.type.included.includes('Volunteer') && m.finalTags.isVolunteer) return true;
-      return false;
-    });
+      if (f.type.included.includes('First Timer') && m.finalTags.isFirstTimer) return true
+      if (f.type.included.includes('Seeker') && m.finalTags.isSeeker) return true
+      if (f.type.included.includes('Regular') && m.finalTags.isRegular) return true
+      if (f.type.included.includes('Dgroup Leader') && m.finalTags.isDgroupLeader) return true
+      if (f.type.included.includes('Volunteer') && m.finalTags.isVolunteer) return true
+      return false
+    })
   }
 
   // 4. Type Filter (Exclusion)
   if (f.type.excluded.length > 0) {
     list = list.filter(m => {
-      if (f.type.excluded.includes('First Timer') && m.finalTags.isFirstTimer) return false;
-      if (f.type.excluded.includes('Seeker') && m.finalTags.isSeeker) return false;
-      if (f.type.excluded.includes('Regular') && m.finalTags.isRegular) return false;
-      if (f.type.excluded.includes('Dgroup Leader') && m.finalTags.isDgroupLeader) return false;
-      if (f.type.excluded.includes('Volunteer') && m.finalTags.isVolunteer) return false;
-      return true;
-    });
+      if (f.type.excluded.includes('First Timer') && m.finalTags.isFirstTimer) return false
+      if (f.type.excluded.includes('Seeker') && m.finalTags.isSeeker) return false
+      if (f.type.excluded.includes('Regular') && m.finalTags.isRegular) return false
+      if (f.type.excluded.includes('Dgroup Leader') && m.finalTags.isDgroupLeader) return false
+      if (f.type.excluded.includes('Volunteer') && m.finalTags.isVolunteer) return false
+      return true
+    })
   }
 
   // 5. Ministry Filters
   if (f.ministries.length > 0) {
-    list = list.filter(m => 
+    list = list.filter(m =>
       m.finalTags.isVolunteer &&
       m.finalTags.volunteerMinistry.some(v => f.ministries.includes(v))
     )
   }
-  
+
   // 6. Gender Filter
   if (f.gender && f.gender.length > 0) {
-    list = list.filter(m => f.gender.includes(m.gender));
+    list = list.filter(m => f.gender.includes(m.gender))
   }
-  
+
   // Sorting based on currentFilters.sort
   const sort = f.sort || { key: 'joinDate', order: 'desc' }
   const dir = sort.order === 'asc' ? 1 : -1
@@ -144,13 +147,58 @@ const filteredMembers = computed(() => {
       return (cmp !== 0 ? cmp : a.lastName.localeCompare(b.lastName)) * dir
     })
   }
-  
+
   return list
+}
+
+// --- Main Filter Logic ---
+const filteredMembers = computed(() => {
+  return applyMemberFilters(showArchived.value ? archivedMembers.value : activeMembers.value)
 })
 
-// Split filtered list into Present and Absent for the columns (Only used for Active View)
-const presentList = computed(() => filteredMembers.value.filter(m => presentMemberIds.value.has(m.id)))
-const absentList = computed(() => filteredMembers.value.filter(m => !presentMemberIds.value.has(m.id)))
+const filteredActiveMembers = computed(() => applyMemberFilters(activeMembers.value))
+const filteredArchivedMembers = computed(() => applyMemberFilters(archivedMembers.value))
+
+const presentMembers = computed(() => filteredActiveMembers.value.filter(m => presentMemberIds.value.has(m.id)))
+const absentMembers = computed(() => filteredActiveMembers.value.filter(m => !presentMemberIds.value.has(m.id)))
+
+const presentPageCount = computed(() => Math.max(1, Math.ceil(presentMembers.value.length / PAGE_SIZE)))
+const absentPageCount = computed(() => Math.max(1, Math.ceil(absentMembers.value.length / PAGE_SIZE)))
+const archivedPageCount = computed(() => Math.max(1, Math.ceil(filteredArchivedMembers.value.length / PAGE_SIZE)))
+
+const paginatedPresentMembers = computed(() => {
+  const start = (presentPage.value - 1) * PAGE_SIZE
+  return presentMembers.value.slice(start, start + PAGE_SIZE)
+})
+
+const paginatedAbsentMembers = computed(() => {
+  const start = (absentPage.value - 1) * PAGE_SIZE
+  return absentMembers.value.slice(start, start + PAGE_SIZE)
+})
+
+const paginatedArchivedMembers = computed(() => {
+  const start = (archivedPage.value - 1) * PAGE_SIZE
+  return filteredArchivedMembers.value.slice(start, start + PAGE_SIZE)
+})
+
+const presentTotal = computed(() => presentMembers.value.length)
+const absentTotal = computed(() => absentMembers.value.length)
+
+function clampPage(page, pageCount) {
+  return Math.min(Math.max(page, 1), pageCount)
+}
+
+function goToPresentPage(page) {
+  presentPage.value = clampPage(page, presentPageCount.value)
+}
+
+function goToAbsentPage(page) {
+  absentPage.value = clampPage(page, absentPageCount.value)
+}
+
+function goToArchivedPage(page) {
+  archivedPage.value = clampPage(page, archivedPageCount.value)
+}
 
 // --- Functions ---
 function openMemberDetails(member) { selectedMember.value = member; showMemberModal.value = true; }
@@ -274,6 +322,28 @@ watch(showAbsenceMonitoringModal, (isOpen) => {
   }
 })
 
+watch(
+  [searchQuery, showArchived, () => currentFilters.value],
+  () => {
+    presentPage.value = 1
+    absentPage.value = 1
+    archivedPage.value = 1
+  },
+  { deep: true }
+)
+
+watch(presentPageCount, (nextCount) => {
+  if (presentPage.value > nextCount) presentPage.value = nextCount
+})
+
+watch(absentPageCount, (nextCount) => {
+  if (absentPage.value > nextCount) absentPage.value = nextCount
+})
+
+watch(archivedPageCount, (nextCount) => {
+  if (archivedPage.value > nextCount) archivedPage.value = nextCount
+})
+
 </script>
 
 <template>
@@ -363,7 +433,7 @@ watch(showAbsenceMonitoringModal, (isOpen) => {
     <!-- LIST VIEW -->
     <div class="member-list-view">
       <div v-if="showArchived" class="simple-list">
-        <div v-for="member in filteredMembers" :key="member.id" class="member-action-row archived-row">
+        <div v-for="member in paginatedArchivedMembers" :key="member.id" class="member-action-row archived-row">
           
           <MemberCard 
             :member="member" 
@@ -380,14 +450,41 @@ watch(showAbsenceMonitoringModal, (isOpen) => {
             <button class="row-btn restore" @click.stop="quickRestoreMember(member)">Restore</button>
           </div>
         </div>
-        <div v-if="filteredMembers.length === 0" class="no-results">No archived members found.</div>
+        <div v-if="filteredArchivedMembers.length === 0" class="no-results">No archived members found.</div>
+        <div v-if="archivedPageCount > 1" class="pagination-bar archive-pagination">
+          <button class="pagination-btn" @click="goToArchivedPage(archivedPage - 1)" :disabled="archivedPage === 1">Previous</button>
+          <div class="pagination-info">
+            <span>Page {{ archivedPage }} of {{ archivedPageCount }}</span>
+            <span>{{ filteredArchivedMembers.length }} members total</span>
+          </div>
+          <button class="pagination-btn" @click="goToArchivedPage(archivedPage + 1)" :disabled="archivedPage === archivedPageCount">Next</button>
+        </div>
       </div>
       <div v-else class="columns-grid">
         <div class="column-block">
-          <h3 class="column-title present-header">Present ({{ presentList.length }})</h3>
+          <h3 class="column-title present-header">Present ({{ presentTotal }})</h3>
+          <div v-if="presentPageCount > 1" class="column-page-nav">
+            <button
+              class="page-chevron-btn"
+              @click="goToPresentPage(presentPage - 1)"
+              :disabled="presentPage === 1"
+              aria-label="Previous page"
+            >
+              <ChevronLeft :size="16" />
+            </button>
+            <span class="page-number">{{ presentPage }}</span>
+            <button
+              class="page-chevron-btn"
+              @click="goToPresentPage(presentPage + 1)"
+              :disabled="presentPage === presentPageCount"
+              aria-label="Next page"
+            >
+              <ChevronRight :size="16" />
+            </button>
+          </div>
           <div class="list-content">
             <MemberCard 
-              v-for="member in presentList" 
+              v-for="member in paginatedPresentMembers" 
               :key="member.id" 
               :member="member" 
               :isPresent="true" 
@@ -395,15 +492,34 @@ watch(showAbsenceMonitoringModal, (isOpen) => {
               class="member-card-item is-present"
               @click="openMemberDetails(member)" 
             />
-            <div v-if="presentList.length === 0" class="empty-col">No present members found.</div>
+            <div v-if="presentTotal === 0" class="empty-col">No present members found.</div>
           </div>
         </div>
         <div class="column-block">
-          <h3 class="column-title absent-header">Absent ({{ absentList.length }})</h3>
+          <h3 class="column-title absent-header">Absent ({{ absentTotal }})</h3>
+          <div v-if="absentPageCount > 1" class="column-page-nav">
+            <button
+              class="page-chevron-btn"
+              @click="goToAbsentPage(absentPage - 1)"
+              :disabled="absentPage === 1"
+              aria-label="Previous page"
+            >
+              <ChevronLeft :size="16" />
+            </button>
+            <span class="page-number">{{ absentPage }}</span>
+            <button
+              class="page-chevron-btn"
+              @click="goToAbsentPage(absentPage + 1)"
+              :disabled="absentPage === absentPageCount"
+              aria-label="Next page"
+            >
+              <ChevronRight :size="16" />
+            </button>
+          </div>
           <div class="list-content">
             <!-- Added is-absent class and hideStatus prop to remove label -->
             <MemberCard 
-              v-for="member in absentList" 
+              v-for="member in paginatedAbsentMembers" 
               :key="member.id" 
               :member="member" 
               :isPresent="false"
@@ -411,7 +527,7 @@ watch(showAbsenceMonitoringModal, (isOpen) => {
               class="member-card-item is-absent"
               @click="openMemberDetails(member)" 
             />
-            <div v-if="absentList.length === 0" class="empty-col">No absent members found.</div>
+            <div v-if="absentTotal === 0" class="empty-col">No absent members found.</div>
           </div>
         </div>
       </div>
@@ -560,6 +676,107 @@ watch(showAbsenceMonitoringModal, (isOpen) => {
 .active-filters { display: flex; gap: 8px; margin-bottom: 12px; }
 .exclude-tag { font-size: 11px; background: #FFEBEE; color: #C62828; border: 1px solid #FFCDD2; padding: 4px 8px; border-radius: 12px; font-weight: 600; }
 
+.pagination-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  margin: 0 0 16px;
+  padding: 12px 14px;
+  background: #F8FBFD;
+  border: 1px solid #E3EEF5;
+  border-radius: 12px;
+}
+
+.column-page-nav {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  margin: 6px 0 2px;
+  color: #546E7A;
+}
+
+.page-number {
+  min-width: 22px;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 700;
+  color: #546E7A;
+}
+
+.page-chevron-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: #546E7A;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: background 0.15s ease, opacity 0.15s ease, transform 0.12s ease;
+}
+
+.page-chevron-btn:hover:not(:disabled) {
+  background: rgba(84, 110, 122, 0.08);
+  transform: translateY(-1px);
+}
+
+.page-chevron-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.archive-pagination {
+  margin-top: 8px;
+  margin-bottom: 0;
+}
+
+.column-pagination {
+  margin-top: 4px;
+  margin-bottom: 0;
+}
+
+.pagination-info {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #546E7A;
+}
+
+.pagination-info span:last-child {
+  font-size: 12px;
+  font-weight: 500;
+  color: #90A4AE;
+}
+
+.pagination-btn {
+  border: 1px solid #CFD8DC;
+  background: #fff;
+  color: #455A64;
+  border-radius: 8px;
+  padding: 8px 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.12s ease, opacity 0.12s ease;
+}
+
+.pagination-btn:hover:not(:disabled) {
+  background: #ECEFF1;
+  transform: translateY(-1px);
+}
+
+.pagination-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .member-list-view { display: flex; flex-direction: column; gap: 24px; }
 .columns-grid { display: grid; grid-template-columns: 1fr; gap: 20px; }
 @media (min-width: 900px) { .columns-grid { grid-template-columns: 1fr 1fr; align-items: start; } }
@@ -653,6 +870,7 @@ watch(showAbsenceMonitoringModal, (isOpen) => {
   .mobile-actions { display: flex; }
   .controls-wrapper { gap: 8px; flex-wrap: wrap; }
   .search-bar { flex-basis: 100%; order: -1; }
+  .pagination-bar { flex-direction: column; gap: 8px; }
 }
 
 @media (max-width: 500px) {
