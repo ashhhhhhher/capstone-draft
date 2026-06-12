@@ -63,7 +63,7 @@ const membersStore = useMembersStore()
 const eventsStore = useEventsStore()
 const attendanceStore = useAttendanceStore()
 
-const { activeMembers } = storeToRefs(membersStore)
+const { members, activeMembers } = storeToRefs(membersStore)
 const { allEvents, currentEvent } = storeToRefs(eventsStore)
 const { allAttendance } = storeToRefs(attendanceStore)
 
@@ -319,12 +319,31 @@ function getEventsData(specificEvent = null) {
 
   return services.map(event => {
     const attendees = (allAttendance.value || []).filter(a => a.eventId === event.id);
-    const attendeeDetails = (activeMembers.value || []).filter(m => attendees.some(a => a.memberId === m.id));
+    const presentCount = attendees.length;
 
+    // Calculate expected active members at the time of the event
+    const evtDateObj = new Date(event.date);
+    const isB1gEvent = event.eventType === 'b1g' || event.name.toLowerCase().includes('b1g');
+    
+    // Evaluate against the FULL members list (including archived) to recreate history accurately
+    const expectedMembers = (members.value || []).filter(m => {
+        const isCreatedBefore = m.createdAt ? new Date(m.createdAt) <= evtDateObj : true;
+        const isNotArchivedYet = m.status === 'active' || (m.status === 'archived' && m.archivedAt && new Date(m.archivedAt) > evtDateObj);
+        const isCorrectGroup = isB1gEvent ? m.finalTags?.ageCategory === 'B1G' : true;
+        return isCreatedBefore && isNotArchivedYet && isCorrectGroup;
+    });
+
+    const expectedCount = expectedMembers.length;
+    const absentCount = Math.max(0, expectedCount - presentCount);
+
+    const attendeeDetails = (members.value || []).filter(m => attendees.some(a => a.memberId === m.id));
     const volunteerCount = attendees.filter(a => a.ministry && a.ministry !== 'N/A').length;
 
     return {
-      name: event.name, date: event.date, total: attendees.length,
+      name: event.name, 
+      date: event.date, 
+      totalPresent: presentCount,
+      totalAbsent: absentCount,
       elevate: attendeeDetails.filter(m => m.finalTags?.ageCategory === 'Elevate' && !m.finalTags?.isFirstTimer).length,
       b1g: attendeeDetails.filter(m => m.finalTags?.ageCategory === 'B1G' && !m.finalTags?.isFirstTimer).length,
       firstTimers: attendeeDetails.filter(m => m.finalTags?.isFirstTimer).length,
@@ -376,8 +395,8 @@ function exportEventsExcel() {
 
     // 2. Raw Events List Sheet
     if (data.length > 0) {
-      const headers = ['Event Name', 'Date', 'Total', 'Elevate', 'B1G', 'First Timers', 'Volunteers'];
-      const rows = [["CHRIST COMMISSION FOUNDATION INC."], ["HISTORICAL ATTENDANCE REPORT"], [""], headers, ...data.map(e => [e.name, e.date, e.total, e.elevate, e.b1g, e.firstTimers, e.volunteers])];
+      const headers = ['Event Name', 'Date', 'Total Present', 'Total Absent', 'Elevate', 'B1G', 'First Timers', 'Volunteers'];
+      const rows = [["CHRIST COMMISSION FOUNDATION INC."], ["HISTORICAL ATTENDANCE REPORT"], [""], headers, ...data.map(e => [e.name, e.date, e.totalPresent, e.totalAbsent, e.elevate, e.b1g, e.firstTimers, e.volunteers])];
       const ws = XLSX.utils.aoa_to_sheet(rows);
 
       const headerStyle = { font: { bold: true, color: { rgb: "FFFFFF" } }, fill: { fgColor: { rgb: "2196F3" } }, alignment: { horizontal: "center" }, border: { top: { style: "thin" }, bottom: { style: "thin" }, left: { style: "thin" }, right: { style: "thin" } } };
@@ -392,8 +411,8 @@ function exportEventsExcel() {
               else if (R > 3) ws[cell].s = { alignment: { horizontal: "center" }, border: { top: { style: "thin" }, bottom: { style: "thin" }, left: { style: "thin" }, right: { style: "thin" } } };
             }
         }
-        ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 6 } }, { s: { r: 1, c: 0 }, e: { r: 1, c: 6 } }];
-        ws['!cols'] = [{ wch: 30 }, { wch: 15 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 15 }, { wch: 15 }];
+        ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 7 } }, { s: { r: 1, c: 0 }, e: { r: 1, c: 7 } }];
+        ws['!cols'] = [{ wch: 30 }, { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 10 }, { wch: 10 }, { wch: 15 }, { wch: 15 }];
       }
       XLSX.utils.book_append_sheet(wb, ws, props.yearlySummaryData ? "Events Historical Attendance" : "History");
     }
@@ -453,8 +472,8 @@ function exportEventsPDF() {
 
       autoTable(doc, {
         startY: currentY,
-        head: [['Date', 'Event Name', 'Total', 'Elevate', 'B1G', 'FT', 'Vols']],
-        body: data.map(e => [e.date, e.name, e.total, e.elevate, e.b1g, e.firstTimers, e.volunteers]),
+        head: [['Date', 'Event Name', 'Present', 'Absent', 'Elev.', 'B1G', 'FT', 'Vols']],
+        body: data.map(e => [e.date, e.name, e.totalPresent, e.totalAbsent, e.elevate, e.b1g, e.firstTimers, e.volunteers]),
         headStyles: { fillColor: [33, 150, 243], textColor: [255, 255, 255] },
         styles: { fontSize: 9, halign: 'center' },
         columnStyles: { 1: { halign: 'left' } } 

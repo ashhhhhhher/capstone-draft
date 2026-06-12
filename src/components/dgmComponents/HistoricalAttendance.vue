@@ -4,7 +4,7 @@ import { storeToRefs } from 'pinia'
 import { useAttendanceStore } from '../../stores/attendance'
 import { useEventsStore } from '../../stores/events'
 import { useMembersStore } from '../../stores/members'
-import { Eye } from 'lucide-vue-next'
+import { Eye, Search } from 'lucide-vue-next'
 import BarChart from '../charts/BarChart.vue'
 import LineChart from '../charts/LineChart.vue'
 import Modal from './Modal.vue'
@@ -50,21 +50,19 @@ const membersStore = useMembersStore()
 const { allEvents } = storeToRefs(eventsStore)
 const { members } = storeToRefs(membersStore)
 
-// 🚀 OPTIMIZATION: Used strictly for the Chart (Filtered by UI)
+// State for different data sections
 const fetchedRangeAttendance = ref([])
-
-// 🛠️ FIX: Independent State for the Latest 10 Table (Always accurate regardless of chart filter)
 const tableAttendance = ref([])
-
-// 🛠️ FIX: Independent State for the Full History Modal (Fetched lazily on click)
 const fullHistoryAttendance = ref([])
 const isLoadingFullHistory = ref(false)
+const selectedEventForModal = ref(null)
 
 // --- UI Controls State ---
 const todayStr = new Date().toISOString().split('T')[0]
 const activeFilter = ref('monthly') 
 const chartType = ref('bar') 
 const showAttendanceOverview = ref(false)
+const searchQuery = ref('') // Added search query state
 
 const selectedYear = ref(new Date().getFullYear())
 const selectedMonth = ref(new Date().toISOString().substring(0, 7)) 
@@ -106,6 +104,7 @@ watch([activeFilter, selectedYear, selectedMonth, fromDate, toDate], () => {
 
 const chartThemeColor = computed(() => props.eventType === 'b1g' ? '#8AE1FC' : '#068FFF')
 const chartThemeBgColor = computed(() => props.eventType === 'b1g' ? 'rgba(138, 225, 252, 0.2)' : 'rgba(6, 143, 255, 0.2)')
+const absentColor = '#FF5252'
 
 const historicalChartOptions = computed(() => ({
   responsive: true,
@@ -116,33 +115,23 @@ const historicalChartOptions = computed(() => ({
     }
   },
   plugins: { 
-    legend: { display: false }, 
-    datalabels: { 
-      display: chartType.value === 'bar',
-      anchor: 'end',
-      align: 'end',
-      offset: 4,
-      color: '#546E7A',
-      font: {
-        weight: '600',
-        size: 12
-      }
-    } 
+    legend: { display: true, position: 'top' }, 
+    datalabels: { display: false } 
   },
   scales: { 
     x: {
-      grid: { display: false }
+      grid: { display: false },
+      stacked: false 
     },
     y: { 
       beginAtZero: true, 
-      suggestedMax: 300, 
       ticks: { stepSize: 50, precision: 0 },
       grid: { color: '#F0F2F5' },
-      border: { display: false }
+      border: { display: false },
+      stacked: false 
     } 
   }
 }))
-
 
 const allEventsOfType = computed(() => {
   return (allEvents.value || [])
@@ -154,6 +143,18 @@ const allEventsOfType = computed(() => {
     .sort((a, b) => new Date(a.date) - new Date(b.date)); // ASCENDING
 });
 
+// calculation of total members dynamically based on the event's exact date
+const getExpectedCountForEvent = (eventDateStr) => {
+    const eventDateObj = new Date(eventDateStr);
+    return (members.value || []).filter(m => {
+        const isCreatedBefore = m.createdAt ? new Date(m.createdAt) <= eventDateObj : true;
+        const isNotArchivedYet = m.status === 'active' || (m.status === 'archived' && m.archivedAt && new Date(m.archivedAt) > eventDateObj);
+        const isCorrectGroup = props.eventType === 'b1g' ? m.finalTags?.ageCategory === 'B1G' : true;
+        
+        return isCreatedBefore && isNotArchivedYet && isCorrectGroup;
+    }).length;
+};
+
 const availableYears = computed(() => {
   const years = new Set(allEventsOfType.value.map(e => e.date.substring(0, 4)));
   if (years.size === 0) years.add(new Date().getFullYear().toString());
@@ -162,33 +163,41 @@ const availableYears = computed(() => {
 
 const processedChartData = computed(() => {
   let labels = [];
-  let data = [];
+  let dataPresent = [];
+  let dataAbsent = [];
+
+  const processEvent = (e, index) => {
+    const presentCount = fetchedRangeAttendance.value.filter(a => a.eventId === e.id).length;
+    const expectedCount = getExpectedCountForEvent(e.date);
+    const absentCount = Math.max(0, expectedCount - presentCount);
+    dataPresent[index] += presentCount;
+    dataAbsent[index] += absentCount;
+  }
 
   if (activeFilter.value === 'yearly') {
      labels = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-     data = new Array(12).fill(0);
+     dataPresent = new Array(12).fill(0);
+     dataAbsent = new Array(12).fill(0);
      
      allEventsOfType.value.forEach(e => {
         if (e.date.startsWith(selectedYear.value.toString())) {
            const d = new Date(e.date);
            const monthIdx = d.getMonth();
-           const count = fetchedRangeAttendance.value.filter(a => a.eventId === e.id).length;
-           data[monthIdx] += count;
+           processEvent(e, monthIdx);
         }
      });
 
   } else if (activeFilter.value === 'monthly') {
      labels = ['Week 1', 'Week 2', 'Week 3', 'Week 4', 'Week 5'];
-     data = new Array(5).fill(0);
+     dataPresent = new Array(5).fill(0);
+     dataAbsent = new Array(5).fill(0);
      
      allEventsOfType.value.forEach(e => {
         if (e.date.startsWith(selectedMonth.value)) {
            const day = parseInt(e.date.split('-')[2]);
            let weekIdx = Math.floor((day - 1) / 7);
            if (weekIdx > 4) weekIdx = 4; 
-           
-           const count = fetchedRangeAttendance.value.filter(a => a.eventId === e.id).length;
-           data[weekIdx] += count;
+           processEvent(e, weekIdx);
         }
      });
 
@@ -198,36 +207,56 @@ const processedChartData = computed(() => {
      customEvents.forEach(e => {
         const d = new Date(e.date);
         labels.push(d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }));
-        data.push(fetchedRangeAttendance.value.filter(a => a.eventId === e.id).length);
+        const presentCount = fetchedRangeAttendance.value.filter(a => a.eventId === e.id).length;
+        const expectedCount = getExpectedCountForEvent(e.date);
+        
+        dataPresent.push(presentCount);
+        dataAbsent.push(Math.max(0, expectedCount - presentCount));
      });
   }
 
-  return { labels, data };
+  return { labels, dataPresent, dataAbsent };
 });
 
 const historicalAttendanceData = computed(() => {
-  const { labels, data } = processedChartData.value;
+  const { labels, dataPresent, dataAbsent } = processedChartData.value;
   
-  if (labels.length === 0 || data.every(v => v === 0) && activeFilter.value === 'custom') {
+  if (labels.length === 0 || (dataPresent.every(v => v === 0) && activeFilter.value === 'custom')) {
      return { labels: [], datasets: [] }; 
   }
 
   return { 
     labels, 
-    datasets: [{ 
-      label: 'Attendance', 
-      backgroundColor: chartType.value === 'line' ? chartThemeBgColor.value : chartThemeColor.value,
-      borderColor: chartThemeColor.value,
-      borderWidth: 2,
-      borderRadius: chartType.value === 'bar' ? 4 : 0,
-      fill: chartType.value === 'line', 
-      tension: 0.4, 
-      pointBackgroundColor: '#fff',
-      pointBorderColor: chartThemeColor.value,
-      pointBorderWidth: 2,
-      pointRadius: chartType.value === 'line' ? 4 : 0,
-      data 
-    }] 
+    datasets: [
+      { 
+        label: 'Present', 
+        backgroundColor: chartType.value === 'line' ? chartThemeBgColor.value : chartThemeColor.value,
+        borderColor: chartThemeColor.value,
+        borderWidth: 2,
+        borderRadius: chartType.value === 'bar' ? 4 : 0,
+        fill: chartType.value === 'line', 
+        tension: 0.4, 
+        pointBackgroundColor: '#fff',
+        pointBorderColor: chartThemeColor.value,
+        pointBorderWidth: 2,
+        pointRadius: chartType.value === 'line' ? 4 : 0,
+        data: dataPresent 
+      },
+      { 
+        label: 'Absent', 
+        backgroundColor: chartType.value === 'line' ? 'rgba(255, 82, 82, 0.2)' : absentColor,
+        borderColor: absentColor,
+        borderWidth: 2,
+        borderRadius: chartType.value === 'bar' ? 4 : 0,
+        fill: chartType.value === 'line', 
+        tension: 0.4, 
+        pointBackgroundColor: '#fff',
+        pointBorderColor: absentColor,
+        pointBorderWidth: 2,
+        pointRadius: chartType.value === 'line' ? 4 : 0,
+        data: dataAbsent 
+      }
+    ] 
   }
 })
 
@@ -242,27 +271,42 @@ const filteredEventsForExport = computed(() => {
   return allEventsOfType.value;
 });
 
-const latestEventsForTable = computed(() => {
+// Search and slice for the table below
+const filteredEventsForTable = computed(() => {
   const today = new Date();
   today.setHours(23, 59, 59, 999);
   
-  return allEventsOfType.value
+  let events = allEventsOfType.value
     .filter(e => new Date(e.date) <= today)
-    .sort((a, b) => new Date(b.date) - new Date(a.date)) // DESCENDING (Latest first)
-    .slice(0, 10);
+    .sort((a, b) => new Date(b.date) - new Date(a.date)); // DESCENDING (Latest first)
+
+  if (searchQuery.value) {
+    const q = searchQuery.value.toLowerCase();
+    events = events.filter(e => 
+      e.name.toLowerCase().includes(q) || 
+      e.date.includes(q) ||
+      formatDate(e.date).toLowerCase().includes(q)
+    );
+  }
+  
+  return events.slice(0, 10); 
 });
 
-// 🛠️ FIX: Automatically keep the table's attendance data updated purely based on the top 10 events
-watch(latestEventsForTable, async (newEvents) => {
+// Fetch attendance dynamically covering the exact range of our searched table results
+watch(filteredEventsForTable, async (newEvents) => {
   if (newEvents && newEvents.length > 0) {
-    const maxDate = newEvents[0].date;
-    const minDate = newEvents[newEvents.length - 1].date;
+    const dates = newEvents.map(e => e.date).sort();
+    const minDate = dates[0];
+    const maxDate = dates[dates.length - 1];
     tableAttendance.value = await attendanceStore.fetchAttendanceByDateRange(minDate, maxDate);
+  } else {
+    tableAttendance.value = [];
   }
 }, { immediate: true });
 
-// 🛠️ FIX: Method to lazily load all history only when the modal is requested
-const handleOpenFullHistory = async () => {
+// load all history only when the modal is requested
+const openEventDetails = async (event) => {
+  selectedEventForModal.value = event;
   if (fullHistoryAttendance.value.length === 0) {
     isLoadingFullHistory.value = true;
     try {
@@ -282,8 +326,7 @@ const handleOpenFullHistory = async () => {
 };
 
 const tableRecords = computed(() => {
-  return latestEventsForTable.value.map(event => {
-    // 🛠️ FIX: Use independent tableAttendance instead of fetchedRangeAttendance
+  return filteredEventsForTable.value.map(event => {
     const eventAttendance = tableAttendance.value.filter(a => a.eventId === event.id)
     
     let elevF = 0, elevM = 0, b1gF = 0, b1gM = 0, dl = 0, vols = 0;
@@ -306,11 +349,13 @@ const tableRecords = computed(() => {
       else if (m.role === 'volunteer' || m.finalTags?.isVolunteer || (a.ministry && a.ministry !== 'N/A')) vols++;
     })
 
+    const expectedCount = getExpectedCountForEvent(event.date);
+
     return {
       id: event.id,
       name: event.name,
       date: event.date,
-      total: eventAttendance.length,
+      totalText: `${eventAttendance.length}/${expectedCount}`,
       elevF, elevM, b1gF, b1gM, dl, vols
     }
   });
@@ -377,7 +422,7 @@ const formatDate = (dateString) => {
              <ExportButton 
                 exportType="events" 
                 :eventsList="filteredEventsForExport" 
-                :yearlySummaryData="activeFilter === 'yearly' ? { year: selectedYear, labels: processedChartData.labels, data: processedChartData.data } : null"
+                :yearlySummaryData="activeFilter === 'yearly' ? { year: selectedYear, labels: processedChartData.labels, data: processedChartData.dataPresent } : null"
              />
           </div>
         </div>
@@ -390,17 +435,17 @@ const formatDate = (dateString) => {
       </div>
     </div>
 
-    <!-- Detailed Records Table (Always Latest 10) -->
+    <!-- Detailed Records Table -->
     <div class="records-header mt-8">
        <div class="section-badge-header">
            <span class="badge">{{ eventType === 'service' ? 'WKND' : 'B1G' }}</span>
-           <span class="title-text">LATEST ATTENDANCE RECORDS</span>
+           <span class="title-text">ATTENDANCE RECORD (CLICK ROW TO VIEW)</span>
        </div>
-       <!-- 🛠️ FIX: Use handleOpenFullHistory to gracefully load the modal data -->
-       <button class="view-full-btn" @click="handleOpenFullHistory" :disabled="isLoadingFullHistory">
-          <Eye v-if="!isLoadingFullHistory" :size="16" />
-          {{ isLoadingFullHistory ? 'Loading...' : 'View Full History' }}
-       </button>
+       
+       <div class="search-container">
+          <Search class="search-icon" :size="16" />
+          <input type="text" v-model="searchQuery" placeholder="Search event or date..." class="search-input" />
+       </div>
     </div>
 
     <div class="table-card">
@@ -409,7 +454,7 @@ const formatDate = (dateString) => {
           <tr>
             <th>SERVICE / EVENT</th>
             <th>DATE</th>
-            <th>TOTAL</th>
+            <th>TOTAL (PRESENT/ALL)</th>
             <th>ELEV. F</th>
             <th>ELEV. M</th>
             <th>B1G F</th>
@@ -419,10 +464,10 @@ const formatDate = (dateString) => {
           </tr>
         </thead>
         <tbody>
-          <tr v-for="record in tableRecords" :key="record.id">
+          <tr v-for="record in tableRecords" :key="record.id" @click="openEventDetails(allEventsOfType.find(e => e.id === record.id))" class="clickable-row">
             <td class="event-name">{{ record.name }}</td>
             <td class="text-blue">{{ formatDate(record.date) }}</td>
-            <td class="total-col">{{ record.total }}</td>
+            <td class="total-col">{{ record.totalText }}</td>
             <td>{{ record.elevF }}</td>
             <td>{{ record.elevM }}</td>
             <td>{{ record.b1gF }}</td>
@@ -435,9 +480,15 @@ const formatDate = (dateString) => {
       <p v-if="tableRecords.length === 0" class="no-data-text pt-4">No records to display.</p>
     </div>
 
-    <!-- Full History Modal - 🛠️ FIX: Passes fullHistoryAttendance safely -->
+    <!-- Full History/Absence Tracker Modal -->
     <Modal v-if="showAttendanceOverview" @close="showAttendanceOverview = false" size="xl">
-      <AttendanceOverviewModal :events="allEventsOfType" :attendance="fullHistoryAttendance" :members="members" @close="showAttendanceOverview = false" />
+      <AttendanceOverviewModal 
+        :selectedEvent="selectedEventForModal" 
+        :allEvents="allEventsOfType" 
+        :attendance="fullHistoryAttendance" 
+        :members="members" 
+        @close="showAttendanceOverview = false" 
+      />
     </Modal>
   </div>
 </template>
@@ -452,7 +503,6 @@ const formatDate = (dateString) => {
   display: flex;
   align-items: center;
   gap: 12px;
-  margin-bottom: 12px;
 }
 .badge {
   background: #E3F2FD;
@@ -550,6 +600,30 @@ const formatDate = (dateString) => {
   font-family: inherit;
 }
 
+/* Search Bar */
+.search-container {
+  display: flex;
+  align-items: center;
+  position: relative;
+}
+.search-icon {
+  position: absolute;
+  left: 10px;
+  color: #90A4AE;
+}
+.search-input {
+  padding: 8px 12px 8px 36px;
+  border: 1px solid #CFD8DC;
+  border-radius: 6px;
+  width: 250px;
+  font-size: 13px;
+  outline: none;
+  transition: border-color 0.2s;
+}
+.search-input:focus {
+  border-color: #068FFF;
+}
+
 /* Toggles */
 .chart-toggles {
   display: flex;
@@ -606,27 +680,6 @@ const formatDate = (dateString) => {
 .mt-8 {
   margin-top: 32px;
 }
-.view-full-btn {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  background: #1976D2;
-  color: white;
-  border: none;
-  padding: 8px 16px;
-  border-radius: 8px;
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: 0.2s;
-}
-.view-full-btn:hover {
-  background: #1565C0;
-}
-.view-full-btn:disabled {
-  background: #90A4AE;
-  cursor: not-allowed;
-}
 
 /* Table styling */
 table {
@@ -666,6 +719,15 @@ tr:last-child td {
   color: #263238;
 }
 
+/* Clickable Table Rows */
+.clickable-row {
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.clickable-row:hover {
+  background-color: #F8F9FA;
+}
+
 @media (max-width: 900px) {
   .toolbar {
     flex-direction: column;
@@ -676,6 +738,14 @@ tr:last-child td {
   }
   .divider {
     display: none;
+  }
+  .records-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+  .search-input {
+    width: 100%;
   }
 }
 </style>
