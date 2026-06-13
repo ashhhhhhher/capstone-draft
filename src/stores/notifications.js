@@ -298,6 +298,31 @@ async function notifyAdminsAbsenceReport(branchId, memberName, reportDetails) {
   }
 }
 
+async function notifyMemberAbsenceThreshold(branchId, memberId, memberName, threshold) {
+  const thresholdLabel = `${threshold} consecutive absence${threshold === 1 ? '' : 's'}`
+  await sendToUser({
+    branchId,
+    targetUid: memberId,
+    roleTarget: 'member',
+    type: 'ABSENCE_THRESHOLD',
+    header: `${threshold} Consecutive Absences`,
+    body: `Hi ${memberName}, you’ve reached ${thresholdLabel}. Please make your next attendance count!`,
+    focus: 'attendance'
+  })
+}
+
+async function notifyMemberArchived(branchId, memberId, memberName) {
+  await sendToUser({
+    branchId,
+    targetUid: memberId,
+    roleTarget: 'member',
+    type: 'MEMBER_ARCHIVED',
+    header: 'You’ve Been Archived',
+    body: `Hi ${memberName}, you’ve been archived due to repeated absences. Please contact your DGroup leader or admin if you need help.`,
+    focus: 'memberStatus'
+  })
+}
+
   // 🔹 Permanently delete all notifications in user's collection
   async function clearAllNotifications() {
     const colRef = getUserNotifCollection()
@@ -336,6 +361,8 @@ async function notifyAdminsAbsenceReport(branchId, memberName, reportDetails) {
     notifyLeaderMemberAssigned,
     notifyMemberAssigned,
     notifyAdminsMatchingPending,
-    notifyAdminsAbsenceReport
+    notifyAdminsAbsenceReport,
+    notifyMemberAbsenceThreshold,
+    notifyMemberArchived
   }
 })

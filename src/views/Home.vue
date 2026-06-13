@@ -14,6 +14,7 @@ import AttendanceListModal from '../components/dgmComponents/AttendanceListModal
 import CalendarModal from '../components/dgmComponents/CalendarModal.vue' 
 import Background from '../components/dgmComponents/Background.vue'
 import EventCard from '../components/dgmComponents/EventCard.vue'
+import AbsenceMonitoring from '../components/dgmComponents/AbsenceMonitoring.vue'
 
 const router = useRouter()
 const { members } = storeToRefs(useMembersStore())
@@ -25,7 +26,6 @@ const showCreateEventModal = ref(false)
 const showAttendanceModal = ref(false)
 const showCalendarModal = ref(false) 
 const showEventDetailsModal = ref(false)
-const showAbsenceModal = ref(false) 
 const eventToEdit = ref(null) 
 const selectedStatFilter = ref('All')
 
@@ -93,10 +93,6 @@ function openEventDetails() { showEventDetailsModal.value = true; }
 
 const prevCurrentEventId = ref(currentEvent.value ? currentEvent.value.id : null)
 watch(currentEvent, (newVal) => {
-  if (prevCurrentEventId.value && !newVal) {
-    showAbsenceModal.value = true;
-    absenceMonitorRef.value?.buildAbsenceNotifications?.();
-  }
   prevCurrentEventId.value = newVal ? newVal.id : null
 })
 
@@ -107,8 +103,7 @@ async function handleEndCurrentEvent() {
   try {
     await eventsStore.endEvent(ev.id);
     showEventDetailsModal.value = false;
-    showAbsenceModal.value = true;
-    absenceMonitorRef.value?.buildAbsenceNotifications?.();
+    await absenceMonitorRef.value?.buildAbsenceNotifications?.(ev.id);
   } catch (err) { console.error(err); }
 }
 </script>
@@ -217,6 +212,9 @@ async function handleEndCurrentEvent() {
       </div>
     </div>
   </Modal>
+  <div style="display: none;">
+    <AbsenceMonitoring ref="absenceMonitorRef" />
+  </div>
 </template>
 
 <style scoped>

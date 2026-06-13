@@ -6,6 +6,7 @@ import { useMembersStore } from '../../stores/members'
 import { useAttendanceStore } from '../../stores/attendance'
 import { useEventsStore } from '../../stores/events'
 import { useChatStore } from '../../stores/chat'
+import { useNotificationsStore } from '../../stores/notifications'
 import { db } from '../../firebase'
 import { collection, query, orderBy, onSnapshot, deleteDoc, doc, updateDoc, getDocs, where } from 'firebase/firestore'
 
@@ -14,6 +15,7 @@ const membersStore = useMembersStore()
 const attendanceStore = useAttendanceStore()
 const eventsStore = useEventsStore()
 const chatStore = useChatStore()
+const notificationsStore = useNotificationsStore()
 
 const { currentEventAttendees } = storeToRefs(attendanceStore)
 
@@ -23,6 +25,7 @@ const selectedReportDetail = ref(null)
 const recentlyArchivedCount = ref(0)
 const recentlyArchivedIds = ref(new Set())
 const showRecentlyArchived = ref(false)
+const lastProcessedEventId = ref(null)
 let unsub = null
 
 const presentMemberIds = computed(() => {
@@ -132,8 +135,66 @@ async function deleteReportsForMember(memberId) {
   }
 }
 
-function buildAbsenceNotifications() {
-  // kept for compatibility
+async function buildAbsenceNotifications(triggerEventId = null) {
+  await sendAbsenceThresholdNotifications(triggerEventId)
+  await runAutoArchival()
+}
+
+function parseDateOnly(dateStr) {
+  if (!dateStr) return null
+  const d = new Date(`${String(dateStr).slice(0, 10)}T00:00:00`)
+  return Number.isNaN(d.getTime()) ? null : d
+}
+
+function getMemberConsecutiveAbsences(member, excludeEventId = null) {
+  const memberJoinDate = member?.createdAt ? parseDateOnly(member.createdAt) : null
+  let consecutive = 0
+
+  for (const ev of pastEvents.value) {
+    if (excludeEventId && ev.id === excludeEventId) continue
+
+    const evDate = parseDateOnly(ev.date)
+    if (memberJoinDate && evDate && evDate < memberJoinDate) {
+      continue
+    }
+
+    if (attendanceLookup.value.has(`${ev.id}_${member.id}`)) {
+      break
+    }
+    consecutive++
+  }
+
+  return consecutive
+}
+
+async function sendAbsenceThresholdNotifications(triggerEventId = null) {
+  const sweepKey = triggerEventId || eventsStore.currentEvent?.id || null
+  if (sweepKey && lastProcessedEventId.value === sweepKey) return
+  if (sweepKey) lastProcessedEventId.value = sweepKey
+
+  if (!authStore.branchId) return
+
+  const tasks = []
+  const thresholds = [3, 4, 5, 6, 7]
+
+  for (const member of membersStore.activeMembers || []) {
+    const consecutiveBefore = getMemberConsecutiveAbsences(member, sweepKey)
+    const consecutiveAfter = getMemberConsecutiveAbsences(member)
+    const memberName = `${member.firstName || ''} ${member.lastName || ''}`.trim() || member.displayName || 'Member'
+
+    for (const threshold of thresholds) {
+      if (consecutiveBefore < threshold && consecutiveAfter >= threshold) {
+        tasks.push(
+          notificationsStore.notifyMemberAbsenceThreshold(authStore.branchId, member.id, memberName, threshold)
+        )
+        break
+      }
+    }
+  }
+
+  if (tasks.length) {
+    await Promise.all(tasks)
+  }
 }
 
 async function runAutoArchival() {
@@ -167,8 +228,14 @@ async function runAutoArchival() {
   const archivedThisRun = []
   for (const memberId of toArchiveIds) {
     console.log(`Auto-archiving member ${memberId} due to 7 consecutive absences.`)
+    const member = membersStore.activeMembers.find(m => m.id === memberId)
     await membersStore.archiveMember(memberId)
     archivedThisRun.push(memberId)
+
+    if (member) {
+      const memberName = `${member.firstName || ''} ${member.lastName || ''}`.trim() || member.displayName || 'Member'
+      await notificationsStore.notifyMemberArchived(authStore.branchId, memberId, memberName)
+    }
 
     recentlyArchivedIds.value = new Set([...recentlyArchivedIds.value, memberId])
     await deleteReportsForMember(memberId)
@@ -255,7 +322,9 @@ async function archiveMember(memberId, reportId) {
   if (!confirmed) return
 
   try {
+    const memberName = `${mem.firstName || ''} ${mem.lastName || ''}`.trim() || mem.displayName || 'Member'
     await membersStore.archiveMember(memberId)
+    await notificationsStore.notifyMemberArchived(authStore.branchId, memberId, memberName)
 
     // Delete the report after successful archiving
     if (reportId) {
