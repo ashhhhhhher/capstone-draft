@@ -11,6 +11,7 @@ import { db } from '../firebase'
 import { collection, query, orderBy, onSnapshot } from 'firebase/firestore'
 import MemberCard from '../components/dgmComponents/MemberCard.vue'
 import MemberDetailsModal from '../components/dgmComponents/MemberDetailsModal.vue'
+import MemberAttendanceRecordsTable from '../components/dgmComponents/MemberAttendanceRecordsTable.vue'
 import Modal from '../components/dgmComponents/Modal.vue'
 import AbsenceMonitoring from '../components/dgmComponents/AbsenceMonitoring.vue' 
 import FilterModal from '../components/dgmComponents/FilterModal.vue' 
@@ -37,6 +38,8 @@ const showArchived = ref(false)
 const showMemberModal = ref(false)
 const showFilterModal = ref(false) 
 const selectedMember = ref(null)
+const showAttendanceRecordsModal = ref(false)
+const selectedAttendanceMember = ref(null)
 const searchQuery = ref('') 
 const showAbsenceMonitoringModal = ref(false)
 const showPendingModal = ref(false)
@@ -58,9 +61,30 @@ const currentFilters = ref({
 
 const sortOption = ref('joinDate-desc')
 
+const sortOptions = computed(() => {
+  if (showArchived.value) {
+    return [{ value: 'archivedAt-desc', label: 'Most Recently Archived' }]
+  }
+
+  return [
+    { value: 'joinDate-desc', label: 'Join Date (Newest)' },
+    { value: 'joinDate-asc', label: 'Join Date (Oldest)' },
+    { value: 'alphabetical-asc', label: 'A-Z' },
+    { value: 'alphabetical-desc', label: 'Z-A' }
+  ]
+})
+
 watch(sortOption, (newVal) => {
   const [key, order] = newVal.split('-')
   currentFilters.value.sort = { key, order }
+})
+
+watch(showArchived, (isArchived) => {
+  if (isArchived) {
+    sortOption.value = 'archivedAt-desc'
+  } else if (sortOption.value === 'archivedAt-desc') {
+    sortOption.value = 'joinDate-desc'
+  }
 })
 
 // --- Computed Properties ---
@@ -140,6 +164,12 @@ function applyMemberFilters(sourceMembers = []) {
       const tb = b.createdAt ? new Date(b.createdAt).getTime() : 0
       return (ta - tb) * dir
     })
+  } else if (sort.key === 'archivedAt') {
+    list.sort((a, b) => {
+      const ta = a.archivedAt ? new Date(a.archivedAt).getTime() : 0
+      const tb = b.archivedAt ? new Date(b.archivedAt).getTime() : 0
+      return (ta - tb) * dir
+    })
   } else {
     // alphabetical by firstName then lastName
     list.sort((a, b) => {
@@ -202,10 +232,12 @@ function goToArchivedPage(page) {
 
 // --- Functions ---
 function openMemberDetails(member) { selectedMember.value = member; showMemberModal.value = true; }
+function openAttendanceRecords(member) { selectedAttendanceMember.value = member; showAttendanceRecordsModal.value = true; }
 function handleSaveChanges(updatedMember) { membersStore.updateMember(updatedMember); showMemberModal.value = false; }
 function handleArchiveMember(memberId) { membersStore.archiveMember(memberId); showMemberModal.value = false; }
 function handleRestoreMember(memberId) { membersStore.restoreMember(memberId); showMemberModal.value = false; }
 function handleModalClose() { showMemberModal.value = false; }
+function closeAttendanceRecordsModal() { showAttendanceRecordsModal.value = false; selectedAttendanceMember.value = null; }
 function openAbsenceMonitoring() { showAbsenceMonitoringModal.value = true; }
 function openPendingList() { showPendingModal.value = true; }
 function openPendingDetails(p) { selectedPending.value = p; }
@@ -225,6 +257,22 @@ async function quickRestoreMember(member) {
   if (!member?.id) return
   if (!confirm(`Restore ${member.firstName} ${member.lastName}?`)) return
   await membersStore.restoreMember(member.id)
+}
+
+async function restoreAllArchivedMembers() {
+  const list = archivedMembers.value || []
+  if (!list.length) return
+
+  const ok = confirm(`Restore all ${list.length} archived members?`)
+  if (!ok) return
+
+  for (const member of list) {
+    if (member?.id) {
+      await membersStore.restoreMember(member.id)
+    }
+  }
+
+  showArchived.value = false
 }
 
 async function quickApprovePending(p) {
@@ -408,14 +456,21 @@ watch(archivedPageCount, (nextCount) => {
           <X :size="16" />
         </button>
       </div>
+
+      <button
+        v-if="showArchived && archivedMembers.length > 0"
+        class="restore-all-btn"
+        @click="restoreAllArchivedMembers"
+      >
+        Restore All Members
+      </button>
       
       <div class="sort-control">
         <label for="sort-select" class="sort-label">Sort by:</label>
-        <select id="sort-select" v-model="sortOption" class="sort-select">
-          <option value="joinDate-desc">Join Date (Newest)</option>
-          <option value="joinDate-asc">Join Date (Oldest)</option>
-          <option value="alphabetical-asc">A-Z</option>
-          <option value="alphabetical-desc">Z-A</option>
+        <select id="sort-select" v-model="sortOption" class="sort-select" :disabled="showArchived && sortOptions.length === 1">
+          <option v-for="opt in sortOptions" :key="opt.value" :value="opt.value">
+            {{ opt.label }}
+          </option>
         </select>
       </div>
 
@@ -535,7 +590,28 @@ watch(archivedPageCount, (nextCount) => {
   </div>
   
   <Modal v-if="showMemberModal" @close="handleModalClose"> 
-    <MemberDetailsModal v-if="selectedMember" :member="selectedMember" @close="handleModalClose" @saveChanges="handleSaveChanges" @archiveMember="handleArchiveMember" @restoreMember="handleRestoreMember" />
+    <MemberDetailsModal
+      v-if="selectedMember"
+      :member="selectedMember"
+      @close="handleModalClose"
+      @saveChanges="handleSaveChanges"
+      @archiveMember="handleArchiveMember"
+      @restoreMember="handleRestoreMember"
+      @viewAttendanceRecords="openAttendanceRecords"
+    />
+  </Modal>
+
+  <Modal v-if="showAttendanceRecordsModal && selectedAttendanceMember" @close="closeAttendanceRecordsModal" size="xl">
+    <div class="attendance-records-modal">
+      <div class="attendance-records-header">
+        <div>
+          <h3>{{ selectedAttendanceMember.firstName }} {{ selectedAttendanceMember.lastName }}</h3>
+          <p>Member since {{ formatArchiveDate(selectedAttendanceMember.createdAt) }}</p>
+        </div>
+        <button class="attendance-records-close" @click="closeAttendanceRecordsModal"><X :size="18" /></button>
+      </div>
+      <MemberAttendanceRecordsTable :member="selectedAttendanceMember" />
+    </div>
   </Modal>
 
   <Modal v-if="showAbsenceMonitoringModal" @close="showAbsenceMonitoringModal = false" size="xl">
@@ -663,11 +739,23 @@ watch(archivedPageCount, (nextCount) => {
 }
 .clear-search-btn:hover { background: #ECEFF1; color: #455A64; }
 
+.restore-all-btn { background: #E3F2FD; border: 1px solid #BBDEFB; color: #1565C0; padding: 10px 14px; border-radius: 8px; font-weight: 700; cursor: pointer; white-space: nowrap; transition: background 0.15s ease, transform 0.12s ease, box-shadow 0.12s ease; }
+.restore-all-btn:hover { background: #DCEFFF; transform: translateY(-1px); box-shadow: 0 6px 16px rgba(21, 101, 192, 0.08); }
+.restore-all-btn:active { transform: translateY(0); }
+
+.attendance-records-modal { padding: 24px; display: flex; flex-direction: column; gap: 16px; }
+.attendance-records-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.attendance-records-header h3 { margin: 0; font-size: 20px; font-weight: 800; color: #0F172A; }
+.attendance-records-header p { margin: 4px 0 0; font-size: 13px; color: #64748B; }
+.attendance-records-close { width: 36px; height: 36px; border: none; border-radius: 10px; background: #F8FAFC; color: #64748B; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; transition: background 0.2s ease, transform 0.2s ease; }
+.attendance-records-close:hover { background: #E2E8F0; transform: translateY(-1px); }
+
 /* Sort Controls CSS added */
 .sort-control { display: flex; align-items: center; gap: 8px; }
 .sort-label { font-size: 14px; font-weight: 600; color: #546E7A; }
 .sort-select { padding: 10px 14px; border-radius: 8px; border: 1px solid #CFD8DC; font-size: 14px; font-weight: 600; color: #546E7A; background-color: #fff; cursor: pointer; outline: none; transition: all 0.2s ease; }
 .sort-select:hover { background: #ECEFF1; }
+.sort-select:disabled { opacity: 1; cursor: default; background: #F8FBFF; color: #1565C0; }
 
 .filter-btn { background: #fff; border: 1px solid #CFD8DC; padding: 10px 14px; border-radius: 8px; font-weight: 600; color: #546E7A; cursor: pointer; display: flex; align-items: center; gap: 6px; }
 .filter-btn:hover { background: #ECEFF1; }
@@ -870,6 +958,7 @@ watch(archivedPageCount, (nextCount) => {
   .mobile-actions { display: flex; }
   .controls-wrapper { gap: 8px; flex-wrap: wrap; }
   .search-bar { flex-basis: 100%; order: -1; }
+  .restore-all-btn { width: 100%; }
   .pagination-bar { flex-direction: column; gap: 8px; }
 }
 

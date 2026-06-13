@@ -1,5 +1,6 @@
 <script setup>
 import { ref, computed, watch } from 'vue'
+import MemberAttendanceRecordsTable from './MemberAttendanceRecordsTable.vue'
 
 const props = defineProps({
   selectedEvent: Object, // The event clicked on from the table
@@ -18,19 +19,10 @@ const itemsPerPage = 10
 // Track the member currently selected for detailed view
 const selectedMemberDetail = ref(null)
 
-// Detail view pagination
-const detailCurrentPage = ref(1)
-const detailItemsPerPage = 5
-
 // Reset pagination and detail view when filters change
 watch([activeFilter, statusFilter], () => {
   currentPage.value = 1
   selectedMemberDetail.value = null
-})
-
-// Reset detail pagination when member selection changes
-watch(selectedMemberDetail, () => {
-  detailCurrentPage.value = 1
 })
 
 // Find the last 5 events leading up to and including the selected event for the table dots
@@ -201,59 +193,6 @@ const totalPages = computed(() => {
   return Math.ceil(memberPresenceData.value.length / itemsPerPage) || 1
 })
 
-// Generate dynamic history up to last seen for detail view
-const selectedMemberExtendedHistory = computed(() => {
-  if (!selectedMemberDetail.value || !props.allEvents) return []
-  
-  const memberId = selectedMemberDetail.value.id
-  const joinedDateStr = selectedMemberDetail.value.joinedDate 
-    ? selectedMemberDetail.value.joinedDate.split('T')[0] 
-    : '2000-01-01'
-
-  // Get all events sorted descending (newest to oldest) up to the selected event
-  const pastEventsDesc = props.allEvents
-    .filter(e => new Date(e.date) <= new Date(props.selectedEvent.date))
-    .sort((a, b) => new Date(b.date) - new Date(a.date))
-
-  const dynamicHistory = []
-
-  for (const ev of pastEventsDesc) {
-    let isMemberDuringEvent = ev.date >= joinedDateStr
-    const isPresent = attendanceLookup.value.has(`${ev.id}_${memberId}`)
-
-    if (isPresent) isMemberDuringEvent = true
-
-    let statusStr = 'not-member'
-    if (isMemberDuringEvent) {
-      statusStr = isPresent ? 'present' : 'absent'
-    }
-
-    dynamicHistory.push({
-      eventId: ev.id,
-      eventName: ev.name,
-      eventDate: ev.date,
-      status: statusStr
-    })
-
-    // Stop searching backward if:
-    // We have at least 5 events AND we've hit a state where they were Present (their "last seen")
-    // OR we hit the events before they were a member (not-member state)
-    if (dynamicHistory.length >= 5 && (statusStr === 'present' || statusStr === 'not-member')) {
-      break;
-    }
-  }
-
-  return dynamicHistory
-})
-
-const paginatedDetailData = computed(() => {
-  const start = (detailCurrentPage.value - 1) * detailItemsPerPage
-  return selectedMemberExtendedHistory.value.slice(start, start + detailItemsPerPage)
-})
-
-const detailTotalPages = computed(() => {
-  return Math.ceil(selectedMemberExtendedHistory.value.length / detailItemsPerPage) || 1
-})
 
 const formatDate = (dateStr) => {
   if (!dateStr) return 'Unknown'
@@ -374,50 +313,12 @@ const formatDate = (dateStr) => {
         <p>Member Since: <strong>{{ formatDate(selectedMemberDetail.joinedDate) }}</strong></p>
       </div>
 
-      <div class="table-container">
-        <table>
-          <thead>
-            <tr>
-              <th>DATE</th>
-              <th>EVENT NAME</th>
-              <th>ATTENDANCE STATUS</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="event in paginatedDetailData" :key="event.eventId">
-              <td class="text-gray-600">{{ formatDate(event.eventDate) }}</td>
-              <td class="font-bold text-dark">{{ event.eventName }}</td>
-              <td>
-                <div class="status-badge" :class="event.status">
-                  <span class="icon" v-if="event.status === 'present'">✓</span>
-                  <span class="icon" v-else-if="event.status === 'absent'">×</span>
-                  <span class="icon" v-else>-</span>
-                  {{ event.status === 'not-member' ? 'Not Joined Yet' : (event.status === 'present' ? 'Present' : 'Absent') }}
-                </div>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-
-      <!-- Detail Pagination Controls -->
-      <div class="pagination-controls" v-if="selectedMemberExtendedHistory.length > detailItemsPerPage">
-        <button 
-          class="page-btn" 
-          :disabled="detailCurrentPage === 1" 
-          @click="detailCurrentPage--"
-        >
-          Previous
-        </button>
-        <span class="page-info">Page {{ detailCurrentPage }} of {{ detailTotalPages }} ({{ selectedMemberExtendedHistory.length }} events)</span>
-        <button 
-          class="page-btn" 
-          :disabled="detailCurrentPage === detailTotalPages" 
-          @click="detailCurrentPage++"
-        >
-          Next
-        </button>
-      </div>
+      <MemberAttendanceRecordsTable
+        :member="selectedMemberDetail"
+        :all-events="allEvents"
+        :attendance="attendance"
+        :anchor-date="selectedEvent?.date"
+      />
     </div>
 
     <button class="close-btn mt-4" @click="emit('close')">Close Detail View</button>

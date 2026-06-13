@@ -14,6 +14,8 @@ const eventsStore = useEventsStore()
 const myId = computed(() => authStore.userProfile?.id)
 const loading = ref(true)
 const selectedYear = ref(new Date().getFullYear())
+const historyFilter = ref('present')
+const eventTypeFilter = ref('service')
 
 // Store only the current year's attendance locally
 const fetchedYearAttendance = ref([])
@@ -32,6 +34,7 @@ async function loadYearlyAttendance() {
 
   const profile = authStore.userProfile;
   const joinedDateStr = profile?.createdAt ? new Date(profile.createdAt).toISOString().split('T')[0] : null;
+  const todayStr = new Date().toISOString().split('T')[0];
 
   // 1. Instantly exit if trying to load a year before they joined (0 reads)
   if (selectedYear.value < minYear.value) {
@@ -41,41 +44,60 @@ async function loadYearlyAttendance() {
   }
   
   loading.value = true;
-  const startStr = `${selectedYear.value}-01-01`;
-  const endStr = `${selectedYear.value}-12-31`;
-  
-  // 2. Try the ultra-fast indexed query for NEW records
-  let myYearData = await attendanceStore.fetchMyAttendanceByDateRange(myId.value, startStr, endStr);
-  
-  // 3. FALLBACK for OLD records (Missing 'memberId' field)
-  if (myYearData.length === 0 && eventsStore.allEvents.length > 0) {
-      
-      // OPTIMIZATION: Filter events to ONLY the selected year, AND on or after their exact join date!
-      const eventsThisYear = eventsStore.allEvents.filter(e => {
-          const isThisYear = e.date.startsWith(selectedYear.value.toString());
-          const isAfterJoined = joinedDateStr ? e.date >= joinedDateStr : true;
-          return isThisYear && isAfterJoined;
-      });
-      
-      if (eventsThisYear.length > 0) {
-        const fallbackRecords = [];
-        for (const event of eventsThisYear) {
-            try {
-               const attRef = doc(db, 'branches', authStore.branchId, 'events', event.id, 'attendance', myId.value);
-               const attSnap = await getDoc(attRef);
-               if (attSnap.exists()) {
-                   fallbackRecords.push({ eventId: event.id, memberId: myId.value, ...attSnap.data() });
-               }
-            } catch(e) {
-               // Silenced to prevent console spam from Firebase permission errors on records they didn't attend
-            }
+  try {
+    await eventsStore.fetchEvents()
+
+    const startStr = `${selectedYear.value}-01-01`;
+    const endStr = `${selectedYear.value}-12-31`;
+    
+    // 2. Try the ultra-fast indexed query for NEW records
+    let myYearData = await attendanceStore.fetchMyAttendanceByDateRange(myId.value, startStr, endStr);
+
+    const yearPrefix = `${selectedYear.value}-`
+    const eventsThisYear = eventsStore.allEvents
+      .filter(e => {
+        const eventDate = e?.date || ''
+        const isThisYear = eventDate.startsWith(yearPrefix)
+        const isAfterJoined = joinedDateStr ? eventDate >= joinedDateStr : true
+        const isNotFuture = selectedYear.value === new Date().getFullYear() ? eventDate <= todayStr : true
+        return isThisYear && isAfterJoined && isNotFuture
+      })
+      .sort((a, b) => new Date(b.date) - new Date(a.date))
+    
+    // 3. FALLBACK for OLD records (Missing 'memberId' field)
+    if (myYearData.length === 0 && eventsThisYear.length > 0) {
+      const fallbackRecords = [];
+      for (const event of eventsThisYear) {
+        try {
+          const attRef = doc(db, 'branches', authStore.branchId, 'events', event.id, 'attendance', myId.value);
+          const attSnap = await getDoc(attRef);
+          if (attSnap.exists()) {
+            fallbackRecords.push({ eventId: event.id, memberId: myId.value, ...attSnap.data() });
+          }
+        } catch(e) {
+          // Silenced to prevent console spam from Firebase permission errors on records they didn't attend
         }
-        myYearData = fallbackRecords;
       }
+      myYearData = fallbackRecords;
+    }
+
+    const presentByEventId = new Map(myYearData.map(record => [record.eventId, record]))
+
+    fetchedYearAttendance.value = eventsThisYear.map(event => {
+      const presentRecord = presentByEventId.get(event.id)
+      return {
+        eventId: event.id,
+        memberId: myId.value,
+        status: presentRecord ? 'present' : 'absent',
+        ...presentRecord,
+        eventName: event.name || 'Unknown Event',
+        date: event.date || null,
+        eventType: event.eventType || null
+      }
+    })
+  } finally {
+    loading.value = false
   }
-  
-  fetchedYearAttendance.value = myYearData;
-  loading.value = false;
 }
 
 onMounted(async () => {
@@ -98,16 +120,43 @@ const changeYear = (delta) => {
   selectedYear.value += delta
 }
 
-const myAttendanceRecords = computed(() => {
-  // Since the fetched data is ALREADY filtered to just this member, we only need to match the event!
-  return fetchedYearAttendance.value.filter(rec => {
-    const ev = eventsStore.allEvents.find(e => e.id === rec.eventId)
-    return !!ev
+const historyRecords = computed(() => {
+  return fetchedYearAttendance.value
+    .map(record => {
+      const event = eventsStore.allEvents.find(e => e.id === record.eventId)
+      return {
+        ...record,
+        eventName: event ? event.name : record.eventName || 'Unknown Event',
+        date: event && event.date ? event.date : record.date || null,
+        eventType: event ? event.eventType : record.eventType || null,
+        status: record.status === 'absent' ? 'absent' : 'present'
+      }
+    })
+    .sort((a, b) => new Date(b.date) - new Date(a.date))
+})
+
+const eventTypeOptions = computed(() => {
+  if (isB1GMember.value) {
+    return [
+      { value: 'service', label: 'WKND' },
+      { value: 'b1g_event', label: 'B1G' }
+    ]
+  }
+  return [{ value: 'service', label: 'WKND' }]
+})
+
+const filteredHistoryRecords = computed(() => {
+  return historyRecords.value.filter(rec => {
+    const statusMatch = historyFilter.value === 'all' || rec.status === historyFilter.value
+    const typeMatch = isB1GMember.value ? rec.eventType === eventTypeFilter.value : rec.eventType === 'service'
+    return statusMatch && typeMatch
   })
 })
 
+const presentAttendanceRecords = computed(() => historyRecords.value.filter(rec => rec.status === 'present'))
+
 const enrichedRecords = computed(() => {
-  return myAttendanceRecords.value.map(record => {
+  return presentAttendanceRecords.value.map(record => {
     const event = eventsStore.allEvents.find(e => e.id === record.eventId)
     const dateVal = event && event.date ? event.date : null
     return {
@@ -119,11 +168,24 @@ const enrichedRecords = computed(() => {
   }).sort((a, b) => new Date(b.date) - new Date(a.date))
 })
 
-const totalCount = computed(() => enrichedRecords.value.length)
+const totalCount = computed(() => presentAttendanceRecords.value.length)
 const streak = computed(() => Math.min(totalCount.value, 5))
 const isB1GMember = computed(() => authStore.userProfile?.finalTags?.ageCategory === 'B1G')
-const wkndCount = computed(() => enrichedRecords.value.filter(r => r.eventType === 'service').length)
-const b1gCount = computed(() => enrichedRecords.value.filter(r => r.eventType === 'b1g_event').length)
+const wkndCount = computed(() => presentAttendanceRecords.value.filter(r => r.eventType === 'service').length)
+const b1gCount = computed(() => presentAttendanceRecords.value.filter(r => r.eventType === 'b1g_event').length)
+
+const monthlySeries = computed(() => {
+  if (historyFilter.value === 'present') {
+    return [{ key: 'present', label: 'Present', colorClass: 'present-color' }]
+  }
+  if (historyFilter.value === 'absent') {
+    return [{ key: 'absent', label: 'Absent', colorClass: 'absent-color' }]
+  }
+  return [
+    { key: 'present', label: 'Present', colorClass: 'present-color' },
+    { key: 'absent', label: 'Absent', colorClass: 'absent-color' }
+  ]
+})
 
 const monthlyStats = computed(() => {
   const map = {}
@@ -131,27 +193,27 @@ const monthlyStats = computed(() => {
   // Ensure all 12 months exist so the X-axis is always full and structured
   const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
   monthNames.forEach((m, idx) => {
-    map[m] = { wknd: 0, b1g: 0, sortIdx: idx }
+    map[m] = { present: 0, absent: 0, sortIdx: idx }
   })
 
-  enrichedRecords.value.forEach(rec => {
+  filteredHistoryRecords.value.forEach(rec => {
     const d = new Date(rec.date)
     const month = d.toLocaleString('default', { month: 'short' })
     if (map[month]) {
-      if (rec.eventType === 'service') map[month].wknd += 1
-      else if (rec.eventType === 'b1g_event') map[month].b1g += 1
+      if (rec.status === 'present') map[month].present += 1
+      else if (rec.status === 'absent') map[month].absent += 1
     }
   })
 
   return Object.entries(map)
-    .map(([m, v]) => ({ month: m, wknd: v.wknd, b1g: v.b1g, total: v.wknd + v.b1g, sortIdx: v.sortIdx }))
+    .map(([m, v]) => ({ month: m, present: v.present, absent: v.absent, total: v.present + v.absent, sortIdx: v.sortIdx }))
     .sort((a, b) => a.sortIdx - b.sortIdx)
 })
 
 const monthlyMax = computed(() => {
   const arr = monthlyStats.value || []
   if (!arr.length) return 1
-  const maxVal = Math.max(...arr.flatMap(s => [s.wknd, s.b1g]))
+  const maxVal = Math.max(...arr.flatMap(s => [s.present, s.absent]))
   return maxVal > 0 ? maxVal : 1 // Prevent division by zero
 })
 
@@ -170,9 +232,22 @@ const yAxisLabels = computed(() => {
       <!-- Year Selector UI -->
       <div class="year-selector">
         <button @click="changeYear(-1)" class="year-btn" :disabled="selectedYear <= minYear"><ChevronLeft :size="20" /></button>
-        <h2 class="year-label">{{ selectedYear }} Attendance</h2>
+        <h2 class="year-label">{{ selectedYear }}</h2>
         <button @click="changeYear(1)" class="year-btn" :disabled="selectedYear >= new Date().getFullYear()"><ChevronRight :size="20" /></button>
+              <div v-if="isB1GMember" class="event-toggle event-toggle-top">
+        <button
+          v-for="option in eventTypeOptions"
+          :key="option.value"
+          class="toggle-btn"
+          :class="{ active: eventTypeFilter === option.value }"
+          @click="eventTypeFilter = option.value"
+        >
+          {{ option.label }}
+        </button>
       </div>
+      </div>
+
+
 
       <div class="stats-row">
         <div class="stat-card blue">
@@ -185,10 +260,6 @@ const yAxisLabels = computed(() => {
             {{ streak }} <Flame :size="20" class="fire-icon" />
           </div>
         </div>
-        <div v-if="isB1GMember" class="stat-card red">
-          <span class="label">B1G Services</span>
-          <div class="value">{{ b1gCount }}</div>
-        </div>
       </div>
 
       <section class="chart-section">
@@ -197,11 +268,8 @@ const yAxisLabels = computed(() => {
           
           <!-- Dynamic Legend -->
           <div class="chart-legend">
-            <div class="legend-item">
-              <span class="legend-box wknd-color"></span> WKND
-            </div>
-            <div v-if="isB1GMember" class="legend-item">
-              <span class="legend-box b1g-color"></span> B1G
+            <div v-for="series in monthlySeries" :key="series.key" class="legend-item">
+              <span class="legend-box" :class="series.colorClass"></span> {{ series.label }}
             </div>
           </div>
         </div>
@@ -226,18 +294,16 @@ const yAxisLabels = computed(() => {
             <div class="bar-chart">
               <div v-for="(stat, index) in monthlyStats" :key="index" class="chart-col">
                 <div class="bar-group">
-                  
-                  <!-- WKND Bar (Only show if > 0 to avoid messy 0s) -->
-                  <div class="bar-wrapper" v-if="stat.wknd > 0">
-                    <span class="bar-val">{{ stat.wknd }}</span>
-                    <div class="bar-segment wknd" :style="{ height: `${(stat.wknd / monthlyMax) * 100}%` }"></div>
-                  </div>
-                  
-                  <!-- B1G Bar (Only show for B1G members AND if > 0) -->
-                  <div class="bar-wrapper" v-if="isB1GMember && stat.b1g > 0">
-                    <span class="bar-val">{{ stat.b1g }}</span>
-                    <div class="bar-segment b1g" :style="{ height: `${(stat.b1g / monthlyMax) * 100}%` }"></div>
-                  </div>
+                  <template v-for="series in monthlySeries" :key="series.key">
+                    <div v-if="stat[series.key] > 0" class="bar-wrapper">
+                      <span class="bar-val">{{ stat[series.key] }}</span>
+                      <div
+                        class="bar-segment"
+                        :class="series.colorClass"
+                        :style="{ height: `${(stat[series.key] / monthlyMax) * 100}%` }"
+                      ></div>
+                    </div>
+                  </template>
 
                 </div>
                 <span class="month-label">{{ stat.month }}</span>
@@ -251,20 +317,33 @@ const yAxisLabels = computed(() => {
     </div>
 
     <section class="history-section">
-      <h3>History Log ({{ selectedYear }})</h3>
+      <div class="history-header">
+        <h3>History Log ({{ selectedYear }})</h3>
+        <div class="history-controls">
+          <div class="history-filter">
+            <label for="historyFilter">Status</label>
+            <select id="historyFilter" v-model="historyFilter">
+              <option value="all">All</option>
+              <option value="present">Present</option>
+              <option value="absent">Absent</option>
+            </select>
+          </div>
+        </div>
+      </div>
       <div class="history-list" v-if="!loading">
-        <div v-for="rec in enrichedRecords" :key="rec.eventId" class="history-item">
-          <div class="status-icon">
-            <CheckCircle :size="20" color="#43A047" />
+        <div v-for="rec in filteredHistoryRecords" :key="`${rec.eventId}-${rec.status}`" class="history-item" :class="[`status-${rec.status}`]">
+          <div class="status-icon" :class="rec.status">
+            <CheckCircle v-if="rec.status === 'present'" :size="20" color="#43A047" />
+            <span v-else class="absent-mark">×</span>
           </div>
           <div class="info">
             <h4>{{ rec.eventName }} <span :class="['event-tag', rec.eventType === 'service' ? 'service-tag' : (rec.eventType === 'b1g_event' ? 'b1g-tag' : 'ccf-tag')]">{{ rec.eventType === 'service' ? 'WKND' : (rec.eventType === 'b1g_event' ? 'B1G' : 'CCF') }}</span></h4>
             <span class="date">{{ rec.date }}</span>
           </div>
-          <div class="badge-attended">Present</div>
+          <div :class="['badge-attended', rec.status === 'present' ? 'present' : 'absent']">{{ rec.status === 'present' ? 'Present' : 'Absent' }}</div>
         </div>
-        <div v-if="enrichedRecords.length === 0" class="empty-text">
-          No attendance records found for this year.
+        <div v-if="filteredHistoryRecords.length === 0" class="empty-text">
+          No {{ historyFilter === 'all' ? 'attendance or absence' : historyFilter }} records found for this year.
         </div>
       </div>
       <div v-else class="loading-text">Loading records...</div>
@@ -300,7 +379,6 @@ const yAxisLabels = computed(() => {
 .stats-row { display: flex; gap: 16px; flex-wrap: wrap; }
 .stat-card { flex: 1; min-width: 120px; box-sizing: border-box; padding: 24px; border-radius: 16px; color: white; display: flex; flex-direction: column; justify-content: space-between; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
 .stat-card.blue { background: linear-gradient(135deg, #42A5F5, #1565C0); }
-.stat-card.red { background: linear-gradient(135deg, #f54242, #c01515); }
 .stat-card.fire { background: linear-gradient(135deg, #FFCA28, #F57C00); }
 .stat-card .label { font-size: 13px; font-weight: 600; opacity: 0.9; text-transform: uppercase; }
 .stat-card .value { font-size: 36px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
@@ -312,8 +390,8 @@ const yAxisLabels = computed(() => {
 .chart-legend { display: flex; gap: 16px; align-items: center; }
 .legend-item { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; color: #546E7A; }
 .legend-box { width: 12px; height: 12px; border-radius: 3px; }
-.wknd-color { background: #1976D2; }
-.b1g-color { background: #D32F2F; }
+.present-color { background: #2E7D32; }
+.absent-color { background: #D32F2F; }
 
 .custom-chart-container {
   display: flex;
@@ -407,8 +485,8 @@ const yAxisLabels = computed(() => {
   min-height: 2px;
 }
 
-.bar-segment.wknd { background: #1976D2; }
-.bar-segment.b1g { background: #D32F2F; }
+.bar-segment.present-color { background: #2E7D32; }
+.bar-segment.absent-color { background: #D32F2F; }
 
 .bar-val {
   font-size: 10px;
@@ -430,22 +508,45 @@ const yAxisLabels = computed(() => {
 
 .event-tag { font-size: 11px; font-weight: 700; padding: 4px 8px; border-radius: 10px; margin-left: 8px; text-transform: uppercase; }
 .event-tag.service-tag { background: #E3F2FD; color: #1565C0; }
-.event-tag.b1g-tag { background: #FFEBEE; color: #D32F2F; }
+.event-tag.b1g-tag { background: #E8F3FF; color: #1E88E5; }
 .event-tag.ccf-tag { background: #FFF8E1; color: #F57C00; }
 
 .history-section { background: white; padding: 24px; border-radius: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); height: 100%; max-height: 500px; overflow-y: auto; width: 100%; box-sizing: border-box; }
-.history-section h3 { font-size: 18px; color: #37474F; margin-bottom: 16px; position: sticky; top: 0; background: white; padding-bottom: 10px; z-index: 1; }
+.history-header { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 16px; position: sticky; top: 0; background: white; padding-bottom: 10px; z-index: 1; }
+.history-section h3 { font-size: 18px; color: #37474F; margin: 0; }
+.history-controls { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+.event-toggle { display: inline-flex; border: 1px solid #DDE3E8; border-radius: 12px; overflow: hidden; background: #fff; }
+.event-toggle-top { align-self: center; margin: 8px auto 0; width: fit-content; }
+.toggle-btn { border: none; background: #fff; color: #546E7A; font-size: 13px; font-weight: 700; padding: 8px 14px; cursor: pointer; transition: background 0.2s, color 0.2s; }
+.toggle-btn + .toggle-btn { border-left: 1px solid #DDE3E8; }
+.toggle-btn:hover { background: #F5F9FF; }
+.toggle-btn.active { background: #E3F2FD; color: #1565C0; }
+.history-filter { display: flex; align-items: center; gap: 8px; }
+.history-filter label { font-size: 12px; font-weight: 700; color: #546E7A; text-transform: uppercase; }
+.history-filter select { border: 1px solid #DDE3E8; border-radius: 10px; background: #fff; color: #37474F; font-size: 13px; font-weight: 600; padding: 8px 10px; outline: none; }
+.history-filter select:focus { border-color: #90CAF9; box-shadow: 0 0 0 3px rgba(66, 165, 245, 0.12); }
 .history-item { background: #FAFAFA; padding: 16px; border-radius: 12px; display: flex; align-items: center; gap: 16px; margin-bottom: 12px; border: 1px solid #F5F5F5; }
+.history-item.status-absent { background: #FFF5F5; border-color: #FFE0E0; }
 .info { flex: 1; }
 .info h4 { margin: 0; font-size: 16px; color: #263238; }
 .info .date { font-size: 13px; color: #78909C; }
-.badge-attended { background: #E8F5E9; color: #2E7D32; font-size: 12px; padding: 4px 10px; border-radius: 6px; font-weight: 600; }
+.status-icon { width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.status-icon.absent { color: #D32F2F; }
+.absent-mark { font-size: 18px; font-weight: 800; line-height: 1; color: #D32F2F; }
+.badge-attended { font-size: 12px; padding: 4px 10px; border-radius: 6px; font-weight: 600; }
+.badge-attended.present { background: #E8F5E9; color: #2E7D32; }
+.badge-attended.absent { background: #FFEBEE; color: #C62828; }
 .empty-text { text-align: center; color: #B0BEC5; margin-top: 20px; }
 .no-data-chart { color: #B0BEC5; font-size: 14px; width: 100%; text-align: center; }
 .loading-text { text-align: center; color: #78909C; padding: 40px; }
 .mt-4 { margin-top: 16px; }
 
 @media (max-width: 600px) {
+  .history-header { flex-direction: column; align-items: flex-start; }
+  .history-controls { width: 100%; }
+  .event-toggle { width: 100%; }
+  .event-toggle-top { width: 100%; }
+  .toggle-btn { flex: 1; }
   .month-label { font-size: 9px; }
   .bar-wrapper { width: 10px; }
 }

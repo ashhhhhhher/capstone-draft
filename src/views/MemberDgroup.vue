@@ -6,6 +6,7 @@ import { useAttendanceStore } from '../stores/attendance'
 import { useRoute } from 'vue-router'
 import DgroupAbsenceMonitoring from '../components/memberComponents/DgroupAbsenceMonitoring.vue'
 import FindADgroup from '../components/memberComponents/FindADgroup.vue'
+import MemberAttendanceRecordsTable from '../components/dgmComponents/MemberAttendanceRecordsTable.vue'
 import { 
   User, Users, ChevronRight, X, UserMinus, HelpCircle, 
   Pencil, ClipboardCheck, Copy, Calendar as CalendarIcon, ArrowLeft,
@@ -24,6 +25,7 @@ const showPersonModal = ref(false)
 const showJoinByIdModal = ref(false)
 const showEditGroupModal = ref(false)
 const showSeekerFlowModal = ref(false)
+const showAttendanceRecordsModal = ref(false)
 
 // Constants shared with FindADgroup
 const INTEREST_OPTIONS = [
@@ -56,6 +58,7 @@ const editGroupForm = reactive({
 const dgroupIdInput = ref('')
 const joinStatus = ref({ type: '', msg: '' })
 const selectedPerson = ref(null) 
+const selectedAttendanceMember = ref(null)
 
 onMounted(() => {
   membersStore.fetchMembers()
@@ -178,6 +181,12 @@ function viewPerson(person) {
   if(!person) return
   selectedPerson.value = person
   showPersonModal.value = true
+}
+
+function viewAttendanceRecords(person) {
+  if (!person) return
+  selectedAttendanceMember.value = person
+  showAttendanceRecordsModal.value = true
 }
 
 function removeMember(member) {
@@ -509,6 +518,7 @@ function isPersonLeader(person) {
                 <div class="info-col">
                   <span class="name">{{ m.firstName }} {{ m.lastName }}</span>
                   <span class="status">{{ m.status || 'Active' }}</span>
+                    <button class="attendance-records-btn" @click.stop="viewAttendanceRecords(m)">View attendance records</button>
                 </div>
                 <button class="btn-icon-danger" @click.stop="removeMember(m)"><UserMinus :size="18" /></button>
               </div>
@@ -610,7 +620,28 @@ function isPersonLeader(person) {
                 <span class="d-value" v-else>--</span>
              </div>
           </div>
+
+             <div class="profile-actions-bottom">
+               <button class="attendance-records-bottom-btn" @click="viewAttendanceRecords(selectedPerson)">
+                 View attendance records
+               </button>
+             </div>
        </div>
+    </div>
+
+    <div v-if="showAttendanceRecordsModal && selectedAttendanceMember" class="modal-overlay" @click.self="showAttendanceRecordsModal = false">
+      <div class="modal attendance-records-modal">
+        <button class="close-x-absolute" @click="showAttendanceRecordsModal = false">
+          <X :size="24" />
+        </button>
+
+        <div class="attendance-records-header">
+          <h3>{{ selectedAttendanceMember.firstName }} {{ selectedAttendanceMember.lastName }}</h3>
+          <p>Attendance history</p>
+        </div>
+
+        <MemberAttendanceRecordsTable :member="selectedAttendanceMember" />
+      </div>
     </div>
 
     <!-- Join ID Modal -->
@@ -710,6 +741,20 @@ function isPersonLeader(person) {
 .info-col { flex: 1; margin-left: 12px; }
 .info-col .name { display: block; font-size: 15px; font-weight: 700; color: #0F172A; }
 .info-col .status { font-size: 12px; color: #94A3B8; font-weight: 500; }
+.attendance-records-btn {
+  margin-top: 4px;
+  border: none;
+  background: #E3F2FD;
+  color: #1565C0;
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+  width: fit-content;
+  transition: background 0.2s ease, transform 0.2s ease;
+}
+.attendance-records-btn:hover { background: #D6EAFB; transform: translateY(-1px); }
 .you-tag { font-size: 12px; color: #3B82F6; font-weight: 700; margin-left: 4px; }
 .btn-icon-danger { width: 32px; height: 32px; border: none; background: transparent; color: #CBD5E1; cursor: pointer; border-radius: 8px; transition: all 0.2s; }
 .btn-icon-danger:hover { background: #FEE2E2; color: #EF4444; }
@@ -746,6 +791,10 @@ function isPersonLeader(person) {
 /* MODALS */
 .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(15, 23, 42, 0.4); backdrop-filter: blur(8px); z-index: 2000; display: flex; align-items: center; justify-content: center; }
 .modal { background: white; width: 95%; max-width: 500px; border-radius: 28px; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.15); }
+.attendance-records-modal { padding: 24px; max-width: 920px; width: 96%; gap: 16px; }
+.attendance-records-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.attendance-records-header h3 { margin: 0; font-size: 20px; font-weight: 800; color: #0F172A; }
+.attendance-records-header p { margin: 4px 0 0; font-size: 13px; color: #64748B; }
 .modal-header-clean { padding: 24px 28px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1.5px solid #F1F5F9; }
 .modal-header-clean h3 { margin: 0; font-size: 20px; font-weight: 900; }
 .close-x { background: none; border: none; cursor: pointer; color: #94A3B8; }
@@ -845,6 +894,25 @@ function isPersonLeader(person) {
     background: #F8FAFC;
     border-radius: 12px;
     padding: 8px 16px;
+}
+.profile-actions-bottom {
+  margin-top: 20px;
+}
+.attendance-records-bottom-btn {
+  width: 100%;
+  border: none;
+  background: #E3F2FD;
+  color: #1565C0;
+  font-weight: 800;
+  font-size: 14px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  cursor: pointer;
+  transition: background 0.2s ease, transform 0.2s ease;
+}
+.attendance-records-bottom-btn:hover {
+  background: #D6EAFB;
+  transform: translateY(-1px);
 }
 .detail-row-clean {
     display: flex;

@@ -9,7 +9,7 @@ const props = defineProps({
   member: Object
 })
 
-const emit = defineEmits(['close', 'saveChanges', 'archiveMember', 'restoreMember'])
+const emit = defineEmits(['close', 'saveChanges', 'archiveMember', 'restoreMember', 'viewAttendanceRecords'])
 
 const membersStore = useMembersStore()
 const { leaders } = storeToRefs(membersStore) 
@@ -268,7 +268,10 @@ function copyToClipboard(text) {
           </div>
         </div>
 
-        <button class="btn-primary" @click="isEditMode = true">Edit</button>
+        <div class="header-actions">
+          <button class="btn-secondary" @click="emit('viewAttendanceRecords', member)">View attendance records</button>
+          <button class="btn-primary" @click="isEditMode = true">Edit</button>
+        </div>
       </div>
       <h3 v-if="isEditMode" class="modal-title">Edit Member Details</h3>
       <h3 v-if="showArchiveConfirmation" class="modal-title delete-header">Archive Member</h3>
@@ -440,6 +443,13 @@ function copyToClipboard(text) {
 .mt-20 { margin-top: 20px; }
 
 .modal-header { display: flex; justify-content: space-between; align-items: flex-start; }
+.header-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
+
+@media (max-width: 640px) {
+  .modal-header { flex-direction: column; gap: 12px; }
+  .header-actions { width: 100%; justify-content: flex-start; }
+  .header-actions .btn-secondary, .header-actions .btn-primary { flex: 1; justify-content: center; }
+}
 .header-left { display: flex; align-items: center; gap: 16px; }
 .modal-avatar-wrapper { width: 64px; height: 64px; flex-shrink: 0; }
 .modal-avatar-img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; border: 2px solid #E3F2FD; }

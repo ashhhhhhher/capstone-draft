@@ -5,8 +5,10 @@ const props = defineProps({
   member: Object,
   isPresent: Boolean,
   hideStatus: Boolean, // New prop to hide the status section
-  hideDetails: Boolean
+  hideDetails: Boolean,
 })
+
+defineEmits(['click'])
 
 const initials = computed(() => {
   if (!props.member?.firstName) return '?'
@@ -35,7 +37,7 @@ const profileImageSrc = computed(() => {
 </script>
 
 <template>
-  <div class="member-card">
+  <div class="member-card" @click="$emit('click')">
     <!-- Updated Avatar: Checks profilePicture first, then photoURL -->
     <img 
       v-if="profileImageSrc" 
@@ -50,7 +52,6 @@ const profileImageSrc = computed(() => {
     <div class="info">
       <div class="name-row">
         <span class="name">{{ member.firstName }} {{ member.lastName }}</span>
-        <!-- Tags -->
         <span v-if="member.finalTags?.isDgroupLeader" class="tag dl">DL</span>
         <span v-else-if="member.finalTags?.isVolunteer" class="tag vol">Vol</span>
       </div>
@@ -116,6 +117,7 @@ const profileImageSrc = computed(() => {
   display: flex;
   align-items: center;
   gap: 6px;
+  flex-wrap: wrap;
 }
 
 .name {
@@ -155,4 +157,5 @@ const profileImageSrc = computed(() => {
   font-size: 12px;
   font-weight: 600;
 }
+
 </style>

@@ -7,7 +7,7 @@ import { useAttendanceStore } from '../../stores/attendance'
 import { useEventsStore } from '../../stores/events'
 import { useChatStore } from '../../stores/chat'
 import { db } from '../../firebase'
-import { collection, query, orderBy, onSnapshot, deleteDoc, doc, updateDoc } from 'firebase/firestore'
+import { collection, query, orderBy, onSnapshot, deleteDoc, doc, updateDoc, getDocs, where } from 'firebase/firestore'
 
 const authStore = useAuthStore()
 const membersStore = useMembersStore()
@@ -20,13 +20,15 @@ const { currentEventAttendees } = storeToRefs(attendanceStore)
 const reports = ref([])
 const isLoading = ref(true)
 const selectedReportDetail = ref(null)
+const recentlyArchivedCount = ref(0)
+const recentlyArchivedIds = ref(new Set())
+const showRecentlyArchived = ref(false)
 let unsub = null
 
 const presentMemberIds = computed(() => {
   return new Set((currentEventAttendees.value || []).map(att => att.memberId).filter(Boolean))
 })
 
-// Get all past events sorted newest to oldest
 const pastEvents = computed(() => {
   const todayStr = new Date().toISOString().split('T')[0]
   return eventsStore.allEvents
@@ -45,9 +47,29 @@ const attendanceLookup = computed(() => {
   return lookup
 })
 
-// Enrich the flagged reports with computed streak and member data
+const visibleReports = computed(() => {
+  const archivedIds = new Set((membersStore.archivedMembers || []).map(m => m.id))
+  return reports.value.filter(report => {
+    if (!report.memberId) return true
+    return !archivedIds.has(report.memberId) && !recentlyArchivedIds.value.has(report.memberId)
+  })
+})
+
+const recentlyArchivedMembers = computed(() => {
+  const archivedIds = recentlyArchivedIds.value
+  return (membersStore.archivedMembers || [])
+    .filter(member => archivedIds.has(member.id))
+    .map(member => ({
+      id: member.id,
+      name: `${member.firstName || ''} ${member.lastName || ''}`.trim() || member.displayName || 'Unknown Member',
+      leader: member.dgroupLeader || 'None',
+      archivedAt: member.archivedAt || null
+    }))
+})
+
 const enrichedReports = computed(() => {
-  return reports.value.map(report => {
+  return visibleReports.value
+    .map(report => {
     const member = membersStore.activeMembers.find(m => m.id === report.memberId) || {
       firstName: report.name.split(' ')[0],
       lastName: report.name.split(' ').slice(1).join(' '),
@@ -79,17 +101,36 @@ const enrichedReports = computed(() => {
       }
     })
 
-    return {
-      ...report,
-      member,
-      dleader: member.dgroupLeader || 'None',
-      streak,
-      lastPresentEvent,
-      last7Events,
-      joinedDate: member.createdAt
-    }
-  })
+      return {
+        ...report,
+        member,
+        dleader: member.dgroupLeader || 'None',
+        streak,
+        lastPresentEvent,
+        last7Events,
+        joinedDate: member.createdAt
+      }
+    })
 })
+
+async function deleteReportsForMember(memberId) {
+  if (!authStore.branchId || !memberId) return
+
+  try {
+    const reportsCol = collection(db, 'branches', authStore.branchId, 'absenceReports')
+    const q = query(reportsCol, where('memberId', '==', memberId))
+    const snap = await getDocs(q)
+
+    await Promise.all(snap.docs.map(d => deleteDoc(d.ref)))
+    reports.value = reports.value.filter(report => report.memberId !== memberId)
+
+    if (selectedReportDetail.value?.memberId === memberId) {
+      selectedReportDetail.value = null
+    }
+  } catch (err) {
+    console.error('Failed to delete archived member reports', err)
+  }
+}
 
 function buildAbsenceNotifications() {
   // kept for compatibility
@@ -123,16 +164,18 @@ async function runAutoArchival() {
   }
 
   // Execute archival
+  const archivedThisRun = []
   for (const memberId of toArchiveIds) {
     console.log(`Auto-archiving member ${memberId} due to 7 consecutive absences.`)
     await membersStore.archiveMember(memberId)
-    
-    // Automatically delete their absence flag if it exists
-    const existingReport = reports.value.find(r => r.memberId === memberId)
-    if (existingReport) {
-      await deleteReport(existingReport.id, true)
-    }
+    archivedThisRun.push(memberId)
+
+    recentlyArchivedIds.value = new Set([...recentlyArchivedIds.value, memberId])
+    await deleteReportsForMember(memberId)
   }
+
+  recentlyArchivedCount.value = archivedThisRun.length
+  showRecentlyArchived.value = archivedThisRun.length > 0
 }
 
 onMounted(async () => {
@@ -166,6 +209,14 @@ onMounted(async () => {
     })
   })
 })
+
+watch(visibleReports, (nextReports) => {
+  if (!selectedReportDetail.value) return
+  const stillVisible = nextReports.some(report => report.id === selectedReportDetail.value?.id)
+  if (!stillVisible) {
+    selectedReportDetail.value = null
+  }
+}, { immediate: true })
 
 // Auto-resolve flags if the member attends the current event
 watch([presentMemberIds, reports], async ([memberIds]) => {
@@ -229,7 +280,6 @@ async function deleteReport(reportId, silent = false) {
   try {
     const reportRef = doc(db, 'branches', authStore.branchId, 'absenceReports', reportId)
     await deleteDoc(reportRef)
-    // Optimistically remove from local list
     reports.value = reports.value.filter(r => r.id !== reportId)
     if (selectedReportDetail.value?.id === reportId) {
       selectedReportDetail.value = null
@@ -267,7 +317,28 @@ defineExpose({ buildAbsenceNotifications })
 <template>
   <div class="absence-monitoring-wrapper">
     <div class="header-titles">
-      <h2>Flagged Absences</h2>
+      <div class="header-main">
+        <h2>Flagged Absences</h2>
+        <button
+          v-if="recentlyArchivedCount > 0"
+          class="recently-archived-btn"
+          type="button"
+          @click="showRecentlyArchived = !showRecentlyArchived"
+          :aria-expanded="showRecentlyArchived"
+          :aria-controls="'recently-archived-panel'"
+        >
+          Recently archived: {{ recentlyArchivedCount }}
+        </button>
+      </div>
+      <div v-if="showRecentlyArchived && recentlyArchivedMembers.length" id="recently-archived-panel" class="recently-archived-panel">
+        <div class="recently-archived-title">Archived this run</div>
+        <div class="recently-archived-list">
+          <div v-for="member in recentlyArchivedMembers" :key="member.id" class="recently-archived-item">
+            <span class="recently-archived-name">{{ member.name }}</span>
+            <span class="recently-archived-meta">{{ member.leader }}</span>
+          </div>
+        </div>
+      </div>
       <p>Members reported by DGroup Leaders for prolonged absences. Auto-archival occurs after 7 consecutive missed events.</p>
     </div>
 
@@ -386,8 +457,17 @@ defineExpose({ buildAbsenceNotifications })
 <style scoped>
 .absence-monitoring-wrapper { padding: 12px; }
 .header-titles { margin-bottom: 24px; }
+.header-main { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
 .header-titles h2 { font-size: 20px; font-weight: 700; color: #263238; margin: 0 0 4px 0; }
 .header-titles p { font-size: 14px; color: #546E7A; margin: 0; }
+.recently-archived-btn { border: 1px solid #BBDEFB; background: #E3F2FD; color: #1565C0; font-size: 12px; font-weight: 700; padding: 8px 12px; border-radius: 999px; cursor: pointer; transition: background 0.2s ease, transform 0.2s ease; }
+.recently-archived-btn:hover { background: #DCEFFF; transform: translateY(-1px); }
+.recently-archived-panel { margin: 10px 0 14px; border: 1px solid #E3F2FD; background: #F8FBFF; border-radius: 12px; padding: 12px; }
+.recently-archived-title { font-size: 12px; font-weight: 800; color: #1565C0; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 8px; }
+.recently-archived-list { display: grid; gap: 8px; }
+.recently-archived-item { display: flex; justify-content: space-between; gap: 12px; padding: 8px 10px; background: #fff; border: 1px solid #EAF2FF; border-radius: 10px; }
+.recently-archived-name { font-size: 13px; font-weight: 700; color: #263238; }
+.recently-archived-meta { font-size: 12px; color: #607D8B; white-space: nowrap; }
 
 .loading-state, .empty-list-msg { 
   text-align: center; 
