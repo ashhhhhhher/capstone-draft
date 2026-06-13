@@ -1,12 +1,14 @@
 <script setup>
-import { ref, computed, onMounted, reactive, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, reactive, watch } from 'vue'
 import { useAuthStore } from '../stores/auth'
 import { useMembersStore } from '../stores/members'
-import { useAttendanceStore } from '../stores/attendance'
 import { useRoute } from 'vue-router'
 import DgroupAbsenceMonitoring from '../components/memberComponents/DgroupAbsenceMonitoring.vue'
 import FindADgroup from '../components/memberComponents/FindADgroup.vue'
 import MemberAttendanceRecordsTable from '../components/dgmComponents/MemberAttendanceRecordsTable.vue'
+import { db } from '../firebase'
+import { collection, onSnapshot } from 'firebase/firestore'
+import { formatWeekIdDisplay } from '../utils/weeklyMeetingUtils'
 import { 
   User, Users, ChevronRight, X, UserMinus, HelpCircle, 
   Pencil, ClipboardCheck, Copy, Calendar as CalendarIcon, ArrowLeft,
@@ -17,7 +19,6 @@ import DgroupOverview from '../components/memberComponents/DgroupOverview.vue'
 
 const authStore = useAuthStore()
 const membersStore = useMembersStore()
-const attendanceStore = useAttendanceStore()
 const route = useRoute()
 
 const activeTab = ref('upline') 
@@ -59,6 +60,14 @@ const dgroupIdInput = ref('')
 const joinStatus = ref({ type: '', msg: '' })
 const selectedPerson = ref(null) 
 const selectedAttendanceMember = ref(null)
+const weeklyMeetingLogs = ref([])
+const weeklyMeetingLoading = ref(true)
+const weeklyMeetingPage = ref(1)
+const showWeeklyMeetingsModal = ref(false)
+const showWeeklyMeetingDetailModal = ref(false)
+const selectedWeeklyMeeting = ref(null)
+const WEEKLY_MEETING_PAGE_SIZE = 10
+let unsubscribeWeeklyMeetings = null
 
 onMounted(() => {
   membersStore.fetchMembers()
@@ -114,6 +123,125 @@ const myUplineGroup = computed(() => {
   if (!myLeaderName.value) return []
   return membersStore.activeMembers.filter(m => m.dgroupLeader === myLeaderName.value)
 })
+
+const leaderWeeklyMeetings = computed(() => {
+  return [...weeklyMeetingLogs.value].sort((a, b) => {
+    const aId = a.meetingWeekId || a.meetingDate || a.loggingDate || a.id || ''
+    const bId = b.meetingWeekId || b.meetingDate || b.loggingDate || b.id || ''
+    return bId.localeCompare(aId)
+  })
+})
+
+const recentWeeklyMeetings = computed(() => leaderWeeklyMeetings.value.slice(0, 3))
+
+const weeklyMeetingPageCount = computed(() => Math.max(1, Math.ceil(leaderWeeklyMeetings.value.length / WEEKLY_MEETING_PAGE_SIZE)))
+
+const paginatedWeeklyMeetings = computed(() => {
+  const start = (weeklyMeetingPage.value - 1) * WEEKLY_MEETING_PAGE_SIZE
+  return leaderWeeklyMeetings.value.slice(start, start + WEEKLY_MEETING_PAGE_SIZE)
+})
+
+const selectedWeeklyMeetingAttendance = computed(() => {
+  return selectedWeeklyMeeting.value?.attendees || {}
+})
+
+const selectedWeeklyMeetingPresentMembers = computed(() => {
+  const members = primaryDownlineGroup.value?.members || []
+  const attendanceMap = selectedWeeklyMeetingAttendance.value
+  return members.filter(member => attendanceMap[member.id]?.isPresent)
+})
+
+const selectedWeeklyMeetingAbsentMembers = computed(() => {
+  const members = primaryDownlineGroup.value?.members || []
+  const attendanceMap = selectedWeeklyMeetingAttendance.value
+  return members.filter(member => !attendanceMap[member.id]?.isPresent)
+})
+
+watch(
+  [() => authStore.branchId, () => myProfile.value?.id, isLeader],
+  ([branchId, leaderId, leaderFlag]) => {
+    if (unsubscribeWeeklyMeetings) {
+      unsubscribeWeeklyMeetings()
+      unsubscribeWeeklyMeetings = null
+    }
+
+    weeklyMeetingLogs.value = []
+    weeklyMeetingLoading.value = true
+
+    if (!branchId || !leaderId || !leaderFlag) {
+      weeklyMeetingLoading.value = false
+      return
+    }
+
+    const meetingsCol = collection(db, 'branches', branchId, 'dgroupEvents', leaderId, 'meetings')
+    unsubscribeWeeklyMeetings = onSnapshot(meetingsCol, (snapshot) => {
+      const items = []
+      snapshot.forEach(docSnap => {
+        const data = docSnap.data()
+        if (data && (data.submittedBy || data.submittedById || data.meetingDate || data.meetingWeekId)) {
+          items.push({ id: docSnap.id, ...data })
+        }
+      })
+
+      items.sort((a, b) => {
+        const aId = a.meetingWeekId || a.meetingDate || a.loggingDate || a.id || ''
+        const bId = b.meetingWeekId || b.meetingDate || b.loggingDate || b.id || ''
+        return bId.localeCompare(aId)
+      })
+
+      weeklyMeetingLogs.value = items
+      weeklyMeetingLoading.value = false
+    }, (err) => {
+      console.error('Weekly meetings onSnapshot error:', err)
+      weeklyMeetingLoading.value = false
+    })
+  },
+  { immediate: true }
+)
+
+onUnmounted(() => {
+  if (typeof unsubscribeWeeklyMeetings === 'function') {
+    unsubscribeWeeklyMeetings()
+    unsubscribeWeeklyMeetings = null
+  }
+})
+
+function formatMeetingDate(meeting) {
+  const raw = meeting?.meetingDate || meeting?.loggingDate || meeting?.submittedAt || null
+  const dateStr = typeof raw === 'string' ? raw.slice(0, 10) : null
+  if (dateStr) {
+    const d = new Date(`${dateStr}T00:00:00`)
+    if (!isNaN(d.getTime())) {
+      return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+    }
+  }
+  if (meeting?.meetingWeekId) return formatWeekIdDisplay(meeting.meetingWeekId)
+  return 'Unknown date'
+}
+
+function attendanceCount(meeting) {
+  return Object.values(meeting?.attendees || {}).filter(a => a?.isPresent).length
+}
+
+function totalExpectedCount(meeting) {
+  return Object.keys(meeting?.attendees || {}).length
+}
+
+function openWeeklyMeetingsModal() {
+  weeklyMeetingPage.value = 1
+  showWeeklyMeetingsModal.value = true
+}
+
+function openWeeklyMeetingDetail(meeting) {
+  if (!meeting) return
+  selectedWeeklyMeeting.value = meeting
+  showWeeklyMeetingDetailModal.value = true
+}
+
+function closeWeeklyMeetingDetail() {
+  showWeeklyMeetingDetailModal.value = false
+  selectedWeeklyMeeting.value = null
+}
 
 // Helper for calculating age
 function calculateAge(birthday) {
@@ -518,7 +646,6 @@ function isPersonLeader(person) {
                 <div class="info-col">
                   <span class="name">{{ m.firstName }} {{ m.lastName }}</span>
                   <span class="status">{{ m.status || 'Active' }}</span>
-                    <button class="attendance-records-btn" @click.stop="viewAttendanceRecords(m)">View attendance records</button>
                 </div>
                 <button class="btn-icon-danger" @click.stop="removeMember(m)"><UserMinus :size="18" /></button>
               </div>
@@ -527,6 +654,45 @@ function isPersonLeader(person) {
                   No members yet.
               </div>
             </div>
+
+            <div class="common-list-card weekly-meetings-card">
+              <div class="list-header row weekly-header-row">
+                <h4>Weekly Dgroup Meeting Attendance</h4>
+                <button
+                  class="view-all-btn"
+                  @click="openWeeklyMeetingsModal"
+                  :disabled="weeklyMeetingLogs.length === 0"
+                >
+                  View all
+                </button>
+              </div>
+
+              <div v-if="weeklyMeetingLoading" class="weekly-state muted">Loading weekly records...</div>
+              <template v-else>
+                <div v-if="recentWeeklyMeetings.length === 0" class="weekly-state muted">
+                  No weekly meeting records yet.
+                </div>
+
+                <div v-else class="weekly-preview-list">
+                  <div v-for="meeting in recentWeeklyMeetings" :key="meeting.id" class="weekly-preview-item clickable" @click="openWeeklyMeetingDetail(meeting)">
+                    <div class="weekly-preview-main">
+                      <div class="weekly-preview-date">{{ formatMeetingDate(meeting) }}</div>
+                      <div class="weekly-preview-sub">
+                        <span>{{ meeting.submittedBy || 'Unknown leader' }}</span>
+                        <span class="bullet">•</span>
+                        <span>{{ attendanceCount(meeting) }} / {{ totalExpectedCount(meeting) }} attended</span>
+                      </div>
+                    </div>
+                    <div class="weekly-preview-badges">
+                      <span class="weekly-chip blue">CD {{ meeting.campusDmember || 0 }}</span>
+                      <span class="weekly-chip green">E {{ meeting.evangelized || 0 }}</span>
+                      <span class="weekly-chip orange">G {{ meeting.guests || 0 }}</span>
+                    </div>
+                  </div>
+                </div>
+              </template>
+            </div>
+
             <div style="margin-top:24px"><DgroupAbsenceMonitoring /></div>
           </div>
         </template>
@@ -644,6 +810,93 @@ function isPersonLeader(person) {
       </div>
     </div>
 
+    <div v-if="showWeeklyMeetingsModal" class="modal-overlay" @click.self="showWeeklyMeetingsModal = false">
+      <div class="modal weekly-meetings-modal">
+        <button class="close-x-absolute" @click="showWeeklyMeetingsModal = false">
+          <X :size="24" />
+        </button>
+
+        <div class="weekly-modal-header">
+          <div>
+            <h3>Weekly Dgroup Meeting Attendance</h3>
+            <p>{{ leaderWeeklyMeetings.length }} records total</p>
+          </div>
+        </div>
+
+        <div v-if="leaderWeeklyMeetings.length === 0" class="weekly-state muted">
+          No weekly meeting records yet.
+        </div>
+
+        <template v-else>
+          <div class="weekly-modal-list">
+            <div v-for="meeting in paginatedWeeklyMeetings" :key="meeting.id" class="weekly-modal-item clickable" @click="openWeeklyMeetingDetail(meeting)">
+              <div class="weekly-preview-main">
+                <div class="weekly-preview-date">{{ formatMeetingDate(meeting) }}</div>
+                <div class="weekly-preview-sub">
+                  <span>{{ meeting.submittedBy || 'Unknown leader' }}</span>
+                  <span class="bullet">•</span>
+                  <span>{{ attendanceCount(meeting) }} / {{ totalExpectedCount(meeting) }} attended</span>
+                </div>
+              </div>
+              <div class="weekly-preview-badges">
+                <span class="weekly-chip blue">CD {{ meeting.campusDmember || 0 }}</span>
+                <span class="weekly-chip green">E {{ meeting.evangelized || 0 }}</span>
+                <span class="weekly-chip orange">G {{ meeting.guests || 0 }}</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="weekly-pagination" v-if="weeklyMeetingPageCount > 1">
+            <button class="pagination-btn" @click="weeklyMeetingPage--" :disabled="weeklyMeetingPage === 1">Previous</button>
+            <div class="pagination-info">
+              <span>Page {{ weeklyMeetingPage }} of {{ weeklyMeetingPageCount }}</span>
+              <span>{{ leaderWeeklyMeetings.length }} records total</span>
+            </div>
+            <button class="pagination-btn" @click="weeklyMeetingPage++" :disabled="weeklyMeetingPage === weeklyMeetingPageCount">Next</button>
+          </div>
+        </template>
+      </div>
+    </div>
+
+    <div v-if="showWeeklyMeetingDetailModal && selectedWeeklyMeeting" class="modal-overlay" @click.self="closeWeeklyMeetingDetail()">
+      <div class="modal weekly-detail-modal">
+        <button class="close-x-absolute" @click="closeWeeklyMeetingDetail()">
+          <X :size="24" />
+        </button>
+
+        <div class="weekly-detail-header">
+          <div>
+            <h3>{{ formatMeetingDate(selectedWeeklyMeeting) }}</h3>
+            <p>{{ selectedWeeklyMeeting.submittedBy || 'Unknown leader' }} • {{ attendanceCount(selectedWeeklyMeeting) }} / {{ totalExpectedCount(selectedWeeklyMeeting) }} attended</p>
+          </div>
+        </div>
+
+        <div class="weekly-detail-grid">
+          <div class="weekly-detail-panel present-panel">
+            <div class="weekly-detail-title">Present ({{ selectedWeeklyMeetingPresentMembers.length }})</div>
+            <div v-if="selectedWeeklyMeetingPresentMembers.length === 0" class="weekly-state muted">No present members.</div>
+            <div v-else class="weekly-member-list">
+              <div v-for="member in selectedWeeklyMeetingPresentMembers" :key="member.id" class="weekly-member-row present-row">
+                <span class="member-dot present"></span>
+                <span class="member-name-text">{{ member.firstName }} {{ member.lastName }}</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="weekly-detail-panel absent-panel">
+            <div class="weekly-detail-title">Absent ({{ selectedWeeklyMeetingAbsentMembers.length }})</div>
+            <div v-if="selectedWeeklyMeetingAbsentMembers.length === 0" class="weekly-state muted">No absent members.</div>
+            <div v-else class="weekly-member-list">
+              <div v-for="member in selectedWeeklyMeetingAbsentMembers" :key="member.id" class="weekly-member-row absent-row">
+                <span class="member-dot absent"></span>
+                <span class="member-name-text">{{ member.firstName }} {{ member.lastName }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Join ID Modal -->
     <div v-if="showJoinByIdModal" class="modal-overlay" @click.self="showJoinByIdModal = false">
       <div class="modal join-id-modal">
@@ -741,23 +994,64 @@ function isPersonLeader(person) {
 .info-col { flex: 1; margin-left: 12px; }
 .info-col .name { display: block; font-size: 15px; font-weight: 700; color: #0F172A; }
 .info-col .status { font-size: 12px; color: #94A3B8; font-weight: 500; }
-.attendance-records-btn {
-  margin-top: 4px;
-  border: none;
-  background: #E3F2FD;
-  color: #1565C0;
-  border-radius: 999px;
-  padding: 4px 10px;
-  font-size: 10px;
-  font-weight: 700;
-  cursor: pointer;
-  width: fit-content;
-  transition: background 0.2s ease, transform 0.2s ease;
-}
-.attendance-records-btn:hover { background: #D6EAFB; transform: translateY(-1px); }
 .you-tag { font-size: 12px; color: #3B82F6; font-weight: 700; margin-left: 4px; }
 .btn-icon-danger { width: 32px; height: 32px; border: none; background: transparent; color: #CBD5E1; cursor: pointer; border-radius: 8px; transition: all 0.2s; }
 .btn-icon-danger:hover { background: #FEE2E2; color: #EF4444; }
+
+.weekly-meetings-card { margin-top: 24px; }
+.weekly-header-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.weekly-header-row h4 { margin: 0; font-size: 13px; }
+.view-all-btn {
+  border: none;
+  background: #E3F2FD;
+  color: #1565C0;
+  font-weight: 800;
+  font-size: 12px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background 0.2s ease, transform 0.2s ease;
+}
+.view-all-btn:hover:not(:disabled) { background: #D6EAFB; transform: translateY(-1px); }
+.view-all-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.weekly-preview-list, .weekly-modal-list { display: flex; flex-direction: column; }
+.weekly-preview-item, .weekly-modal-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  padding: 14px 24px;
+  border-bottom: 1px solid #F8FAFC;
+}
+.clickable { cursor: pointer; transition: background 0.15s ease, transform 0.12s ease; }
+.clickable:hover { background: #F8FAFC; transform: translateY(-1px); }
+.weekly-preview-item:last-child, .weekly-modal-item:last-child { border-bottom: none; }
+.weekly-preview-main { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.weekly-preview-date { font-size: 15px; font-weight: 800; color: #0F172A; }
+.weekly-preview-sub { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; color: #64748B; font-size: 12px; }
+.weekly-preview-badges { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+.weekly-chip { font-size: 11px; font-weight: 800; padding: 4px 8px; border-radius: 999px; }
+.weekly-chip.blue { background: #E3F2FD; color: #1565C0; }
+.weekly-chip.green { background: #E8F5E9; color: #2E7D32; }
+.weekly-chip.orange { background: #FFF3E0; color: #F57C00; }
+.weekly-state { padding: 18px 24px; }
+.weekly-state.muted { color: #94A3B8; }
+.weekly-meetings-modal { padding: 24px; max-width: 860px; width: 96%; gap: 16px; }
+.weekly-modal-header h3 { margin: 0; font-size: 14px; font-weight: 900; color: #0F172A; }
+.weekly-modal-header p { margin: 4px 0 0; font-size: 13px; color: #64748B; }
+.weekly-pagination { display: flex; justify-content: center; align-items: center; gap: 16px; margin-top: 8px; flex-wrap: wrap; }
+.weekly-detail-modal { padding: 24px; max-width: 900px; width: 96%; gap: 16px; }
+.weekly-detail-header h3 { margin: 0; font-size: 14px; font-weight: 900; color: #0F172A; }
+.weekly-detail-header p { margin: 4px 0 0; font-size: 13px; color: #64748B; }
+.weekly-detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.weekly-detail-panel { background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 16px; padding: 16px; }
+.weekly-detail-title { font-size: 14px; font-weight: 900; color: #0F172A; margin-bottom: 12px; }
+.weekly-member-list { display: flex; flex-direction: column; gap: 8px; }
+.weekly-member-row { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 12px; background: white; border: 1px solid #E2E8F0; }
+.member-dot { width: 10px; height: 10px; border-radius: 999px; flex-shrink: 0; }
+.member-dot.present { background: #2E7D32; }
+.member-dot.absent { background: #C62828; }
+.member-name-text { font-size: 14px; font-weight: 600; color: #334155; }
 
 /* === WAITLIST SECTION STYLING === */
 .requests-card-clean { background: #FFFAFA; border: 1px solid #FECACA; border-radius: 16px; padding: 20px; margin-bottom: 24px; }
@@ -777,6 +1071,14 @@ function isPersonLeader(person) {
 .btn-req-action.approve:hover { background: #BBF7D0; }
 .btn-req-action.reject { background: #FEE2E2; color: #DC2626; }
 .btn-req-action.reject:hover { background: #FECACA; }
+
+@media (max-width: 640px) {
+  .weekly-preview-item, .weekly-modal-item { flex-direction: column; align-items: flex-start; padding: 14px 16px; }
+  .weekly-preview-badges { justify-content: flex-start; }
+  .weekly-meetings-modal { padding: 18px; }
+  .weekly-detail-modal { padding: 18px; }
+  .weekly-detail-grid { grid-template-columns: 1fr; }
+}
 
 /* === EMPTY LIST MSG (CENTERED) === */
 .empty-list-msg-centered { padding: 32px; text-align: center; color: #94A3B8; font-size: 14px; font-weight: 500; width: 100%; display: block; }

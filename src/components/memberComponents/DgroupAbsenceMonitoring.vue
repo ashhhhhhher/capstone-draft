@@ -99,7 +99,15 @@ async function fetchDgroupMeetingReports() {
       const hasAttendance = data.attendees && typeof data.attendees === 'object'
       if (!hasAttendance) return
 
-      rows.push({ id: docSnap.id, ...data })
+      const pathParts = path.split('/')
+      const leaderMemberId = pathParts[3] || null
+
+      rows.push({
+        id: docSnap.id,
+        leaderMemberId,
+        dgroupLeaderId: data.dgroupLeaderId || leaderMemberId,
+        ...data
+      })
     })
 
     dgroupMeetingReports.value = rows
@@ -270,16 +278,15 @@ function mainEventsForMember(member) {
 
 function dgroupMeetingsForCurrentLeader() {
   const leaderId = myProfile.value?.id || null
-  const leaderName = myName.value || ''
+
+  if (!leaderId) return []
 
   return (dgroupMeetingReports.value || [])
     .filter(meeting => {
       if (!meeting) return false
       if (!meetingIsCountable(meeting)) return false
 
-      if (leaderId && meeting.dgroupLeaderId) return meeting.dgroupLeaderId === leaderId
-      if (leaderName && meeting.dgroupLeader) return meeting.dgroupLeader === leaderName
-      return true
+      return meeting.leaderMemberId === leaderId || meeting.dgroupLeaderId === leaderId
     })
     .sort((a, b) => getMeetingDateTime(b) - getMeetingDateTime(a))
 }
