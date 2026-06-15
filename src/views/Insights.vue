@@ -24,7 +24,7 @@ const { members, activeMembers, leaders, seekers } = storeToRefs(membersStore)
 const { allEvents } = storeToRefs(useEventsStore())
 const attendanceStore = useAttendanceStore()
 
-// 🚀 OPTIMIZATION: Local State instead of Global Store
+// Local State instead of Global Store
 const currentYearAttendance = ref([]) 
 
 // --- UI State ---
@@ -72,12 +72,13 @@ const genderAgeChartOptions = ref({
   plugins: {
     legend: { 
       display: true, 
-      position: 'top', 
-      align: 'start',
-      labels: { usePointStyle: true, boxWidth: 8 }
+      position: 'bottom', 
+      align: 'center',
+      labels: { usePointStyle: true, boxWidth: 6, padding: 8, pointStyle: 'circle' }
     },
     datalabels: { display: false }
   },
+  layout: { padding: { top: 0, bottom: 0 } },
   scales: { 
     x: { 
       grid: { display: false } 
@@ -261,8 +262,8 @@ const elevateAgeData = computed(() => {
   return {
     labels,
     datasets: [
-      { label: 'Male', backgroundColor: '#4C8BF5', data: males, borderRadius: 4 },
-      { label: 'Female', backgroundColor: '#52C5D0', data: females, borderRadius: 4 }
+      { label: 'Male', backgroundColor: '#2F6FFF', data: males, borderRadius: 4 },
+      { label: 'Female', backgroundColor: '#77D0FF', data: females, borderRadius: 4 }
     ]
   }
 })
@@ -307,8 +308,8 @@ const b1gAgeData = computed(() => {
   return {
     labels,
     datasets: [
-      { label: 'Male', backgroundColor: '#4C8BF5', data: males, borderRadius: 4 },
-      { label: 'Female', backgroundColor: '#52C5D0', data: females, borderRadius: 4 }
+      { label: 'Male', backgroundColor: '#FF6B6B', data: males, borderRadius: 4 },
+      { label: 'Female', backgroundColor: '#FF9AA2', data: females, borderRadius: 4 }
     ]
   }
 })
@@ -538,11 +539,10 @@ const openVolunteerModal = () => {
             </div>
         </div>
 
-        <!-- Row 3: Charts Grid (Expanded to 4 items) -->
         <div class="charts-grid-auto">
             <!-- ELEVATE Age -->
             <div class="chart-card">
-                <h3>Gender & Age Group <span class="chart-sub">ELEVATE Members</span></h3>
+                <h3>Gender & Age Group - ELEVATE</h3>
                 <div class="chart-wrapper" style="height: 240px;">
                     <BarChart v-if="members.length > 0 && elevateAgeData.labels.length > 0" :chartData="elevateAgeData" :chartOptions="genderAgeChartOptions" />
                     <p v-else class="no-data-text">No Elevate members found.</p>
@@ -551,7 +551,7 @@ const openVolunteerModal = () => {
 
             <!-- B1G Age -->
             <div class="chart-card">
-                <h3>Gender & Age Group <span class="chart-sub">B1G Members</span></h3>
+                <h3>Gender & Age Group - B1G</h3>
                 <div class="chart-wrapper" style="height: 240px;">
                     <BarChart v-if="members.length > 0 && b1gAgeData.labels.length > 0" :chartData="b1gAgeData" :chartOptions="genderAgeChartOptions" />
                     <p v-else class="no-data-text">No B1G members found.</p>

@@ -975,9 +975,12 @@ doc.save(`${eventName.value || 'Attendance'}_Attendance_Report.pdf`);
             <td>{{ member.gender }}</td>
             <td>{{ member.dgroupLeader || 'N/A' }}</td>
             <td>
-                <span v-if="member.finalTags?.isFirstTimer" class="tag ft">First Timer</span>
-                <span v-else-if="member.finalTags?.isDgroupLeader" class="tag dl">Leader</span>
-                <span v-else-if="member.finalTags?.isVolunteer" class="tag vol">Volunteer</span>
+                <template v-if="member.finalTags">
+                  <span v-if="member.finalTags.isFirstTimer" class="tag ft">First Timer</span>
+                  <span v-if="member.finalTags.isDgroupLeader" class="tag dl">Leader</span>
+                  <span v-if="member.finalTags.isVolunteer" class="tag vol">Volunteer</span>
+                  <span v-if="!member.finalTags.isFirstTimer && !member.finalTags.isDgroupLeader && !member.finalTags.isVolunteer" class="tag reg">Regular</span>
+                </template>
                 <span v-else class="tag reg">Regular</span>
             </td>
           </tr>

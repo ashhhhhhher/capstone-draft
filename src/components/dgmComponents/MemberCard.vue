@@ -52,8 +52,10 @@ const profileImageSrc = computed(() => {
     <div class="info">
       <div class="name-row">
         <span class="name">{{ member.firstName }} {{ member.lastName }}</span>
+        <span v-if="member.finalTags?.isFirstTimer" class="tag ft">FT</span>
         <span v-if="member.finalTags?.isDgroupLeader" class="tag dl">DL</span>
-        <span v-else-if="member.finalTags?.isVolunteer" class="tag vol">Vol</span>
+        <span v-if="member.finalTags?.isVolunteer" class="tag vol">Vol</span>
+        <span v-if="!member.finalTags || (!member.finalTags.isFirstTimer && !member.finalTags.isDgroupLeader && !member.finalTags.isVolunteer)" class="tag reg">Reg</span>
       </div>
       <div v-if="!hideDetails" class="details">
         {{ member.finalTags?.ageCategory }} • {{ member.gender }}
@@ -134,6 +136,8 @@ const profileImageSrc = computed(() => {
 }
 .tag.dl { background: #E3F2FD; color: #1976D2; }
 .tag.vol { background: #E8F5E9; color: #2E7D32; }
+.tag.ft { background: #FFF9C4; color: #FBC02D; }
+.tag.reg { background: #E8F5E9; color: #2E7D32; }
 
 .details {
   font-size: 12px;
